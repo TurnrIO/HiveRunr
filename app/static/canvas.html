@@ -97,6 +97,27 @@ select.field-input{appearance:none;cursor:pointer;background-image:url("data:ima
 .run-status-skip{background:#1e293b;color:#94a3b8}
 .run-output-body{font-size:11px;font-family:'JetBrains Mono','Fira Code',monospace;color:#94a3b8;white-space:pre-wrap;max-height:140px;overflow-y:auto;line-height:1.5}
 
+/* ── Node I/O Panel ── */
+.nio-panel{margin-top:12px;border:1px solid #2a2d3e;border-radius:8px;overflow:hidden;background:#0f1117}
+.nio-header{display:flex;align-items:center;justify-content:space-between;padding:6px 10px;background:#13161f;border-bottom:1px solid #2a2d3e}
+.nio-side-tabs{display:flex;gap:3px}
+.nio-tab{font-size:10px;font-weight:700;letter-spacing:.04em;padding:3px 10px;border-radius:4px;border:1px solid #2a2d3e;background:transparent;color:#64748b;cursor:pointer;transition:all .15s}
+.nio-tab:hover{color:#94a3b8;border-color:#3b4255}
+.nio-tab-active{background:#7c3aed22 !important;color:#a78bfa !important;border-color:#7c3aed !important}
+.nio-view-tabs{display:flex;border-bottom:1px solid #1e2130;background:#0c0e14}
+.nio-view-tab{flex:1;font-size:10px;font-weight:500;padding:5px 0;border:none;background:transparent;color:#475569;cursor:pointer;border-bottom:2px solid transparent;transition:all .15s}
+.nio-view-tab:hover{color:#94a3b8}
+.nio-view-tab.active{color:#a78bfa;border-bottom-color:#7c3aed}
+.nio-content{padding:8px 10px;max-height:260px;overflow-y:auto}
+.nio-json{font-size:10px;font-family:'JetBrains Mono','Fira Code',monospace;color:#94a3b8;white-space:pre-wrap;word-break:break-all;margin:0;line-height:1.6}
+.nio-tree-key{color:#94a3b8;font-size:10px}
+.nio-tree-str{color:#4ade80;word-break:break-all}
+.nio-tree-num{color:#60a5fa}
+.nio-tree-bool{color:#f59e0b}
+.nio-tree-null{color:#64748b;font-style:italic}
+.nio-tree-expand{cursor:pointer;color:#a78bfa;user-select:none;font-size:10px}
+.nio-tree-indent{margin-left:14px;border-left:1px solid #2a2d3e;padding-left:8px}
+
 /* ── flow canvas ── */
 .flow-wrap{flex:1;position:relative;background:#0f1117}
 .reactflow-attribution{display:none}
@@ -355,6 +376,114 @@ function CustomNode({ id, data, selected }){
 }
 
 const nodeTypes = { custom: CustomNode };
+
+// ── Node I/O Panel helpers ─────────────────────────────────────────────────────
+function JsonSchemaTree({ data, depth }){
+  depth = depth || 0;
+  const [collapsed, setCollapsed] = React.useState(depth > 1);
+  if(data === null || data === undefined)
+    return React.createElement('span',{className:"nio-tree-null"},"null");
+  if(typeof data === 'boolean')
+    return React.createElement('span',{className:"nio-tree-bool"},String(data));
+  if(typeof data === 'number')
+    return React.createElement('span',{className:"nio-tree-num"},String(data));
+  if(typeof data === 'string'){
+    const display = data.length > 100 ? data.slice(0,100)+"…" : data;
+    return React.createElement('span',{className:"nio-tree-str"},'"'+display+'"');
+  }
+  if(Array.isArray(data)){
+    if(data.length === 0) return React.createElement('span',{style:{color:"#94a3b8"}},"[ ] (empty)");
+    const preview = `[ ${data.length} item${data.length>1?"s":""}  ]`;
+    return (
+      <div>
+        <span className="nio-tree-expand" onClick={()=>setCollapsed(c=>!c)}>
+          {collapsed?"▶":"▼"} {preview}
+        </span>
+        {!collapsed && (
+          <div className="nio-tree-indent">
+            {data.slice(0,30).map((item,i)=>(
+              <div key={i} style={{marginBottom:2}}>
+                <span style={{color:"#64748b",fontSize:9}}>[{i}]</span>{" "}
+                <JsonSchemaTree data={item} depth={depth+1}/>
+              </div>
+            ))}
+            {data.length>30 && <div style={{color:"#64748b",fontSize:9,fontStyle:"italic"}}>…{data.length-30} more</div>}
+          </div>
+        )}
+      </div>
+    );
+  }
+  if(typeof data === 'object'){
+    const keys = Object.keys(data);
+    if(keys.length === 0) return React.createElement('span',{style:{color:"#94a3b8"}},"{ } (empty)");
+    const preview = `{ ${keys.slice(0,3).join(", ")}${keys.length>3?"…":""} }`;
+    return (
+      <div>
+        <span className="nio-tree-expand" onClick={()=>setCollapsed(c=>!c)}>
+          {collapsed?"▶":"▼"} {preview}
+        </span>
+        {!collapsed && (
+          <div className="nio-tree-indent">
+            {keys.map(k=>(
+              <div key={k} style={{marginBottom:2,lineHeight:1.7}}>
+                <span className="nio-tree-key">{k}:{" "}</span>
+                <JsonSchemaTree data={data[k]} depth={depth+1}/>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
+  return React.createElement('span',{style:{color:"#94a3b8"}},String(data));
+}
+
+function NodeIOPanel({ runInput, runOutput, runStatus, runDurationMs, runAttempts }){
+  const [side, setSide]   = useState("output");
+  const [view, setView]   = useState("schema");
+  const data    = side === "input" ? runInput : runOutput;
+  const isErr   = runStatus === "err";
+  const isOk    = runStatus === "ok";
+  const statusColor = isOk ? "#4ade80" : isErr ? "#f87171" : "#94a3b8";
+  const statusLabel = isOk ? "Success"  : isErr ? "Error"   : "Skipped";
+  const jsonStr = (data === undefined || data === null)
+    ? "null"
+    : (typeof data === "string" ? data : JSON.stringify(data, null, 2));
+  const isTruncated = data && data.__truncated;
+  return (
+    <div className="nio-panel">
+      <div className="nio-header">
+        <div className="nio-side-tabs">
+          <button className={`nio-tab${side==="input"?" nio-tab-active":""}`} onClick={()=>setSide("input")}>INPUT</button>
+          <button className={`nio-tab${side==="output"?" nio-tab-active":""}`} onClick={()=>setSide("output")}>OUTPUT</button>
+        </div>
+        <div style={{display:"flex",alignItems:"center",gap:8}}>
+          {runDurationMs !== undefined && (
+            <span style={{fontSize:9,color:"#64748b"}}>{runDurationMs}ms{runAttempts>1?` · ${runAttempts}×`:""}</span>
+          )}
+          <span style={{fontSize:9,fontWeight:700,color:statusColor,background:isOk?"#14532d33":isErr?"#7f1d1d33":"#1e293b",padding:"2px 7px",borderRadius:4}}>{statusLabel}</span>
+        </div>
+      </div>
+      <div className="nio-view-tabs">
+        <button className={`nio-view-tab${view==="schema"?" active":""}`} onClick={()=>setView("schema")}>Schema</button>
+        <button className={`nio-view-tab${view==="json"?" active":""}`} onClick={()=>setView("json")}>JSON</button>
+      </div>
+      <div className="nio-content">
+        {isTruncated ? (
+          <div style={{color:"#64748b",fontStyle:"italic",fontSize:11}}>⚠ Data too large to display</div>
+        ) : data === undefined ? (
+          <div style={{color:"#475569",fontSize:11,fontStyle:"italic"}}>No data yet — run the flow first</div>
+        ) : view === "schema" ? (
+          <div style={{fontSize:11,lineHeight:1.8}}>
+            <JsonSchemaTree data={data} depth={0}/>
+          </div>
+        ) : (
+          <pre className="nio-json">{jsonStr}</pre>
+        )}
+      </div>
+    </div>
+  );
+}
 
 // ── Config Panel ──────────────────────────────────────────────────────────────
 function ConfigPanel({ node, onChange, onDelete }){
@@ -654,43 +783,15 @@ function ConfigPanel({ node, onChange, onDelete }){
           </div>
         )}
 
-        {/* Live Data Inspector panel */}
-        {runStatus && (
-          <div className="run-output-panel">
-            <div className="run-output-title">
-              Run data
-              <div style={{display:"flex",gap:6,alignItems:"center"}}>
-                {runDurationMs !== undefined && (
-                  <span style={{fontSize:10,color:"#64748b"}}>{runDurationMs}ms{runAttempts>1?` · ${runAttempts} attempts`:""}</span>
-                )}
-                <span className={`run-output-status ${statusCls}`}>{statusLabel}</span>
-              </div>
-            </div>
-            {runInput !== undefined && (
-              <>
-                <div style={{fontSize:10,fontWeight:600,color:"#94a3b8",marginBottom:3,marginTop:4}}>▶ Input</div>
-                <div className="run-output-body" style={{borderColor:"#1e3a5f",maxHeight:160}}>
-                  {runInput?.__truncated
-                    ? <span style={{color:"#64748b",fontStyle:"italic"}}>⚠ Input too large to display ({runInput.__size} chars)</span>
-                    : (typeof runInput === "string" ? runInput : JSON.stringify(runInput, null, 2))
-                  }
-                </div>
-              </>
-            )}
-            {runOutput !== undefined && runOutput !== null && (
-              <>
-                <div style={{fontSize:10,fontWeight:600,color: runStatus==="err"?"#f87171":"#4ade80",marginBottom:3,marginTop:6}}>
-                  {runStatus==="err" ? "✗ Error" : runStatus==="skip" ? "↷ Skipped" : "✓ Output"}
-                </div>
-                <div className="run-output-body" style={{borderColor: runStatus==="err"?"#7f1d1d":"#14532d",maxHeight:200}}>
-                  {runOutput?.__truncated
-                    ? <span style={{color:"#64748b",fontStyle:"italic"}}>⚠ Output too large to display</span>
-                    : (typeof runOutput === "string" ? runOutput : JSON.stringify(runOutput, null, 2))
-                  }
-                </div>
-              </>
-            )}
-          </div>
+        {/* Node I/O Panel — shows last-run input/output for this node */}
+        {!isNote && (
+          <NodeIOPanel
+            runInput={runInput}
+            runOutput={runOutput}
+            runStatus={runStatus}
+            runDurationMs={runDurationMs}
+            runAttempts={runAttempts}
+          />
         )}
 
         <button className="delete-node-btn" onClick={()=>onDelete(node.id)}>🗑 Remove node</button>
@@ -1598,6 +1699,28 @@ function App(){
       saveSnap(newNodes, newEdges);
       window.location.hash = "flow-" + full.slug;
       showToast(`Loaded: ${full.name}`);
+      // Auto-load most recent run traces so the I/O panel shows data immediately
+      try {
+        const allRuns = await api("GET", "/api/runs");
+        const graphRuns = allRuns.filter(r =>
+          r.workflow === full.name || String(r.graph_id) === String(full.id)
+        );
+        if(graphRuns.length > 0){
+          const latest = graphRuns[0];
+          setInspectorRuns(graphRuns.slice(0,20));
+          setInspectorRunId(String(latest.id || latest.task_id));
+          const traces = latest.traces || [];
+          const traceMap = {};
+          traces.forEach(t => { if(t.node_id) traceMap[t.node_id] = t; });
+          setNodes(ns => ns.map(n => {
+            if(n.data.type === "note") return n;
+            const t = traceMap[n.id];
+            if(!t) return n;
+            const st = t.status === "ok" ? "ok" : t.status === "error" ? "err" : "skip";
+            return { ...n, data:{ ...n.data, _runStatus:st, _runOutput:t.output, _runInput:t.input, _runDurationMs:t.duration_ms, _runAttempts:t.attempts }};
+          }));
+        }
+      } catch(e){ /* non-fatal: run data is optional */ }
     } catch(err){ showToast(err.message,"error") }
   }
 
