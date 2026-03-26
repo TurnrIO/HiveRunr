@@ -5207,6 +5207,26 @@ select.field-input{appearance:none;cursor:pointer;background-image:url("data:ima
 .nio-tree-null{color:#64748b;font-style:italic}
 .nio-tree-expand{cursor:pointer;color:#a78bfa;user-select:none;font-size:10px}
 .nio-tree-indent{margin-left:14px;border-left:1px solid #2a2d3e;padding-left:8px}
+/* drag rows */
+.nio-drag-row{display:flex;align-items:flex-start;gap:3px;border-radius:3px;padding:1px 2px;transition:background .1s}
+.nio-drag-row:hover{background:#1a1d2e}
+.nio-drag-row:hover .nio-drag-handle{opacity:1}
+.nio-drag-handle{opacity:0;cursor:grab;color:#64748b;font-size:9px;user-select:none;flex-shrink:0;margin-top:3px;padding:0 1px;transition:opacity .1s,color .1s;line-height:1}
+.nio-drag-handle:hover{color:#a78bfa}
+.nio-drag-handle:active{cursor:grabbing;color:#a78bfa}
+/* expand modal */
+.nio-expand-btn{background:none;border:1px solid #2a2d3e;border-radius:4px;color:#64748b;cursor:pointer;font-size:10px;padding:2px 6px;transition:all .15s}
+.nio-expand-btn:hover{color:#a78bfa;border-color:#7c3aed}
+.nio-modal-overlay{position:fixed;inset:0;background:#000000cc;z-index:9999;display:flex;align-items:center;justify-content:center}
+.nio-modal{background:#13161f;border:1px solid #3b4255;border-radius:12px;width:min(720px,94vw);max-height:88vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 24px 64px #000}
+.nio-modal-hdr{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid #2a2d3e;gap:12px}
+.nio-modal-title{font-size:12px;font-weight:600;color:#e2e8f0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.nio-modal-close{background:none;border:none;color:#64748b;font-size:18px;cursor:pointer;line-height:1;padding:0 4px}
+.nio-modal-close:hover{color:#e2e8f0}
+.nio-modal-body{flex:1;overflow:hidden;display:flex;flex-direction:column}
+.nio-modal-body .nio-content{max-height:none;flex:1;overflow-y:auto;padding:12px 16px}
+/* drop targets */
+.field-input.drag-over,.field-input.drag-over:focus{border-color:#7c3aed !important;background:#7c3aed14 !important;box-shadow:0 0 0 2px #7c3aed33 !important}
 
 /* ── flow canvas ── */
 .flow-wrap{flex:1;position:relative;background:#0f1117}
@@ -5468,115 +5488,206 @@ function CustomNode({ id, data, selected }){
 const nodeTypes = { custom: CustomNode };
 
 // ── Node I/O Panel helpers ─────────────────────────────────────────────────────
-function JsonSchemaTree({ data, depth }){
+// sourceNodeId: the node whose output this data came from (used to build {{id.path}} template)
+// fieldPath: dot-notation path from root, e.g. "customer.name"
+function JsonSchemaTree({ data, depth, sourceNodeId, fieldPath }){
   depth = depth || 0;
+  fieldPath = fieldPath || null;
   const [collapsed, setCollapsed] = React.useState(depth > 1);
-  if(data === null || data === undefined)
-    return React.createElement('span',{className:"nio-tree-null"},"null");
-  if(typeof data === 'boolean')
-    return React.createElement('span',{className:"nio-tree-bool"},String(data));
-  if(typeof data === 'number')
-    return React.createElement('span',{className:"nio-tree-num"},String(data));
-  if(typeof data === 'string'){
-    const display = data.length > 100 ? data.slice(0,100)+"…" : data;
-    return React.createElement('span',{className:"nio-tree-str"},'"'+display+'"');
+
+  const template = (sourceNodeId && fieldPath) ? `{{${sourceNodeId}.${fieldPath}}}` : null;
+
+  function startDrag(e){
+    if(!template) return;
+    e.dataTransfer.setData("text/plain", template);
+    e.dataTransfer.effectAllowed = "copy";
+    e.stopPropagation();
   }
+
+  // Leaf primitives — render inline with optional drag row
+  function Draggable({ children }){
+    if(!template) return children;
+    return (
+      <span className="nio-drag-row" draggable="true" onDragStart={startDrag} title={`Drag to insert: ${template}`}>
+        <span className="nio-drag-handle" title={template}>⠿</span>
+        {children}
+      </span>
+    );
+  }
+
+  if(data === null || data === undefined)
+    return <Draggable><span className="nio-tree-null">null</span></Draggable>;
+  if(typeof data === 'boolean')
+    return <Draggable><span className="nio-tree-bool">{String(data)}</span></Draggable>;
+  if(typeof data === 'number')
+    return <Draggable><span className="nio-tree-num">{String(data)}</span></Draggable>;
+  if(typeof data === 'string'){
+    const display = data.length > 120 ? data.slice(0,120)+"…" : data;
+    return <Draggable><span className="nio-tree-str">"{display}"</span></Draggable>;
+  }
+
   if(Array.isArray(data)){
-    if(data.length === 0) return React.createElement('span',{style:{color:"#94a3b8"}},"[ ] (empty)");
+    if(data.length === 0) return <Draggable><span style={{color:"#94a3b8"}}>[ ] (empty)</span></Draggable>;
     const preview = `[ ${data.length} item${data.length>1?"s":""}  ]`;
     return (
       <div>
-        <span className="nio-tree-expand" onClick={()=>setCollapsed(c=>!c)}>
-          {collapsed?"▶":"▼"} {preview}
+        <span className="nio-drag-row" draggable={!!template} onDragStart={startDrag}>
+          {template && <span className="nio-drag-handle" title={template}>⠿</span>}
+          <span className="nio-tree-expand" onClick={()=>setCollapsed(c=>!c)}>
+            {collapsed?"▶":"▼"} {preview}
+          </span>
         </span>
         {!collapsed && (
           <div className="nio-tree-indent">
-            {data.slice(0,30).map((item,i)=>(
-              <div key={i} style={{marginBottom:2}}>
-                <span style={{color:"#64748b",fontSize:9}}>[{i}]</span>{" "}
-                <JsonSchemaTree data={item} depth={depth+1}/>
-              </div>
-            ))}
+            {data.slice(0,30).map((item,i)=>{
+              const childPath = fieldPath ? `${fieldPath}[${i}]` : `[${i}]`;
+              return (
+                <div key={i} style={{marginBottom:2}}>
+                  <span style={{color:"#64748b",fontSize:9}}>[{i}]</span>{" "}
+                  <JsonSchemaTree data={item} depth={depth+1} sourceNodeId={sourceNodeId} fieldPath={childPath}/>
+                </div>
+              );
+            })}
             {data.length>30 && <div style={{color:"#64748b",fontSize:9,fontStyle:"italic"}}>…{data.length-30} more</div>}
           </div>
         )}
       </div>
     );
   }
+
   if(typeof data === 'object'){
     const keys = Object.keys(data);
-    if(keys.length === 0) return React.createElement('span',{style:{color:"#94a3b8"}},"{ } (empty)");
+    if(keys.length === 0) return <Draggable><span style={{color:"#94a3b8"}}>{"{ }"} (empty)</span></Draggable>;
     const preview = `{ ${keys.slice(0,3).join(", ")}${keys.length>3?"…":""} }`;
     return (
       <div>
-        <span className="nio-tree-expand" onClick={()=>setCollapsed(c=>!c)}>
-          {collapsed?"▶":"▼"} {preview}
+        <span className="nio-drag-row" draggable={!!template} onDragStart={startDrag}>
+          {template && <span className="nio-drag-handle" title={template}>⠿</span>}
+          <span className="nio-tree-expand" onClick={()=>setCollapsed(c=>!c)}>
+            {collapsed?"▶":"▼"} {preview}
+          </span>
         </span>
         {!collapsed && (
           <div className="nio-tree-indent">
-            {keys.map(k=>(
-              <div key={k} style={{marginBottom:2,lineHeight:1.7}}>
-                <span className="nio-tree-key">{k}:{" "}</span>
-                <JsonSchemaTree data={data[k]} depth={depth+1}/>
-              </div>
-            ))}
+            {keys.map(k=>{
+              const childPath = fieldPath ? `${fieldPath}.${k}` : k;
+              return (
+                <div key={k} className="nio-drag-row" draggable={!!sourceNodeId}
+                  onDragStart={e=>{ e.dataTransfer.setData("text/plain",`{{${sourceNodeId}.${childPath}}}`); e.dataTransfer.effectAllowed="copy"; e.stopPropagation(); }}
+                  style={{marginBottom:2,lineHeight:1.7}}>
+                  {sourceNodeId && <span className="nio-drag-handle" title={`{{${sourceNodeId}.${childPath}}}`}>⠿</span>}
+                  <div style={{flex:1}}>
+                    <span className="nio-tree-key">{k}:{" "}</span>
+                    <JsonSchemaTree data={data[k]} depth={depth+1} sourceNodeId={sourceNodeId} fieldPath={childPath}/>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         )}
       </div>
     );
   }
-  return React.createElement('span',{style:{color:"#94a3b8"}},String(data));
+  return <Draggable><span style={{color:"#94a3b8"}}>{String(data)}</span></Draggable>;
 }
 
-function NodeIOPanel({ runInput, runOutput, runStatus, runDurationMs, runAttempts }){
-  const [side, setSide]   = useState("output");
-  const [view, setView]   = useState("schema");
-  const data    = side === "input" ? runInput : runOutput;
+// Inner panel body — shared between inline panel and expanded modal
+function NioBody({ data, view, sourceNodeId, isTruncated }){
+  if(isTruncated)
+    return <div style={{color:"#64748b",fontStyle:"italic",fontSize:11}}>⚠ Data too large to display</div>;
+  if(data === undefined)
+    return <div style={{color:"#475569",fontSize:11,fontStyle:"italic"}}>No data yet — run the flow first</div>;
+  if(view === "schema")
+    return (
+      <div style={{fontSize:11,lineHeight:1.8}}>
+        {sourceNodeId && (
+          <div style={{fontSize:9,color:"#64748b",marginBottom:6,fontStyle:"italic"}}>
+            ⠿ drag any field into a config input to insert a template reference
+          </div>
+        )}
+        <JsonSchemaTree data={data} depth={0} sourceNodeId={sourceNodeId} fieldPath={null}/>
+      </div>
+    );
+  const jsonStr = (data === null) ? "null" : (typeof data === "string" ? data : JSON.stringify(data, null, 2));
+  return <pre className="nio-json">{jsonStr}</pre>;
+}
+
+function NodeIOPanel({ runInput, runOutput, runStatus, runDurationMs, runAttempts, nodeId, upstreamNodeId, nodeLabel }){
+  const [side, setSide]     = useState("output");
+  const [view, setView]     = useState("schema");
+  const [expanded, setExpanded] = useState(false);
+
+  const data         = side === "input" ? runInput : runOutput;
+  // sourceNodeId for drag templates:
+  // OUTPUT tab → current node (nodeId) is what downstream refs; INPUT tab → upstream node produced it
+  const sourceNodeId = side === "output" ? nodeId : upstreamNodeId;
+
   const isErr   = runStatus === "err";
   const isOk    = runStatus === "ok";
   const statusColor = isOk ? "#4ade80" : isErr ? "#f87171" : "#94a3b8";
   const statusLabel = isOk ? "Success"  : isErr ? "Error"   : "Skipped";
-  const jsonStr = (data === undefined || data === null)
-    ? "null"
-    : (typeof data === "string" ? data : JSON.stringify(data, null, 2));
-  const isTruncated = data && data.__truncated;
-  return (
-    <div className="nio-panel">
-      <div className="nio-header">
-        <div className="nio-side-tabs">
-          <button className={`nio-tab${side==="input"?" nio-tab-active":""}`} onClick={()=>setSide("input")}>INPUT</button>
-          <button className={`nio-tab${side==="output"?" nio-tab-active":""}`} onClick={()=>setSide("output")}>OUTPUT</button>
-        </div>
-        <div style={{display:"flex",alignItems:"center",gap:8}}>
-          {runDurationMs !== undefined && (
-            <span style={{fontSize:9,color:"#64748b"}}>{runDurationMs}ms{runAttempts>1?` · ${runAttempts}×`:""}</span>
-          )}
-          <span style={{fontSize:9,fontWeight:700,color:statusColor,background:isOk?"#14532d33":isErr?"#7f1d1d33":"#1e293b",padding:"2px 7px",borderRadius:4}}>{statusLabel}</span>
-        </div>
+  const isTruncated = !!(data && data.__truncated);
+
+  const Tabs = () => (
+    <>
+      <div className="nio-side-tabs">
+        <button className={`nio-tab${side==="input"?" nio-tab-active":""}`} onClick={()=>setSide("input")}>INPUT</button>
+        <button className={`nio-tab${side==="output"?" nio-tab-active":""}`} onClick={()=>setSide("output")}>OUTPUT</button>
       </div>
-      <div className="nio-view-tabs">
-        <button className={`nio-view-tab${view==="schema"?" active":""}`} onClick={()=>setView("schema")}>Schema</button>
-        <button className={`nio-view-tab${view==="json"?" active":""}`} onClick={()=>setView("json")}>JSON</button>
-      </div>
-      <div className="nio-content">
-        {isTruncated ? (
-          <div style={{color:"#64748b",fontStyle:"italic",fontSize:11}}>⚠ Data too large to display</div>
-        ) : data === undefined ? (
-          <div style={{color:"#475569",fontSize:11,fontStyle:"italic"}}>No data yet — run the flow first</div>
-        ) : view === "schema" ? (
-          <div style={{fontSize:11,lineHeight:1.8}}>
-            <JsonSchemaTree data={data} depth={0}/>
-          </div>
-        ) : (
-          <pre className="nio-json">{jsonStr}</pre>
+      <div style={{display:"flex",alignItems:"center",gap:6}}>
+        {runDurationMs !== undefined && (
+          <span style={{fontSize:9,color:"#64748b"}}>{runDurationMs}ms{runAttempts>1?` · ${runAttempts}×`:""}</span>
         )}
+        {runStatus && (
+          <span style={{fontSize:9,fontWeight:700,color:statusColor,background:isOk?"#14532d33":isErr?"#7f1d1d33":"#1e293b",padding:"2px 7px",borderRadius:4}}>
+            {statusLabel}
+          </span>
+        )}
+        <button className="nio-expand-btn" onClick={()=>setExpanded(true)} title="Expand to full view">⛶</button>
       </div>
+    </>
+  );
+
+  const ViewTabs = () => (
+    <div className="nio-view-tabs">
+      <button className={`nio-view-tab${view==="schema"?" active":""}`} onClick={()=>setView("schema")}>Schema</button>
+      <button className={`nio-view-tab${view==="json"?" active":""}`} onClick={()=>setView("json")}>JSON</button>
     </div>
+  );
+
+  return (
+    <>
+      <div className="nio-panel">
+        <div className="nio-header"><Tabs/></div>
+        <ViewTabs/>
+        <div className="nio-content">
+          <NioBody data={data} view={view} sourceNodeId={sourceNodeId} isTruncated={isTruncated}/>
+        </div>
+      </div>
+
+      {/* Expanded modal overlay */}
+      {expanded && (
+        <div className="nio-modal-overlay" onClick={e=>{ if(e.target===e.currentTarget) setExpanded(false); }}>
+          <div className="nio-modal">
+            <div className="nio-modal-hdr">
+              <div className="nio-side-tabs"><Tabs/></div>
+              <button className="nio-modal-close" onClick={()=>setExpanded(false)}>✕</button>
+            </div>
+            <ViewTabs/>
+            <div className="nio-modal-body">
+              <div className="nio-content" style={{maxHeight:"calc(85vh - 90px)"}}>
+                <NioBody data={data} view={view} sourceNodeId={sourceNodeId} isTruncated={isTruncated}/>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 
 // ── Config Panel ──────────────────────────────────────────────────────────────
-function ConfigPanel({ node, onChange, onDelete }){
+function ConfigPanel({ node, onChange, onDelete, edges }){
   if(!node){
     return (
       <div className="config-panel">
@@ -5607,6 +5718,34 @@ function ConfigPanel({ node, onChange, onDelete }){
   const runAttempts    = node.data._runAttempts;
   const retryMax = node.data.retry_max ?? 0;
   const retryDelay = node.data.retry_delay ?? 5;
+
+  // Compute the upstream node id (for INPUT drag references)
+  const upstreamNodeId = React.useMemo(()=>{
+    if(!edges || !node) return null;
+    const inEdge = edges.find(e => e.target === node.id);
+    return inEdge ? inEdge.source : null;
+  }, [edges, node && node.id]);
+
+  // Drop handler factory for config input/textarea fields
+  function dropProps(fieldKey, currentVal){
+    return {
+      onDragOver: e => { e.preventDefault(); e.currentTarget.classList.add("drag-over"); },
+      onDragLeave: e => e.currentTarget.classList.remove("drag-over"),
+      onDrop: e => {
+        e.preventDefault();
+        e.currentTarget.classList.remove("drag-over");
+        const tmpl = e.dataTransfer.getData("text/plain");
+        if(!tmpl) return;
+        const el = e.currentTarget;
+        const start = el.selectionStart ?? (currentVal||"").length;
+        const end   = el.selectionEnd   ?? start;
+        const val   = currentVal || "";
+        const newVal = val.slice(0,start) + tmpl + val.slice(end);
+        update(fieldKey, newVal);
+        setTimeout(()=>{ try{ el.selectionStart = el.selectionEnd = start + tmpl.length; }catch(e){} }, 0);
+      }
+    };
+  }
 
   function update(key, val){
     onChange(node.id, { ...node.data, config:{ ...node.data.config, [key]:val }});
@@ -5665,28 +5804,32 @@ function ConfigPanel({ node, onChange, onDelete }){
 
         {/* Fields */}
         {def.fields.length > 0 && <div className="section-divider">Config</div>}
-        {def.fields.map(f => (
+        {def.fields.map(f => {
+          const cfgVal = (node.data.config||{})[f.k]||"";
+          const dp = (!f.secret && f.type !== "select") ? dropProps(f.k, cfgVal) : {};
+          return (
           <div className="field-group" key={f.k}>
             <div className="field-label">
               {f.l}
               {f.secret && <span className="field-hint">🔒 sensitive</span>}
             </div>
             {f.type === "select" ? (
-              <select className="field-input" value={(node.data.config||{})[f.k]||f.options[0]}
+              <select className="field-input" value={cfgVal||f.options[0]}
                 onChange={e=>update(f.k,e.target.value)}>
                 {f.options.map(o=><option key={o} value={o}>{o}</option>)}
               </select>
             ) : f.textarea ? (
               <textarea className={`field-input${f.mono?" mono":""}`} placeholder={f.ph}
-                value={(node.data.config||{})[f.k]||""} onChange={e=>update(f.k,e.target.value)} rows={4}/>
+                value={cfgVal} onChange={e=>update(f.k,e.target.value)} rows={4} {...dp}/>
             ) : (
               <input className={`field-input${f.mono?" mono":""}`} placeholder={f.ph}
                 type={f.secret?"password":"text"}
-                value={(node.data.config||{})[f.k]||""} onChange={e=>update(f.k,e.target.value)}/>
+                value={cfgVal} onChange={e=>update(f.k,e.target.value)} {...dp}/>
             )}
             {f.secret && <span className="secret-hint">💡 Or use {"{{creds.your-credential-name}}"}</span>}
           </div>
-        ))}
+          );
+        })}
 
         {/* Condition / Loop hints */}
         {node.data.type === "action.condition" && (
@@ -5873,7 +6016,7 @@ function ConfigPanel({ node, onChange, onDelete }){
           </div>
         )}
 
-        {/* Node I/O Panel — shows last-run input/output for this node */}
+        {/* Node I/O Panel — shows last-run input/output; drag fields into config inputs above */}
         {!isNote && (
           <NodeIOPanel
             runInput={runInput}
@@ -5881,6 +6024,9 @@ function ConfigPanel({ node, onChange, onDelete }){
             runStatus={runStatus}
             runDurationMs={runDurationMs}
             runAttempts={runAttempts}
+            nodeId={node.id}
+            upstreamNodeId={upstreamNodeId}
+            nodeLabel={node.data.label || def.label}
           />
         )}
 
@@ -6972,7 +7118,7 @@ function App(){
             )}
           </FlowCanvas>
         </div>
-        <ConfigPanel node={selectedNode} onChange={onNodeChange} onDelete={onDeleteNode}/>
+        <ConfigPanel node={selectedNode} onChange={onNodeChange} onDelete={onDeleteNode} edges={edges}/>
       </div>
 
       {showModal && (
