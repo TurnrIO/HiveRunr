@@ -138,6 +138,28 @@ select.field-input{appearance:none;cursor:pointer;background-image:url("data:ima
 /* drop targets */
 .field-input.drag-over,.field-input.drag-over:focus{border-color:#7c3aed !important;background:#7c3aed14 !important;box-shadow:0 0 0 2px #7c3aed33 !important}
 
+/* ── Node Editor Modal (n8n-style 3-column) ── */
+.nem-overlay{position:fixed;inset:0;z-index:800;display:flex;pointer-events:none}
+.nem-backdrop{flex:1;pointer-events:all;cursor:default}
+.nem-panel{width:min(940px,94vw);background:#0f1117;border-left:1px solid #2a2d3e;display:flex;flex-direction:column;pointer-events:all;box-shadow:-12px 0 40px #0009;overflow:hidden}
+.nem-hdr{display:flex;align-items:center;gap:10px;padding:10px 16px;border-bottom:1px solid #2a2d3e;background:#13161f;flex-shrink:0}
+.nem-hdr-icon{font-size:20px;flex-shrink:0}
+.nem-hdr-title{flex:1;font-size:13px;font-weight:600;color:#e2e8f0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.nem-hdr-close{background:none;border:none;color:#64748b;font-size:20px;cursor:pointer;line-height:1;padding:0 4px;flex-shrink:0}
+.nem-hdr-close:hover{color:#e2e8f0}
+.nem-columns{flex:1;display:flex;overflow:hidden;min-height:0}
+.nem-io-col{width:240px;flex-shrink:0;display:flex;flex-direction:column;overflow:hidden;background:#0c0e14}
+.nem-io-col.left{border-right:1px solid #2a2d3e}
+.nem-io-col.right{border-left:1px solid #2a2d3e}
+.nem-io-col-hdr{font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#64748b;padding:7px 12px;border-bottom:1px solid #1e2130;display:flex;align-items:center;gap:8px;flex-shrink:0}
+.nem-drag-hint{font-size:9px;color:#475569;font-style:italic;font-weight:400;text-transform:none;letter-spacing:0}
+.nem-io-view-tabs{display:flex;border-bottom:1px solid #1e2130;flex-shrink:0}
+.nem-io-view-tab{flex:1;font-size:10px;font-weight:500;padding:5px 0;border:none;background:transparent;color:#475569;cursor:pointer;border-bottom:2px solid transparent;transition:all .15s}
+.nem-io-view-tab:hover{color:#94a3b8}
+.nem-io-view-tab.active{color:#a78bfa;border-bottom-color:#7c3aed}
+.nem-io-col-body{flex:1;overflow-y:auto;padding:8px 10px;font-size:11px;line-height:1.8}
+.nem-cfg-col{flex:1;overflow-y:auto;padding:16px 20px;min-width:0;border-right:1px solid #2a2d3e}
+
 /* ── flow canvas ── */
 .flow-wrap{flex:1;position:relative;background:#0f1117}
 .reactflow-attribution{display:none}
@@ -1365,6 +1387,346 @@ function validateFlow(nodes, edges, credentials) {
   return issues;
 }
 
+// ── Node Editor Modal (n8n-style) ─────────────────────────────────────────────
+function NodeEditorModal({ node, onChange, onDelete, onClose, edges }){
+  const isNote    = node.data.type === "note";
+  const isTrigger = node.data.type?.startsWith("trigger.");
+  const def       = NODE_DEFS[node.data.type] || { label:node.data.type, icon:"?", color:"#475569", fields:[] };
+  const isDisabled  = !!node.data.disabled;
+  const runStatus   = node.data._runStatus;
+  const runOutput   = node.data._runOutput;
+  const runInput    = node.data._runInput;
+  const runDurationMs = node.data._runDurationMs;
+  const runAttempts = node.data._runAttempts;
+  const retryMax    = node.data.retry_max ?? 0;
+  const retryDelay  = node.data.retry_delay ?? 5;
+  const failMode    = node.data.fail_mode || "abort";
+
+  const upstreamNodeId = React.useMemo(()=>{
+    if(!edges||!node) return null;
+    const e = edges.find(e=>e.target===node.id);
+    return e ? e.source : null;
+  },[edges, node&&node.id]);
+
+  const [inputView,  setInputView]  = useState("schema");
+  const [outputView, setOutputView] = useState("schema");
+
+  function update(key,val){ onChange(node.id,{...node.data,config:{...node.data.config,[key]:val}}); }
+  function updateLabel(val){ onChange(node.id,{...node.data,label:val}); }
+  function updateRetryMax(val){ onChange(node.id,{...node.data,retry_max:parseInt(val)||0}); }
+  function updateRetryDelay(val){ onChange(node.id,{...node.data,retry_delay:parseInt(val)||5}); }
+  function updateFailMode(val){ onChange(node.id,{...node.data,fail_mode:val}); }
+  function toggleDisabled(){ onChange(node.id,{...node.data,disabled:!isDisabled}); }
+  function copyId(){ navigator.clipboard.writeText(node.id).catch(()=>{}); }
+
+  function dropProps(fieldKey, currentVal){
+    return {
+      onDragOver: e=>{ e.preventDefault(); e.currentTarget.classList.add("drag-over"); },
+      onDragLeave: e=>e.currentTarget.classList.remove("drag-over"),
+      onDrop: e=>{
+        e.preventDefault();
+        e.currentTarget.classList.remove("drag-over");
+        const tmpl = e.dataTransfer.getData("text/plain");
+        if(!tmpl) return;
+        const el = e.currentTarget;
+        const start = el.selectionStart ?? (currentVal||"").length;
+        const end   = el.selectionEnd ?? start;
+        const newVal = (currentVal||"").slice(0,start)+tmpl+(currentVal||"").slice(end);
+        update(fieldKey, newVal);
+        setTimeout(()=>{ try{ el.selectionStart=el.selectionEnd=start+tmpl.length; }catch(e){} },0);
+      }
+    };
+  }
+
+  useEffect(()=>{
+    const h=e=>{ if(e.key==="Escape") onClose(); };
+    window.addEventListener("keydown",h);
+    return ()=>window.removeEventListener("keydown",h);
+  },[]);
+
+  const statusLabel = runStatus==="ok"?"Succeeded":runStatus==="err"?"Failed":runStatus==="skip"?"Skipped":null;
+  const statusCls   = runStatus==="ok"?"run-status-ok":runStatus==="err"?"run-status-err":"run-status-skip";
+
+  return (
+    <div className="nem-overlay">
+      <div className="nem-backdrop" onClick={onClose}/>
+      <div className="nem-panel">
+
+        {/* Header */}
+        <div className="nem-hdr">
+          <span className="nem-hdr-icon">{def.icon}</span>
+          <span className="nem-hdr-title">{node.data.label||def.label}</span>
+          {statusLabel && <span className={`run-output-status ${statusCls}`} style={{fontSize:10,flexShrink:0}}>{statusLabel}</span>}
+          {runDurationMs!==undefined && <span style={{fontSize:10,color:"#64748b",flexShrink:0}}>{runDurationMs}ms</span>}
+          <button className="nem-hdr-close" onClick={onClose}>✕</button>
+        </div>
+
+        {/* Three columns */}
+        <div className="nem-columns">
+
+          {/* ── LEFT: INPUT ── */}
+          <div className="nem-io-col left">
+            <div className="nem-io-col-hdr">
+              ← Input
+              {upstreamNodeId && <span className="nem-drag-hint">drag → config field</span>}
+            </div>
+            <div className="nem-io-view-tabs">
+              <button className={`nem-io-view-tab${inputView==="schema"?" active":""}`} onClick={()=>setInputView("schema")}>Schema</button>
+              <button className={`nem-io-view-tab${inputView==="json"?" active":""}`} onClick={()=>setInputView("json")}>JSON</button>
+            </div>
+            <div className="nem-io-col-body">
+              <NioBody data={runInput} view={inputView} sourceNodeId={upstreamNodeId} isTruncated={!!(runInput&&runInput.__truncated)}/>
+            </div>
+          </div>
+
+          {/* ── CENTER: CONFIG ── */}
+          <div className="nem-cfg-col">
+
+            {/* Node ID */}
+            <div className="node-id-badge" onClick={copyId} title="Click to copy" style={{marginBottom:12}}>
+              <div>
+                <div style={{fontSize:10,color:"#64748b",marginBottom:2}}>NODE ID (for templates)</div>
+                <code>{node.id}</code>
+              </div>
+              <span className="copy-hint">📋 copy</span>
+            </div>
+
+            {/* Enable toggle */}
+            {!isNote && (
+              <div className="disable-toggle-row">
+                <span className="disable-toggle-label">{isDisabled?"⏸ Node disabled":"▶ Node enabled"}</span>
+                <label className="toggle-switch">
+                  <input type="checkbox" checked={!isDisabled} onChange={toggleDisabled}/>
+                  <div className="toggle-track"/>
+                  <div className="toggle-thumb"/>
+                </label>
+              </div>
+            )}
+
+            {/* Label */}
+            {!isNote && (<>
+              <div className="section-divider">Label</div>
+              <div className="field-group">
+                <input className="field-input" placeholder={def.label}
+                  value={node.data.label||""} onChange={e=>updateLabel(e.target.value)}/>
+              </div>
+            </>)}
+
+            {/* Config fields */}
+            {def.fields.length>0 && <div className="section-divider">Config</div>}
+            {def.fields.map(f=>{
+              const cfgVal=(node.data.config||{})[f.k]||"";
+              const dp=(!f.secret&&f.type!=="select")?dropProps(f.k,cfgVal):{};
+              return (
+                <div className="field-group" key={f.k}>
+                  <div className="field-label">
+                    {f.l}
+                    {f.secret&&<span className="field-hint">🔒 sensitive</span>}
+                  </div>
+                  {f.type==="select"?(
+                    <select className="field-input" value={cfgVal||f.options[0]} onChange={e=>update(f.k,e.target.value)}>
+                      {f.options.map(o=><option key={o} value={o}>{o}</option>)}
+                    </select>
+                  ):f.textarea?(
+                    <textarea className={`field-input${f.mono?" mono":""}`} placeholder={f.ph}
+                      value={cfgVal} onChange={e=>update(f.k,e.target.value)} rows={4} {...dp}/>
+                  ):(
+                    <input className={`field-input${f.mono?" mono":""}`} placeholder={f.ph}
+                      type={f.secret?"password":"text"}
+                      value={cfgVal} onChange={e=>update(f.k,e.target.value)} {...dp}/>
+                  )}
+                  {f.secret&&<span className="secret-hint">💡 Or use {"{{creds.your-credential-name}}"}</span>}
+                </div>
+              );
+            })}
+
+            {/* Type hints */}
+            {node.data.type==="action.condition"&&(
+              <div style={{background:"#0f1117",border:"1px solid #2a2d3e",borderRadius:6,padding:"8px 10px",fontSize:10,color:"#94a3b8",marginTop:6,lineHeight:1.8}}>
+                Expression must evaluate to a Python bool.<br/>
+                <div style={{color:"#059669",marginTop:4}}>● True handle → nodes that run when condition is met</div>
+                <div style={{color:"#dc2626"}}>● False handle → nodes that run when condition is not met</div>
+                <div style={{marginTop:4}}>Output: <code style={{color:"#a78bfa"}}>{"{ result: bool, input: ... }"}</code></div>
+              </div>
+            )}
+            {node.data.type==="action.loop"&&(
+              <div style={{background:"#0f1117",border:"1px solid #2a2d3e",borderRadius:6,padding:"8px 10px",fontSize:10,color:"#94a3b8",marginTop:6}}>
+                <div style={{color:"#7e22ce",marginBottom:3}}>● Body → runs per item</div>
+                <div style={{color:"#64748b",marginBottom:4}}>● Done → after all iterations</div>
+                Each body node receives the current item as input.
+              </div>
+            )}
+            {node.data.type==="action.filter"&&(
+              <div style={{background:"#0f1117",border:"1px solid #2a2d3e",borderRadius:6,padding:"8px 10px",fontSize:10,color:"#94a3b8",marginTop:6}}>
+                Output: <code style={{color:"#a78bfa"}}>{"{ items: [...], count: N }"}</code><br/>
+                Use <code style={{color:"#a78bfa"}}>item</code> in the expression.
+              </div>
+            )}
+            {node.data.type==="action.llm_call"&&(
+              <div style={{background:"#0f1117",border:"1px solid #2a2d3e",borderRadius:6,padding:"8px 10px",fontSize:10,color:"#94a3b8",marginTop:6}}>
+                Output: <code style={{color:"#a78bfa"}}>{"{ response, model, tokens }"}</code><br/>
+                Set <code style={{color:"#a78bfa"}}>api_base</code> for Groq, Together AI, Ollama etc.
+              </div>
+            )}
+            {node.data.type==="action.slack"&&(
+              <div style={{background:"#0f1117",border:"1px solid #2a2d3e",borderRadius:6,padding:"8px 10px",fontSize:10,color:"#94a3b8",marginTop:6,lineHeight:1.9}}>
+                <div style={{color:"#a78bfa",fontWeight:600,marginBottom:4}}>💡 Credential shortcut</div>
+                Create a <strong>Slack Incoming Webhook</strong> credential → set <strong>Slack Credential</strong> to its name.<br/>
+                Output: <code style={{color:"#a78bfa"}}>{"{ sent: true, message }"}</code>
+              </div>
+            )}
+            {node.data.type==="action.call_graph"&&(
+              <div style={{background:"#0f1117",border:"1px solid #2a2d3e",borderRadius:6,padding:"8px 10px",fontSize:10,color:"#94a3b8",marginTop:6}}>
+                Runs another flow as a sub-routine.<br/>Output: the sub-flow's final context dict.<br/>
+                Max nesting depth: <code style={{color:"#a78bfa"}}>5</code> levels.
+              </div>
+            )}
+            {node.data.type==="action.run_script"&&(
+              <div style={{background:"#0f1117",border:"1px solid #2a2d3e",borderRadius:6,padding:"8px 10px",fontSize:10,color:"#94a3b8",marginTop:6}}>
+                Variables: <code style={{color:"#a78bfa"}}>input</code>, <code style={{color:"#a78bfa"}}>context</code>, <code style={{color:"#a78bfa"}}>log</code>, <code style={{color:"#a78bfa"}}>json</code>, <code style={{color:"#a78bfa"}}>os</code>, <code style={{color:"#a78bfa"}}>time</code><br/>
+                Assign output to <code style={{color:"#a78bfa"}}>result</code>.
+              </div>
+            )}
+            {node.data.type==="action.send_email"&&(
+              <div style={{background:"#0f1117",border:"1px solid #2a2d3e",borderRadius:6,padding:"8px 10px",fontSize:10,color:"#94a3b8",marginTop:6,lineHeight:1.9}}>
+                <div style={{color:"#a78bfa",fontWeight:600,marginBottom:4}}>💡 Credential shortcut</div>
+                Create an <strong>SMTP Server</strong> credential → set <strong>SMTP Credential</strong> to its name.
+              </div>
+            )}
+            {node.data.type==="action.ssh"&&(
+              <div style={{background:"#0f1117",border:"1px solid #2a2d3e",borderRadius:6,padding:"8px 10px",fontSize:10,color:"#94a3b8",marginTop:6,lineHeight:1.9}}>
+                <div style={{color:"#a78bfa",fontWeight:600,marginBottom:4}}>💡 Credential shortcut</div>
+                Create an <strong>SSH Server</strong> credential → set <strong>SSH Credential</strong> to its name.<br/>
+                Output: <code style={{color:"#a78bfa"}}>{"{ stdout, stderr, exit_code, success }"}</code>
+              </div>
+            )}
+            {node.data.type==="action.sftp"&&(
+              <div style={{background:"#0f1117",border:"1px solid #2a2d3e",borderRadius:6,padding:"8px 10px",fontSize:10,color:"#94a3b8",marginTop:6,lineHeight:1.9}}>
+                <div style={{color:"#a78bfa",fontWeight:600,marginBottom:4}}>📁 SFTP / FTP Operations</div>
+                Create an <strong>SFTP / FTP Server</strong> credential → set <strong>SFTP Credential</strong> to its name.<br/>
+                <div style={{display:"grid",gridTemplateColumns:"auto 1fr",gap:"0 10px",marginTop:6}}>
+                  <code style={{color:"#a78bfa"}}>list</code><span>→ files[] — set <em>recursive: true</em> to walk subdirs</span>
+                  <code style={{color:"#a78bfa"}}>upload</code><span>→ put <em>content</em> at remote_path</span>
+                  <code style={{color:"#a78bfa"}}>download</code><span>→ {"{ content, size }"}</span>
+                  <code style={{color:"#a78bfa"}}>delete</code><span>→ remove file</span>
+                  <code style={{color:"#a78bfa"}}>mkdir</code><span>→ create directory</span>
+                  <code style={{color:"#a78bfa"}}>rename</code><span>→ move/rename (set <em>new_path</em>)</span>
+                  <code style={{color:"#a78bfa"}}>exists</code><span>→ {"{ exists, is_dir }"}</span>
+                  <code style={{color:"#a78bfa"}}>stat</code><span>→ {"{ size, is_dir, modified }"}</span>
+                </div>
+              </div>
+            )}
+            {node.data.type==="action.github"&&(
+              <div style={{background:"#0f1117",border:"1px solid #2a2d3e",borderRadius:6,padding:"8px 10px",fontSize:10,color:"#94a3b8",marginTop:6,lineHeight:1.9}}>
+                <div style={{color:"#a78bfa",fontWeight:600,marginBottom:4}}>🐙 GitHub</div>
+                Create a <strong>GitHub Token</strong> credential (API Key type, paste PAT) → set <strong>GitHub Credential</strong>.<br/>
+                <div style={{display:"grid",gridTemplateColumns:"auto 1fr",gap:"0 10px",marginTop:4}}>
+                  <code style={{color:"#a78bfa"}}>get_repo</code><span>→ repo details</span>
+                  <code style={{color:"#a78bfa"}}>list_issues</code><span>→ open issues</span>
+                  <code style={{color:"#a78bfa"}}>create_issue</code><span>→ new issue</span>
+                  <code style={{color:"#a78bfa"}}>add_comment</code><span>→ comment on issue</span>
+                  <code style={{color:"#a78bfa"}}>list_commits</code><span>→ recent commits</span>
+                  <code style={{color:"#a78bfa"}}>get_file</code><span>→ raw file content</span>
+                  <code style={{color:"#a78bfa"}}>create_release</code><span>→ new release</span>
+                </div>
+              </div>
+            )}
+            {node.data.type==="action.google_sheets"&&(
+              <div style={{background:"#0f1117",border:"1px solid #2a2d3e",borderRadius:6,padding:"8px 10px",fontSize:10,color:"#94a3b8",marginTop:6,lineHeight:1.9}}>
+                <div style={{color:"#a78bfa",fontWeight:600,marginBottom:4}}>📊 Google Sheets</div>
+                Service Account credential → set <strong>Google SA Credential</strong>.<br/>
+                <div style={{display:"grid",gridTemplateColumns:"auto 1fr",gap:"0 10px",marginTop:4}}>
+                  <code style={{color:"#a78bfa"}}>read_range</code><span>→ rows[]</span>
+                  <code style={{color:"#a78bfa"}}>write_range</code><span>→ overwrite range</span>
+                  <code style={{color:"#a78bfa"}}>append_rows</code><span>→ append below data</span>
+                  <code style={{color:"#a78bfa"}}>clear_range</code><span>→ clear range</span>
+                </div>
+              </div>
+            )}
+            {node.data.type==="action.notion"&&(
+              <div style={{background:"#0f1117",border:"1px solid #2a2d3e",borderRadius:6,padding:"8px 10px",fontSize:10,color:"#94a3b8",marginTop:6,lineHeight:1.9}}>
+                <div style={{color:"#a78bfa",fontWeight:600,marginBottom:4}}>🗒 Notion</div>
+                Integration Token credential → set <strong>Notion Credential</strong>.<br/>
+                <div style={{display:"grid",gridTemplateColumns:"auto 1fr",gap:"0 10px",marginTop:4}}>
+                  <code style={{color:"#a78bfa"}}>query_database</code><span>→ rows[]</span>
+                  <code style={{color:"#a78bfa"}}>get_page</code><span>→ page properties</span>
+                  <code style={{color:"#a78bfa"}}>create_page</code><span>→ new page</span>
+                  <code style={{color:"#a78bfa"}}>update_page</code><span>→ update properties</span>
+                  <code style={{color:"#a78bfa"}}>append_blocks</code><span>→ add content</span>
+                </div>
+              </div>
+            )}
+            {node.data.type==="trigger.cron"&&(
+              <div style={{background:"#0f1117",border:"1px solid #2a2d3e",borderRadius:6,padding:"8px 10px",fontSize:10,color:"#94a3b8",marginTop:6,lineHeight:1.8}}>
+                <div style={{color:"#a78bfa",fontWeight:600,marginBottom:4}}>⏰ Saved automatically as a schedule</div>
+                <div style={{display:"grid",gridTemplateColumns:"auto 1fr",gap:"0 10px"}}>
+                  <span style={{color:"#64748b"}}>Every minute</span><code>* * * * *</code>
+                  <span style={{color:"#64748b"}}>Every hour</span><code>0 * * * *</code>
+                  <span style={{color:"#64748b"}}>Daily at 9am</span><code>0 9 * * *</code>
+                  <span style={{color:"#64748b"}}>Weekdays 9am</span><code>0 9 * * 1-5</code>
+                  <span style={{color:"#64748b"}}>Every 15 min</span><code>*/15 * * * *</code>
+                </div>
+              </div>
+            )}
+            {node.data.type==="action.merge"&&(
+              <div style={{background:"#0f1117",border:"1px solid #2a2d3e",borderRadius:6,padding:"8px 10px",fontSize:10,color:"#94a3b8",marginTop:6,lineHeight:1.9}}>
+                <div style={{color:"#a78bfa",fontWeight:600,marginBottom:4}}>⇒ Merge / Join</div>
+                <div style={{display:"grid",gridTemplateColumns:"auto 1fr",gap:"0 10px",marginTop:4}}>
+                  <code style={{color:"#4ade80"}}>dict</code><span>→ merge dicts (last wins)</span>
+                  <code style={{color:"#60a5fa"}}>all</code><span>→ {"{ merged: [...], count }"}</span>
+                  <code style={{color:"#94a3b8"}}>first</code><span>→ pass first upstream value</span>
+                </div>
+              </div>
+            )}
+
+            {/* Retry Policy */}
+            {!isNote&&!isTrigger&&(<>
+              <div className="section-divider">Retry Policy</div>
+              <div className="form-row" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+                <div className="field-group" style={{marginBottom:0}}>
+                  <label style={{fontSize:11,color:"#94a3b8",fontWeight:500,marginBottom:4}}>Max retries</label>
+                  <input className="field-input" type="number" min="0" max="5" value={retryMax} onChange={e=>updateRetryMax(e.target.value)}/>
+                </div>
+                <div className="field-group" style={{marginBottom:0}}>
+                  <label style={{fontSize:11,color:"#94a3b8",fontWeight:500,marginBottom:4}}>Retry delay (sec)</label>
+                  <input className="field-input" type="number" min="1" max="60" value={retryDelay} onChange={e=>updateRetryDelay(e.target.value)}/>
+                </div>
+              </div>
+              <div className="field-group" style={{marginTop:10}}>
+                <label style={{fontSize:11,color:"#94a3b8",fontWeight:500,marginBottom:4}}>On failure</label>
+                <select className="field-input" value={failMode} onChange={e=>updateFailMode(e.target.value)}>
+                  <option value="abort">abort — stop the graph (default)</option>
+                  <option value="continue">continue — store error, keep going</option>
+                </select>
+                {failMode==="continue"&&(
+                  <div style={{fontSize:10,color:"#f59e0b",marginTop:4}}>
+                    ⚠ Downstream nodes receive {"{ __error, __node, __type }"} as input.
+                  </div>
+                )}
+              </div>
+            </>)}
+
+            <button className="delete-node-btn" style={{marginTop:16}} onClick={()=>{ onDelete(node.id); onClose(); }}>🗑 Remove node</button>
+          </div>
+
+          {/* ── RIGHT: OUTPUT ── */}
+          <div className="nem-io-col right">
+            <div className="nem-io-col-hdr">Output →</div>
+            <div className="nem-io-view-tabs">
+              <button className={`nem-io-view-tab${outputView==="schema"?" active":""}`} onClick={()=>setOutputView("schema")}>Schema</button>
+              <button className={`nem-io-view-tab${outputView==="json"?" active":""}`} onClick={()=>setOutputView("json")}>JSON</button>
+            </div>
+            <div className="nem-io-col-body">
+              <NioBody data={runOutput} view={outputView} sourceNodeId={node.id} isTruncated={!!(runOutput&&runOutput.__truncated)}/>
+            </div>
+          </div>
+
+        </div>{/* end nem-columns */}
+      </div>{/* end nem-panel */}
+    </div>
+  );
+}
+
 // ── Main App ──────────────────────────────────────────────────────────────────
 function App(){
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
@@ -2028,8 +2390,20 @@ function App(){
             )}
           </FlowCanvas>
         </div>
-        <ConfigPanel node={selectedNode} onChange={onNodeChange} onDelete={onDeleteNode} edges={edges}/>
+        {/* Slim right panel: only shows the empty-state hint */}
+        <ConfigPanel node={null} onChange={onNodeChange} onDelete={onDeleteNode} edges={edges}/>
       </div>
+
+      {/* Node Editor Modal — opens when a node is selected */}
+      {selectedNode && (
+        <NodeEditorModal
+          node={selectedNode}
+          onChange={onNodeChange}
+          onDelete={onDeleteNode}
+          onClose={()=>setSelectedNode(null)}
+          edges={edges}
+        />
+      )}
 
       {showModal && (
         <OpenModal
