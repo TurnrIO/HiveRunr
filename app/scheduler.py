@@ -8,11 +8,14 @@ logging.basicConfig(level=logging.INFO)
 
 def _make_job(sched):
     def job():
-        from app.worker import enqueue_workflow, enqueue_graph
+        from app.worker import enqueue_workflow, enqueue_graph, enqueue_script
         import json
         payload = json.loads(sched["payload"]) if isinstance(sched["payload"], str) else (sched["payload"] or {})
         if sched.get("graph_id"):
             enqueue_graph.delay(sched["graph_id"], payload)
+        elif sched.get("workflow", "").startswith("script:"):
+            script_name = sched["workflow"][len("script:"):]
+            enqueue_script.delay(script_name, payload)
         elif sched.get("workflow"):
             enqueue_workflow.delay(sched["workflow"], payload)
     return job

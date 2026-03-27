@@ -823,8 +823,8 @@ function Credentials({ showToast }) {
 }
 
 // ── Schedules ─────────────────────────────────────────────────────────────
-// ── Searchable flow picker ─────────────────────────────────────────────────
-function FlowPicker({ value, onChange, graphs }) {
+// ── Searchable flow + script picker ────────────────────────────────────────
+function FlowPicker({ value, onChange, graphs, scripts }) {
   const [query, setQuery] = useState(value || "");
   const [open,  setOpen]  = useState(false);
   const wrapRef = useRef(null);
@@ -838,38 +838,68 @@ function FlowPicker({ value, onChange, graphs }) {
     return ()=>document.removeEventListener("mousedown", close);
   },[open]);
 
-  const filtered = graphs.filter(g =>
-    g.name.toLowerCase().includes((query||"").toLowerCase())
-  ).slice(0, 30);
+  const q = (query||"").toLowerCase();
+  const filteredGraphs   = (graphs  ||[]).filter(g => g.name.toLowerCase().includes(q)).slice(0, 20);
+  const filteredScripts  = (scripts ||[]).filter(s => s.name.toLowerCase().includes(q)).slice(0, 20);
+  const hasResults = filteredGraphs.length > 0 || filteredScripts.length > 0;
 
-  function select(g) { setQuery(g.name); onChange(g.name); setOpen(false); }
+  function selectGraph(g)  { setQuery(g.name);          onChange(g.name);            setOpen(false); }
+  function selectScript(s) { setQuery("script:" + s.name); onChange("script:" + s.name); setOpen(false); }
 
   function handleInput(e) { setQuery(e.target.value); onChange(e.target.value); setOpen(true); }
+
+  const sectionLabel = {
+    padding:"4px 12px 2px",fontSize:10,fontWeight:700,letterSpacing:"0.08em",
+    textTransform:"uppercase",color:"#475569",background:"#13151f"
+  };
+  const itemStyle = {
+    padding:"8px 12px",cursor:"pointer",display:"flex",alignItems:"center",
+    justifyContent:"space-between",borderBottom:"1px solid #1e2130",fontSize:13
+  };
 
   return (
     <div ref={wrapRef} style={{position:"relative"}}>
       <input required value={query} onChange={handleInput} onFocus={()=>setOpen(true)}
-        placeholder="Search flows…" autoComplete="off" style={{width:"100%"}}/>
-      {open && filtered.length > 0 && (
+        placeholder="Search flows &amp; scripts…" autoComplete="off" style={{width:"100%"}}/>
+      {open && hasResults && (
         <div style={{position:"absolute",top:"calc(100% + 4px)",left:0,right:0,background:"#1a1d2e",
-          border:"1px solid #7c3aed",borderRadius:8,zIndex:999,maxHeight:220,overflowY:"auto",
+          border:"1px solid #7c3aed",borderRadius:8,zIndex:999,maxHeight:260,overflowY:"auto",
           boxShadow:"0 8px 24px rgba(0,0,0,.5)"}}>
-          {filtered.map(g=>(
-            <div key={g.id} onMouseDown={()=>select(g)}
-              style={{padding:"8px 12px",cursor:"pointer",display:"flex",alignItems:"center",
-                justifyContent:"space-between",borderBottom:"1px solid #1e2130",fontSize:13}}
-              onMouseEnter={e=>e.currentTarget.style.background="#252840"}
-              onMouseLeave={e=>e.currentTarget.style.background=""}>
-              <span style={{color:"#e2e8f0"}}>{g.name}</span>
-              <span style={{fontSize:10,color:"#475569",fontFamily:"monospace"}}>#{g.id}</span>
-            </div>
-          ))}
+          {filteredGraphs.length > 0 && (
+            <>
+              <div style={sectionLabel}>Flows</div>
+              {filteredGraphs.map(g=>(
+                <div key={"g"+g.id} onMouseDown={()=>selectGraph(g)} style={itemStyle}
+                  onMouseEnter={e=>e.currentTarget.style.background="#252840"}
+                  onMouseLeave={e=>e.currentTarget.style.background=""}>
+                  <span style={{color:"#e2e8f0"}}>{g.name}</span>
+                  <span style={{display:"flex",alignItems:"center",gap:6}}>
+                    <span style={{fontSize:10,background:"#312e81",color:"#a5b4fc",borderRadius:4,padding:"1px 6px",fontWeight:600}}>Flow</span>
+                    <span style={{fontSize:10,color:"#475569",fontFamily:"monospace"}}>#{g.id}</span>
+                  </span>
+                </div>
+              ))}
+            </>
+          )}
+          {filteredScripts.length > 0 && (
+            <>
+              <div style={sectionLabel}>Scripts</div>
+              {filteredScripts.map(s=>(
+                <div key={"s"+s.name} onMouseDown={()=>selectScript(s)} style={itemStyle}
+                  onMouseEnter={e=>e.currentTarget.style.background="#252840"}
+                  onMouseLeave={e=>e.currentTarget.style.background=""}>
+                  <span style={{color:"#e2e8f0"}}>{s.name}</span>
+                  <span style={{fontSize:10,background:"#164e3d",color:"#6ee7b7",borderRadius:4,padding:"1px 6px",fontWeight:600}}>Script</span>
+                </div>
+              ))}
+            </>
+          )}
         </div>
       )}
-      {open && query && filtered.length === 0 && (
+      {open && query && !hasResults && (
         <div style={{position:"absolute",top:"calc(100% + 4px)",left:0,right:0,background:"#1a1d2e",
           border:"1px solid #2a2d3e",borderRadius:8,padding:"10px 12px",fontSize:13,color:"#475569",zIndex:999}}>
-          No matching flows
+          No matching flows or scripts
         </div>
       )}
     </div>
@@ -879,12 +909,14 @@ function FlowPicker({ value, onChange, graphs }) {
 function Schedules({ showToast }) {
   const [schedules, setSchedules] = useState([]);
   const [graphs,    setGraphs]    = useState([]);
+  const [scripts,   setScripts]   = useState([]);
   const [form, setForm] = useState({name:"",workflow:"",cron:"0 9 * * *",payload:"{}",timezone:"UTC"});
 
   const load = async () => { try { setSchedules(await api("GET","/api/schedules")); } catch(e){} };
   useEffect(()=>{
     load();
     api("GET","/api/graphs").then(setGraphs).catch(()=>{});
+    api("GET","/api/scripts").then(data => setScripts(Array.isArray(data) ? data : (data.scripts || []))).catch(()=>{});
   },[]);
 
   async function create(e) {
@@ -907,8 +939,8 @@ function Schedules({ showToast }) {
           <div className="form-row">
             <div className="form-group"><label>Name</label><input required value={form.name} onChange={e=>setForm({...form,name:e.target.value})} placeholder="Daily digest"/></div>
             <div className="form-group">
-              <label>Flow</label>
-              <FlowPicker value={form.workflow} graphs={graphs} onChange={v=>setForm({...form,workflow:v})}/>
+              <label>Flow / Script</label>
+              <FlowPicker value={form.workflow} graphs={graphs} scripts={scripts} onChange={v=>setForm({...form,workflow:v})}/>
             </div>
           </div>
           <div className="form-row">
