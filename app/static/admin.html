@@ -1375,7 +1375,7 @@ function StatusDot({ status }) {
   );
 }
 
-function Settings({ showToast }) {
+function Settings({ showToast, user }) {
   const [status,     setStatus]     = useState(null);
   const [loadingSt,  setLoadingSt]  = useState(true);
   const [nodes,      setNodes]      = useState([]);
@@ -1384,12 +1384,41 @@ function Settings({ showToast }) {
   const [clearing,   setClearing]   = useState(false);
   const [trimming,   setTrimming]   = useState(false);
   const [keepVal,    setKeepVal]    = useState("100");
+  const [tokens,     setTokens]     = useState([]);
+  const [newTokenName, setNewTokenName] = useState("");
+  const [creatingToken, setCreatingToken] = useState(false);
+  const [revealedToken, setRevealedToken] = useState(null); // shown once after creation
   const webhookBase = `${window.location.origin}/webhook/`;
+  const isOwner = user?.role === "owner";
 
   useEffect(()=>{
     loadStatus();
     loadNodes();
-  },[]);
+    if(isOwner) loadTokens();
+  },[isOwner]);
+
+  function loadTokens() {
+    api("GET","/api/tokens").then(setTokens).catch(()=>{});
+  }
+
+  async function createToken(e) {
+    e.preventDefault();
+    if(!newTokenName.trim()) return;
+    setCreatingToken(true);
+    try {
+      const t = await api("POST","/api/tokens",{name:newTokenName.trim()});
+      setRevealedToken(t);
+      setNewTokenName("");
+      loadTokens();
+    } catch(err) { showToast(err.message,"error"); }
+    setCreatingToken(false);
+  }
+
+  async function revokeToken(id, name) {
+    if(!window.confirm(`Revoke token "${name}"? Any services using it will lose access immediately.`)) return;
+    try { await api("DELETE",`/api/tokens/${id}`); loadTokens(); showToast("Token revoked"); }
+    catch(err) { showToast(err.message,"error"); }
+  }
 
   async function loadStatus() {
     setLoadingSt(true);
@@ -1493,13 +1522,72 @@ function Settings({ showToast }) {
         )}
       </div>
 
-      {/* ── API Token (service account) ── */}
-      <div className="card">
-        <div className="card-title">API Access</div>
-        <p style={{fontSize:13,color:"#94a3b8",marginBottom:10}}>
-          Browser access uses session cookies. For API / service-account access, set the <code style={{color:"#a78bfa"}}>ADMIN_TOKEN</code> environment variable and pass it as the <code style={{color:"#a78bfa"}}>x-admin-token</code> request header.
-        </p>
-      </div>
+      {/* ── API Tokens ── */}
+      {isOwner && (
+        <div className="card">
+          <div className="card-title">API Tokens</div>
+          <p style={{fontSize:13,color:"#94a3b8",marginBottom:14}}>
+            Tokens allow external services and scripts to call the API without a browser session.
+            Pass a token as the <code style={{color:"#a78bfa"}}>x-api-token</code> request header.
+            Tokens are shown only once at creation — store them securely.
+          </p>
+
+          {/* generate form */}
+          <form onSubmit={createToken} style={{display:"flex",gap:8,marginBottom:16}}>
+            <input value={newTokenName} onChange={e=>setNewTokenName(e.target.value)}
+              placeholder="Token name (e.g. CI pipeline, monitoring)" style={{flex:1}}/>
+            <button type="submit" className="btn btn-primary" disabled={creatingToken||!newTokenName.trim()}>
+              {creatingToken?"Generating…":"+ Generate"}
+            </button>
+          </form>
+
+          {/* token list */}
+          {tokens.length === 0 ? (
+            <div className="empty-state" style={{padding:"12px 0"}}>No API tokens yet.</div>
+          ) : (
+            <table>
+              <thead><tr><th>Name</th><th>Created</th><th>Last used</th><th></th></tr></thead>
+              <tbody>
+                {tokens.map(t=>(
+                  <tr key={t.id}>
+                    <td style={{fontWeight:500}}>{t.name}</td>
+                    <td style={{fontSize:12,color:"#64748b"}}>{new Date(t.created_at).toLocaleString()}</td>
+                    <td style={{fontSize:12,color:"#64748b"}}>{t.last_used ? new Date(t.last_used).toLocaleString() : "Never"}</td>
+                    <td>
+                      <button className="btn btn-danger btn-sm" onClick={()=>revokeToken(t.id,t.name)}>Revoke</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      )}
+
+      {/* ── Token reveal modal ── */}
+      {revealedToken && (
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.7)",zIndex:2000,
+          display:"flex",alignItems:"center",justifyContent:"center"}}>
+          <div className="card" style={{width:480,margin:0}}>
+            <div className="card-title" style={{color:"#4ade80"}}>✓ Token created — copy it now</div>
+            <p style={{fontSize:13,color:"#f87171",marginBottom:12}}>
+              This token will <strong>not</strong> be shown again. Copy it and store it securely.
+            </p>
+            <div style={{background:"#0d0f1a",border:"1px solid #2a2d3e",borderRadius:8,padding:"10px 12px",
+              fontFamily:"monospace",fontSize:13,color:"#a78bfa",wordBreak:"break-all",marginBottom:12,
+              userSelect:"all",cursor:"text"}}>
+              {revealedToken.token}
+            </div>
+            <div style={{display:"flex",gap:8}}>
+              <button className="btn btn-primary" onClick={()=>{
+                navigator.clipboard.writeText(revealedToken.token);
+                showToast("Token copied to clipboard");
+              }}>⎘ Copy</button>
+              <button className="btn btn-ghost" onClick={()=>setRevealedToken(null)}>Done — I've saved it</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Webhook URL ── */}
       <div className="card">

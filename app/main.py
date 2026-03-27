@@ -20,6 +20,7 @@ from app.core.db import (
     users_exist, create_user, get_user_by_username, get_user_by_id, list_users,
     update_user_password, update_user_role, delete_user,
     create_session, delete_session_by_token_hash,
+    create_api_token, list_api_tokens, get_api_token_by_hash, touch_api_token, delete_api_token,
 )
 from app.worker import enqueue_workflow, enqueue_graph, enqueue_script
 
@@ -30,20 +31,26 @@ app          = FastAPI(title="HiveRunr")
 STATIC_DIR   = Path(__file__).parent / "static"
 RUNLOGS_DIR  = Path("/app/runlogs")
 WORKFLOWS    = ["example"]
-API_KEY      = os.environ.get("API_KEY",      "dev_api_key")
-ADMIN_TOKEN  = os.environ.get("ADMIN_TOKEN",  "")   # empty = disabled; set for API-client access
+API_KEY      = os.environ.get("API_KEY", "dev_api_key")
 
 # ── auth ──────────────────────────────────────────────────────────────────
 def _check_admin(request: Request):
-    """Accept session cookie (browser) OR x-admin-token header (API clients)."""
-    from app.auth import get_current_user
+    """Accept session cookie (browser) OR x-api-token / x-admin-token header (API clients)."""
+    from app.auth import get_current_user, hash_token
+    # 1. Session cookie — browser users
     user = get_current_user(request)
     if user:
         return user
-    # Legacy token fallback for API / service clients
-    token = request.headers.get("x-admin-token") or request.query_params.get("token", "")
-    if ADMIN_TOKEN and token == ADMIN_TOKEN:
-        return {"id": 0, "username": "admin", "role": "owner"}
+    # 2. DB-stored API token — service accounts / CI
+    raw = (request.headers.get("x-api-token")
+           or request.headers.get("x-admin-token")
+           or request.query_params.get("token", ""))
+    if raw:
+        th = hash_token(raw)
+        tok = get_api_token_by_hash(th)
+        if tok:
+            touch_api_token(th)
+            return {"id": 0, "username": f"api:{tok['name']}", "role": "owner"}
     raise HTTPException(401, "Authentication required")
 
 def _check_api_key(key: str):
@@ -425,6 +432,33 @@ def api_delete_user(user_id: int, request: Request):
     if actor.get("id") == user_id:
         raise HTTPException(400, "Cannot delete your own account")
     delete_user(user_id)
+    return {"ok": True}
+
+# ── api token management ──────────────────────────────────────────────────
+@app.get("/api/tokens")
+def api_list_tokens(request: Request):
+    _require_owner(request)
+    return list_api_tokens()
+
+class CreateTokenBody(BaseModel):
+    name: str
+
+@app.post("/api/tokens")
+def api_create_token(body: CreateTokenBody, request: Request):
+    from app.auth import hash_token
+    actor = _require_owner(request)
+    if not body.name.strip():
+        raise HTTPException(422, "Token name is required")
+    raw = "hr_" + _sec.token_hex(32)
+    th  = hash_token(raw)
+    tok = create_api_token(body.name.strip(), th, actor.get("id") or None)
+    # Return the raw token ONCE — it cannot be retrieved again
+    return {"id": tok["id"], "name": tok["name"], "created_at": tok["created_at"], "token": raw}
+
+@app.delete("/api/tokens/{token_id}")
+def api_delete_token(token_id: int, request: Request):
+    _require_owner(request)
+    delete_api_token(token_id)
     return {"ok": True}
 
 # ── health ────────────────────────────────────────────────────────────────

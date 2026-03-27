@@ -148,6 +148,16 @@ def init_db():
                 expires_at TIMESTAMPTZ DEFAULT NOW() + INTERVAL '30 days'
             )
         """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS api_tokens (
+                id         SERIAL PRIMARY KEY,
+                name       TEXT NOT NULL,
+                token_hash TEXT UNIQUE NOT NULL,
+                created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+                created_at TIMESTAMPTZ DEFAULT NOW(),
+                last_used  TIMESTAMPTZ
+            )
+        """)
 
 # ── runs ──────────────────────────────────────────────────────────────────
 def list_runs():
@@ -559,3 +569,40 @@ def delete_session_by_token_hash(token_hash: str):
 def purge_expired_sessions():
     with get_conn() as conn:
         conn.cursor().execute("DELETE FROM sessions WHERE expires_at < NOW()")
+
+# ── api_tokens ─────────────────────────────────────────────────────────────
+def create_api_token(name: str, token_hash: str, created_by: int) -> dict:
+    with get_conn() as conn:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur.execute(
+            "INSERT INTO api_tokens (name, token_hash, created_by) VALUES (%s, %s, %s) RETURNING id, name, created_at",
+            (name, token_hash, created_by)
+        )
+        return dict(cur.fetchone())
+
+def list_api_tokens() -> list:
+    with get_conn() as conn:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur.execute("""
+            SELECT t.id, t.name, t.created_at, t.last_used, u.username AS created_by_username
+            FROM api_tokens t LEFT JOIN users u ON t.created_by = u.id
+            ORDER BY t.created_at DESC
+        """)
+        return [dict(r) for r in cur.fetchall()]
+
+def get_api_token_by_hash(token_hash: str):
+    with get_conn() as conn:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur.execute("SELECT * FROM api_tokens WHERE token_hash=%s", (token_hash,))
+        row = cur.fetchone()
+        return dict(row) if row else None
+
+def touch_api_token(token_hash: str):
+    with get_conn() as conn:
+        conn.cursor().execute(
+            "UPDATE api_tokens SET last_used=NOW() WHERE token_hash=%s", (token_hash,)
+        )
+
+def delete_api_token(token_id: int):
+    with get_conn() as conn:
+        conn.cursor().execute("DELETE FROM api_tokens WHERE id=%s", (token_id,))
