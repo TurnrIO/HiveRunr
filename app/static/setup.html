@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Set up HiveRunr</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:#0d0f1a;color:#e2e8f0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+    min-height:100vh;display:flex;align-items:center;justify-content:center}
+  .card{background:#13151f;border:1px solid #1e2130;border-radius:16px;padding:40px 36px;
+    width:100%;max-width:440px;box-shadow:0 24px 64px rgba(0,0,0,.5)}
+  .logo{display:flex;align-items:center;gap:10px;margin-bottom:28px;justify-content:center}
+  .logo-icon{width:38px;height:38px;background:linear-gradient(135deg,#7c3aed,#a855f7);
+    border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:20px}
+  .logo-text{font-size:22px;font-weight:700;color:#e2e8f0;letter-spacing:-.5px}
+  .step-badge{background:#7c3aed22;border:1px solid #7c3aed55;border-radius:20px;
+    padding:3px 12px;font-size:11px;font-weight:600;color:#a78bfa;
+    text-transform:uppercase;letter-spacing:.06em;display:inline-block;margin-bottom:14px}
+  h1{font-size:20px;font-weight:700;color:#e2e8f0;margin-bottom:6px}
+  .subtitle{font-size:13px;color:#64748b;margin-bottom:28px;line-height:1.5}
+  label{display:block;font-size:12px;font-weight:600;color:#94a3b8;margin-bottom:6px;
+    text-transform:uppercase;letter-spacing:.04em}
+  input{width:100%;padding:10px 13px;background:#0d0f1a;border:1px solid #2a2d3e;border-radius:8px;
+    color:#e2e8f0;font-size:14px;outline:none;transition:border-color .15s}
+  input:focus{border-color:#7c3aed}
+  input.invalid{border-color:#f87171}
+  .hint{font-size:11px;color:#475569;margin-top:5px}
+  .field{margin-bottom:18px}
+  .btn{width:100%;padding:11px;background:linear-gradient(135deg,#7c3aed,#6d28d9);border:none;
+    border-radius:8px;color:#fff;font-size:14px;font-weight:600;cursor:pointer;
+    transition:opacity .15s;margin-top:8px}
+  .btn:hover{opacity:.88}
+  .btn:disabled{opacity:.5;cursor:not-allowed}
+  .error{background:#f871711a;border:1px solid #f8717140;border-radius:8px;padding:10px 13px;
+    font-size:13px;color:#fca5a5;margin-bottom:18px;display:none}
+  .divider{border:none;border-top:1px solid #1e2130;margin:24px 0}
+  .owner-badge{display:flex;align-items:center;gap:8px;background:#7c3aed14;
+    border:1px solid #7c3aed33;border-radius:8px;padding:10px 12px;margin-bottom:24px}
+  .owner-badge .icon{font-size:18px}
+  .owner-badge p{font-size:12px;color:#a78bfa;line-height:1.4}
+  .owner-badge strong{color:#c4b5fd}
+  .spinner{display:inline-block;width:14px;height:14px;border:2px solid rgba(255,255,255,.3);
+    border-top-color:#fff;border-radius:50%;animation:spin .6s linear infinite;vertical-align:middle;margin-right:6px}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .strength{height:3px;border-radius:2px;margin-top:7px;background:#1e2130;overflow:hidden}
+  .strength-bar{height:100%;width:0;transition:width .3s,background .3s;border-radius:2px}
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="logo">
+    <div class="logo-icon">⚡</div>
+    <div class="logo-text">HiveRunr</div>
+  </div>
+  <div class="step-badge">First-time setup</div>
+  <h1>Create owner account</h1>
+  <p class="subtitle">This will be the primary account with full access to everything. You can add more users later.</p>
+
+  <div class="owner-badge">
+    <div class="icon">👑</div>
+    <p><strong>Owner role</strong> — full access to all flows, schedules, credentials, and settings.</p>
+  </div>
+
+  <div class="error" id="err"></div>
+
+  <form id="form" onsubmit="setup(event)">
+    <div class="field">
+      <label>Username</label>
+      <input id="username" type="text" autocomplete="username" autofocus required
+        placeholder="admin" oninput="validate()"/>
+    </div>
+    <div class="field">
+      <label>Email</label>
+      <input id="email" type="email" autocomplete="email" required
+        placeholder="you@example.com" oninput="validate()"/>
+      <p class="hint">Used for password recovery (coming soon)</p>
+    </div>
+    <div class="field">
+      <label>Password</label>
+      <input id="password" type="password" autocomplete="new-password" required
+        placeholder="At least 8 characters" oninput="onPwInput()"/>
+      <div class="strength"><div class="strength-bar" id="sbar"></div></div>
+    </div>
+    <div class="field">
+      <label>Confirm password</label>
+      <input id="confirm" type="password" autocomplete="new-password" required
+        placeholder="Repeat password" oninput="validate()"/>
+    </div>
+    <button class="btn" id="btn" type="submit" disabled>Create account &amp; sign in</button>
+  </form>
+</div>
+
+<script>
+function pwStrength(pw) {
+  let score = 0;
+  if (pw.length >= 8)  score++;
+  if (pw.length >= 12) score++;
+  if (/[A-Z]/.test(pw)) score++;
+  if (/[0-9]/.test(pw)) score++;
+  if (/[^A-Za-z0-9]/.test(pw)) score++;
+  return score; // 0-5
+}
+
+function onPwInput() {
+  const pw = document.getElementById('password').value;
+  const score = pwStrength(pw);
+  const bar = document.getElementById('sbar');
+  const pct = Math.max(10, score * 20);
+  const color = score <= 1 ? '#f87171' : score <= 3 ? '#fbbf24' : '#4ade80';
+  bar.style.width = pct + '%';
+  bar.style.background = color;
+  validate();
+}
+
+function validate() {
+  const u = document.getElementById('username').value.trim();
+  const e = document.getElementById('email').value.trim();
+  const p = document.getElementById('password').value;
+  const c = document.getElementById('confirm').value;
+  const confirmEl = document.getElementById('confirm');
+  const ok = u.length > 0 && e.includes('@') && p.length >= 8 && p === c;
+  confirmEl.classList.toggle('invalid', c.length > 0 && p !== c);
+  document.getElementById('btn').disabled = !ok;
+}
+
+async function setup(e) {
+  e.preventDefault();
+  const btn = document.getElementById('btn');
+  const err = document.getElementById('err');
+  err.style.display = 'none';
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span>Setting up…';
+  try {
+    const res = await fetch('/api/auth/setup', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        username: document.getElementById('username').value.trim(),
+        email:    document.getElementById('email').value.trim().toLowerCase(),
+        password: document.getElementById('password').value,
+      }),
+    });
+    if (res.ok) {
+      window.location.href = '/';
+    } else {
+      const data = await res.json().catch(()=>({}));
+      err.textContent = data.detail || 'Setup failed — please try again';
+      err.style.display = 'block';
+      btn.disabled = false;
+      btn.textContent = 'Create account & sign in';
+    }
+  } catch(ex) {
+    err.textContent = 'Network error — please try again';
+    err.style.display = 'block';
+    btn.disabled = false;
+    btn.textContent = 'Create account & sign in';
+  }
+}
+</script>
+</body>
+</html>
