@@ -419,14 +419,19 @@ function Metrics({ showToast }) {
           <table>
             <thead><tr><th>Flow</th><th>Status</th><th>Duration (ms)</th><th>Time</th></tr></thead>
             <tbody>
-              {recentRuns.map(r => (
+              {recentRuns.map(r => {
+                const durMs = r.created_at && r.updated_at
+                  ? Math.max(0, Math.round((new Date(r.updated_at) - new Date(r.created_at))))
+                  : null;
+                return (
                 <tr key={r.id}>
                   <td style={{fontSize:12}}>{r.flow_name || "—"}</td>
                   <td><span className={`badge badge-${r.status}`}>{r.status}</span></td>
-                  <td style={{fontSize:12}}>{r.duration_ms || "—"}</td>
-                  <td style={{fontSize:12,color:"#64748b"}}>{relativeTime(r.started_at)}</td>
+                  <td style={{fontSize:12}}>{durMs != null ? durMs : "—"}</td>
+                  <td style={{fontSize:12,color:"#64748b"}}>{relativeTime(r.created_at)}</td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         </div>
