@@ -5250,6 +5250,18 @@ select.field-input{appearance:none;cursor:pointer;background-image:url("data:ima
 .nem-io-col-body{flex:1;overflow-y:auto;padding:8px 10px;font-size:11px;line-height:1.8}
 .nem-cfg-col{flex:1;overflow-y:auto;padding:16px 20px;min-width:0;border-right:1px solid #2a2d3e}
 
+/* ── Variable autocomplete ── */
+.var-wrap{position:relative}
+.var-dropdown{position:absolute;top:100%;left:0;right:0;z-index:9999;background:#1a1d2e;border:1px solid #7c3aed;border-radius:6px;box-shadow:0 8px 24px #0008;max-height:220px;overflow-y:auto;margin-top:2px}
+.var-dropdown-item{display:flex;align-items:center;justify-content:space-between;padding:6px 10px;cursor:pointer;gap:8px;border-bottom:1px solid #1e2130;transition:background .1s}
+.var-dropdown-item:last-child{border-bottom:none}
+.var-dropdown-item:hover,.var-dropdown-item.active{background:#2a2060}
+.var-dropdown-label{font-size:11px;color:#e2e8f0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1}
+.var-dropdown-node{font-size:9px;color:#7c3aed;font-weight:600;white-space:nowrap;flex-shrink:0}
+.var-dropdown-tmpl{font-size:9px;color:#64748b;white-space:nowrap;font-family:monospace;flex-shrink:0}
+.var-dropdown-section{font-size:9px;color:#475569;font-weight:700;letter-spacing:.08em;text-transform:uppercase;padding:5px 10px 2px;background:#0f1117;position:sticky;top:0}
+.var-trigger-hint{font-size:9px;color:#475569;position:absolute;right:8px;top:50%;transform:translateY(-50%);pointer-events:none;font-style:italic}
+
 /* ── flow canvas ── */
 .flow-wrap{flex:1;position:relative;background:#0f1117}
 .reactflow-attribution{display:none}
@@ -6477,8 +6489,176 @@ function validateFlow(nodes, edges, credentials) {
   return issues;
 }
 
+// ── Variable autocomplete helpers ─────────────────────────────────────────────
+// Recursively flatten object keys to dot-notation paths, max 3 levels deep
+function flattenVarPaths(obj, nodeId, nodeLabel, prefix, depth){
+  prefix = prefix || ""; depth = depth || 0;
+  const results = [];
+  if(!obj || typeof obj !== "object" || depth > 3) return results;
+  if(Array.isArray(obj)){
+    // For arrays, expose [0] and [1] as samples
+    obj.slice(0,2).forEach((item,i)=>{
+      const p = prefix ? `${prefix}[${i}]` : `[${i}]`;
+      results.push({ template:`{{${nodeId}.${p}}}`, label:p, nodeLabel });
+      results.push(...flattenVarPaths(item, nodeId, nodeLabel, p, depth+1));
+    });
+    return results;
+  }
+  for(const k of Object.keys(obj)){
+    if(k.startsWith("__")) continue; // skip internal fields like __truncated
+    const p = prefix ? `${prefix}.${k}` : k;
+    results.push({ template:`{{${nodeId}.${p}}}`, label:p, nodeLabel });
+    if(obj[k] && typeof obj[k] === "object" && !Array.isArray(obj[k])){
+      results.push(...flattenVarPaths(obj[k], nodeId, nodeLabel, p, depth+1));
+    }
+  }
+  return results;
+}
+
+// Build the full variable list for a node given its upstream nodes
+function buildVarList(targetNodeId, allNodes, edges, credentials){
+  const vars = [];
+  // Upstream node outputs
+  const upstreamIds = edges.filter(e=>e.target===targetNodeId).map(e=>e.source);
+  for(const upId of upstreamIds){
+    const upNode = allNodes.find(n=>n.id===upId);
+    if(!upNode) continue;
+    const nodeLabel = upNode.data.label || (NODE_DEFS[upNode.data.type]||{}).label || upId;
+    const output = upNode.data._runOutput;
+    if(output && !output.__truncated && typeof output === "object"){
+      const paths = flattenVarPaths(output, upId, nodeLabel, "", 0);
+      vars.push(...paths);
+      if(!paths.length){
+        // Output exists but is empty — still add the root ref
+        vars.push({ template:`{{${upId}}}`, label:"(output)", nodeLabel });
+      }
+    } else {
+      // No run data yet — expose just the node reference so user knows it exists
+      vars.push({ template:`{{${upId}}}`, label:"(run flow to see fields)", nodeLabel, dimmed:true });
+    }
+  }
+  // Credential references
+  if(credentials && credentials.length){
+    for(const c of credentials){
+      vars.push({ template:`{{creds.${c.name}}}`, label:`creds.${c.name}`, nodeLabel:"Credentials", isCred:true });
+    }
+  }
+  return vars;
+}
+
+// VarField — input or textarea with {{ autocomplete
+function VarField({ multiline, value, onChangeValue, vars, className, placeholder, type, rows, ...rest }){
+  const [show, setShow]     = useState(false);
+  const [filter, setFilter] = useState("");
+  const [cursor, setCursor] = useState(0);
+  const elRef = useRef(null);
+
+  // Detect {{ trigger after any keystroke
+  function detectTrigger(el){
+    const pos = el.selectionStart || 0;
+    const before = (el.value || "").slice(0, pos);
+    const ddIdx  = before.lastIndexOf("{{");
+    if(ddIdx !== -1 && !before.slice(ddIdx).includes("}}")){
+      setFilter(before.slice(ddIdx + 2).toLowerCase());
+      setShow(true);
+      setCursor(0);
+    } else {
+      setShow(false);
+    }
+  }
+
+  function handleChange(e){
+    onChangeValue(e.target.value);
+    detectTrigger(e.target);
+  }
+
+  function handleKeyDown(e){
+    if(!show || !filtered.length) return;
+    if(e.key === "ArrowDown"){ e.preventDefault(); setCursor(c=>Math.min(c+1, filtered.length-1)); }
+    else if(e.key === "ArrowUp"){ e.preventDefault(); setCursor(c=>Math.max(c-1,0)); }
+    else if(e.key === "Enter"){ e.preventDefault(); insertVar(filtered[cursor]); }
+    else if(e.key === "Escape"){ e.preventDefault(); setShow(false); }
+  }
+
+  function insertVar(v){
+    const el = elRef.current;
+    if(!el) return;
+    const pos = el.selectionStart || 0;
+    const val = value || "";
+    const before = val.slice(0, pos);
+    const after  = val.slice(pos);
+    const ddIdx  = before.lastIndexOf("{{");
+    const newVal = before.slice(0, ddIdx) + v.template + after;
+    onChangeValue(newVal);
+    setShow(false);
+    setTimeout(()=>{
+      try{
+        const newPos = ddIdx + v.template.length;
+        el.selectionStart = el.selectionEnd = newPos;
+        el.focus();
+      }catch(e){}
+    }, 0);
+  }
+
+  const filtered = vars.filter(v=>{
+    if(!filter) return true;
+    return v.label.toLowerCase().includes(filter) || v.template.toLowerCase().includes(filter) || (v.nodeLabel||"").toLowerCase().includes(filter);
+  }).slice(0,30);
+
+  // Group by nodeLabel for the dropdown
+  const groups = [];
+  const seen = new Map();
+  for(const v of filtered){
+    const g = v.isCred ? "Credentials" : (v.nodeLabel || "Upstream");
+    if(!seen.has(g)){ seen.set(g, []); groups.push({ label:g, items:[] }); }
+    seen.get(g).push(v);
+    groups.find(x=>x.label===g).items.push(v);
+  }
+
+  const sharedProps = {
+    ref: elRef,
+    className: className || "field-input",
+    placeholder,
+    value: value || "",
+    onChange: handleChange,
+    onKeyDown: handleKeyDown,
+    onBlur: ()=>setTimeout(()=>setShow(false), 180),
+    onClick: e=>detectTrigger(e.target),
+    ...rest
+  };
+
+  return (
+    <div className="var-wrap">
+      {multiline
+        ? <textarea {...sharedProps} rows={rows||4}/>
+        : <input {...sharedProps} type={type||"text"}/>
+      }
+      {!show && <span className="var-trigger-hint">type {"{{"}  for vars</span>}
+      {show && filtered.length > 0 && (
+        <div className="var-dropdown">
+          {groups.map((g,gi)=>(
+            <div key={gi}>
+              <div className="var-dropdown-section">{g.label}</div>
+              {g.items.map((v,i)=>{
+                const globalIdx = filtered.indexOf(v);
+                return (
+                  <div key={v.template} className={`var-dropdown-item${globalIdx===cursor?" active":""}`}
+                    onMouseDown={e=>{ e.preventDefault(); insertVar(v); }}>
+                    <span className="var-dropdown-label" style={v.dimmed?{color:"#475569"}:{}}>{v.label}</span>
+                    <span className="var-dropdown-tmpl">{v.template}</span>
+                  </div>
+                );
+              })}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Node Editor Modal (n8n-style) ─────────────────────────────────────────────
-function NodeEditorModal({ node, onChange, onDelete, onClose, edges }){
+function NodeEditorModal({ node, onChange, onDelete, onClose, edges, allNodes, credentials }){
   const isNote    = node.data.type === "note";
   const isTrigger = node.data.type?.startsWith("trigger.");
   const def       = NODE_DEFS[node.data.type] || { label:node.data.type, icon:"?", color:"#475569", fields:[] };
@@ -6497,6 +6677,11 @@ function NodeEditorModal({ node, onChange, onDelete, onClose, edges }){
     const e = edges.find(e=>e.target===node.id);
     return e ? e.source : null;
   },[edges, node&&node.id]);
+
+  // Build variable list for autocomplete
+  const vars = React.useMemo(()=>
+    buildVarList(node.id, allNodes||[], edges||[], credentials||[])
+  ,[node.id, allNodes, edges, credentials]);
 
   const [inputView,  setInputView]  = useState("schema");
   const [outputView, setOutputView] = useState("schema");
@@ -6607,6 +6792,7 @@ function NodeEditorModal({ node, onChange, onDelete, onClose, edges }){
             {def.fields.map(f=>{
               const cfgVal=(node.data.config||{})[f.k]||"";
               const dp=(!f.secret&&f.type!=="select")?dropProps(f.k,cfgVal):{};
+              const useAutocomplete = !f.secret && f.type!=="select";
               return (
                 <div className="field-group" key={f.k}>
                   <div className="field-label">
@@ -6617,13 +6803,21 @@ function NodeEditorModal({ node, onChange, onDelete, onClose, edges }){
                     <select className="field-input" value={cfgVal||f.options[0]} onChange={e=>update(f.k,e.target.value)}>
                       {f.options.map(o=><option key={o} value={o}>{o}</option>)}
                     </select>
-                  ):f.textarea?(
-                    <textarea className={`field-input${f.mono?" mono":""}`} placeholder={f.ph}
-                      value={cfgVal} onChange={e=>update(f.k,e.target.value)} rows={4} {...dp}/>
+                  ):useAutocomplete?(
+                    <VarField
+                      multiline={!!f.textarea}
+                      rows={4}
+                      className={`field-input${f.mono?" mono":""}`}
+                      placeholder={f.ph}
+                      value={cfgVal}
+                      onChangeValue={v=>update(f.k,v)}
+                      vars={vars}
+                      {...dp}
+                    />
                   ):(
                     <input className={`field-input${f.mono?" mono":""}`} placeholder={f.ph}
-                      type={f.secret?"password":"text"}
-                      value={cfgVal} onChange={e=>update(f.k,e.target.value)} {...dp}/>
+                      type="password"
+                      value={cfgVal} onChange={e=>update(f.k,e.target.value)}/>
                   )}
                   {f.secret&&<span className="secret-hint">💡 Or use {"{{creds.your-credential-name}}"}</span>}
                 </div>
@@ -6841,6 +7035,7 @@ function App(){
   const [validationIssues, setValidationIssues] = useState(null); // null=not shown, []=clear
   const [inspectorRuns, setInspectorRuns] = useState([]);  // recent runs for current graph
   const [inspectorRunId, setInspectorRunId] = useState(null); // selected run for inspection
+  const [credentials, setCredentials]    = useState([]);   // for variable autocomplete
 
   // undo/redo
   const histRef = useRef([]);
@@ -6856,7 +7051,11 @@ function App(){
     setToast({msg,type,key:Date.now()});
   },[]);
 
-  useEffect(()=>{ loadGraphList() },[]);
+  useEffect(()=>{
+    loadGraphList();
+    // Pre-fetch credentials for the variable autocomplete dropdown
+    api("GET","/api/credentials").then(setCredentials).catch(()=>{});
+  },[]);
 
   // keyboard shortcuts
   useEffect(()=>{
@@ -7492,6 +7691,8 @@ function App(){
           onDelete={onDeleteNode}
           onClose={()=>setSelectedNode(null)}
           edges={edges}
+          allNodes={nodes}
+          credentials={credentials}
         />
       )}
 
