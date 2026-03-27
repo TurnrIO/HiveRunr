@@ -3121,6 +3121,15 @@ def api_runs(request: Request):
     _sync_stuck_runs()
     return list_runs()
 
+@app.get("/api/runs/by-task/{task_id}")
+def api_run_by_task(task_id: str, request: Request):
+    """Lightweight single-run polling endpoint — used by canvas during execution."""
+    _check_admin(request)
+    run = get_run_by_task(task_id)
+    if not run:
+        raise HTTPException(404, "Run not found")
+    return run
+
 @app.delete("/api/runs/{run_id}")
 def api_delete_run(run_id: int, request: Request): _check_admin(request); delete_run(run_id); return {"deleted": True}
 
@@ -3554,6 +3563,7 @@ def _check_webhook_rate(token: str) -> bool:
         return count <= _WEBHOOK_RATE_LIMIT
     except Exception:
         return True  # fail open if Redis unavailable
+
 
 
 MAIN_EOF
@@ -5118,6 +5128,13 @@ body{font-family:'Inter',system-ui,sans-serif;background:#0f1117;color:#e2e8f0;h
 .btn-sm{padding:4px 9px;font-size:11px}
 .btn:disabled{opacity:.5;cursor:not-allowed}
 .tb-divider{width:1px;height:20px;background:#2a2d3e;margin:0 2px}
+/* ── topbar "More" dropdown ── */
+.tb-more-wrap{position:relative}
+.tb-more-menu{position:absolute;top:calc(100% + 6px);left:0;background:#1a1d2e;border:1px solid #2a2d3e;border-radius:8px;min-width:160px;z-index:999;box-shadow:0 8px 24px rgba(0,0,0,.5);padding:4px 0;display:flex;flex-direction:column}
+.tb-more-item{display:flex;align-items:center;gap:8px;padding:7px 14px;font-size:12px;color:#94a3b8;cursor:pointer;background:none;border:none;width:100%;text-align:left;transition:background .1s,color .1s}
+.tb-more-item:hover{background:#2a2d3e;color:#e2e8f0}
+.tb-more-item.danger:hover{background:#7f1d1d22;color:#f87171}
+.tb-more-sep{height:1px;background:#2a2d3e;margin:3px 0}
 
 /* ── error banner ── */
 .error-banner{background:#1f0a0a;border-bottom:1px solid #7f1d1d;padding:8px 16px;display:flex;align-items:center;gap:10px;flex-shrink:0;z-index:9}
@@ -5284,6 +5301,7 @@ select.field-input{appearance:none;cursor:pointer;background-image:url("data:ima
 .custom-node{background:#1a1d2e;border:1.5px solid #2a2d3e;border-radius:10px;min-width:170px;box-shadow:0 4px 12px rgba(0,0,0,.4);transition:border-color .15s,opacity .2s}
 .custom-node:hover,.custom-node.selected{border-color:#7c3aed;box-shadow:0 0 0 2px rgba(124,58,237,.2)}
 .custom-node.disabled-node{opacity:.45}
+.custom-node.node-running{border-color:#7c3aed;animation:node-run-pulse 1.4s ease-in-out infinite}
 .custom-node .node-header{display:flex;align-items:center;gap:7px;padding:9px 10px 7px;border-bottom:1px solid #2a2d3e;border-radius:10px 10px 0 0}
 .custom-node .node-header .nh-icon{width:22px;height:22px;border-radius:5px;display:flex;align-items:center;justify-content:center;font-size:12px;flex-shrink:0}
 .custom-node .node-header .nh-title{font-size:11px;font-weight:600;color:#e2e8f0;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -5291,10 +5309,11 @@ select.field-input{appearance:none;cursor:pointer;background-image:url("data:ima
 .custom-node .node-body{padding:5px 10px;font-size:10px;color:#94a3b8;min-height:22px}
 .custom-node .node-footer{display:flex;align-items:center;justify-content:space-between;padding:3px 10px 6px}
 .custom-node .node-id{font-size:9px;color:#4b5563;font-family:monospace}
-.node-status-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
-.node-status-dot.ok{background:#4ade80;box-shadow:0 0 5px #4ade8080}
-.node-status-dot.err{background:#f87171;box-shadow:0 0 5px #f8717180}
-.node-status-dot.skip{background:#64748b}
+.node-status-badge{display:flex;align-items:center;gap:3px;font-size:9px;font-weight:600;border-radius:4px;padding:1px 5px;letter-spacing:.02em}
+.node-status-badge.ok{color:#4ade80;background:#4ade8012}
+.node-status-badge.err{color:#f87171;background:#f8717112}
+.node-status-badge.skip{color:#64748b;background:#64748b12}
+.node-status-badge.pending{color:#a78bfa;background:#7c3aed14}
 .node-off-chip{background:#374151;color:#94a3b8;font-size:9px;font-weight:700;padding:1px 5px;border-radius:4px;letter-spacing:.04em}
 
 /* ── sticky note node ── */
@@ -5319,6 +5338,7 @@ select.field-input{appearance:none;cursor:pointer;background-image:url("data:ima
 @keyframes slideIn{from{transform:translateY(20px);opacity:0}to{transform:translateY(0);opacity:1}}
 @keyframes spin{to{transform:rotate(360deg)}}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
+@keyframes node-run-pulse{0%,100%{box-shadow:0 0 0 0 rgba(124,58,237,.55),0 4px 12px rgba(0,0,0,.4)}60%{box-shadow:0 0 0 6px rgba(124,58,237,0),0 4px 12px rgba(0,0,0,.4)}}
 
 /* ── modal ── */
 .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:1000;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px)}
@@ -5468,8 +5488,9 @@ function CustomNode({ id, data, selected }){
   const isLoop      = data.type === "action.loop";
   const isTrigger   = data.type?.startsWith("trigger.");
   const isDisabled  = !!data.disabled;
-  const runStatus   = data._runStatus; // "ok" | "err" | "skip"
+  const runStatus   = data._runStatus; // "ok" | "err" | "skip" | "pending"
   const runOutput   = data._runOutput;
+  const runDuration = data._runDurationMs;
 
   const isCron = data.type === "trigger.cron";
   const cronExpr = isCron ? ((data.config||{}).cron || "not set") : null;
@@ -5479,7 +5500,7 @@ function CustomNode({ id, data, selected }){
     .map(([k,v])=>`${k}: ${String(v).slice(0,22)}`).join(" · ").slice(0,55);
 
   return (
-    <div className={`custom-node${selected?" selected":""}${isDisabled?" disabled-node":""}`}
+    <div className={`custom-node${selected?" selected":""}${isDisabled?" disabled-node":""}${runStatus==="pending"?" node-running":""}`}
          style={{borderColor: selected ? def.color : undefined}}>
       {!isTrigger && <Handle type="target" position={Position.Left} style={{background: def.color}} />}
       <div className="node-header">
@@ -5500,7 +5521,14 @@ function CustomNode({ id, data, selected }){
       ) : null}
       <div className="node-footer">
         <span className="node-id">#{id}</span>
-        {runStatus && <span className={`node-status-dot ${runStatus}`} title={runStatus==="ok"?"Success":runStatus==="err"?"Failed":"Skipped (disabled)"}/>}
+        {runStatus && (
+          <span className={`node-status-badge ${runStatus}`}>
+            {runStatus==="ok" ? "✓" : runStatus==="err" ? "✗" : runStatus==="pending" ? "⟳" : "—"}
+            {runStatus==="ok" && runDuration!=null ? ` ${runDuration}ms` : ""}
+            {runStatus==="err" ? " err" : ""}
+            {runStatus==="skip" ? " skip" : ""}
+          </span>
+        )}
       </div>
       {isCondition ? (
         <>
@@ -7011,6 +7039,35 @@ function NodeEditorModal({ node, onChange, onDelete, onClose, edges, allNodes, c
   );
 }
 
+// ── Topbar "More" dropdown ────────────────────────────────────────────────────
+function MoreMenu({ onExport, onImport, onLayout, onValidate, onHistory, disabled }){
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef(null);
+  useEffect(()=>{
+    if(!open) return;
+    function close(e){ if(wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false); }
+    document.addEventListener("mousedown", close);
+    return ()=>document.removeEventListener("mousedown", close);
+  },[open]);
+  function act(fn){ setOpen(false); setTimeout(fn, 0); }
+  return (
+    <div className="tb-more-wrap" ref={wrapRef}>
+      <button className="btn btn-ghost btn-sm" onClick={()=>setOpen(o=>!o)} title="More actions">⋯</button>
+      {open && (
+        <div className="tb-more-menu">
+          <button className="tb-more-item" onClick={()=>act(onExport)} disabled={disabled}>⬇ Export flow</button>
+          <button className="tb-more-item" onClick={()=>act(onImport)}>⬆ Import flow</button>
+          <div className="tb-more-sep"/>
+          <button className="tb-more-item" onClick={()=>act(onLayout)}>⊞ Auto-layout</button>
+          <button className="tb-more-item" onClick={()=>act(onValidate)} disabled={disabled}>✔ Validate</button>
+          <div className="tb-more-sep"/>
+          <button className="tb-more-item" onClick={()=>act(onHistory)} disabled={disabled}>📜 Version history</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Main App ──────────────────────────────────────────────────────────────────
 function App(){
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
@@ -7045,6 +7102,7 @@ function App(){
   function syncHistState(){ setHistState({idx:histIdx.current, len:histRef.current.length}) }
 
   const reactFlowWrapper = useRef(null);
+  const importFileRef    = useRef(null);
   const { screenToFlowPosition } = useReactFlow();
 
   const showToast = useCallback((msg, type="success")=>{
@@ -7345,9 +7403,12 @@ function App(){
     if(!currentGraph){ showToast("Save the graph first","error"); return }
     setRunning(true);
     setRunError(null);
-    // Clear previous run annotations
-    setNodes(ns => ns.map(n=>({...n, data:{ ...n.data, _runStatus:undefined, _runOutput:undefined, _runInput:undefined }})));
-    setSelectedNode(s => s ? {...s, data:{...s.data, _runStatus:undefined, _runOutput:undefined}} : s);
+    // Mark all non-note nodes as pending so they pulse while running
+    setNodes(ns => ns.map(n=>({...n, data:{ ...n.data,
+      _runStatus: n.data.type==="note" ? undefined : "pending",
+      _runOutput:undefined, _runInput:undefined
+    }})));
+    setSelectedNode(s => s ? {...s, data:{...s.data, _runStatus:"pending", _runOutput:undefined}} : s);
 
     let taskId;
     try {
@@ -7363,58 +7424,54 @@ function App(){
       return;
     }
 
-    // Poll for completion
+    // Poll the single-run endpoint at 800ms — much faster and cheaper than fetching all runs
     const poll = setInterval(async()=>{
       try {
-        const runs = await api("GET","/api/runs");
-        const run = runs.find(x=>x.task_id===taskId);
+        const run = await api("GET",`/api/runs/by-task/${taskId}`);
         if(!run || run.status==="running" || run.status==="queued") return;
         clearInterval(poll);
         setRunning(false);
         refreshInspectorRuns();
 
+        const traces = run.traces || [];
+        const traceMap = {};
+        traces.forEach(t => { if(t.node_id) traceMap[t.node_id] = t; });
         const ctx = (run.result?.context) || {};
         const err = run.result?.error || run.error || "";
 
         if(run.status==="succeeded"){
           showToast("Run succeeded ✓");
         } else {
-          // parse error to find failed node
           let failedNodeId = null;
           const m = err.match(/\[([a-zA-Z0-9_]+)\]/);
           if(m) failedNodeId = m[1];
-
           let failedNodeName = failedNodeId;
-          setNodes(ns=>{
-            const n = ns.find(x=>x.id===failedNodeId);
-            if(n) failedNodeName = n.data?.label || failedNodeId;
-            return ns;
-          });
-
+          setNodes(ns=>{ const n=ns.find(x=>x.id===failedNodeId); if(n) failedNodeName=n.data?.label||failedNodeId; return ns; });
           setRunError({ msg: err, nodeName: failedNodeName });
         }
 
-        // Annotate nodes with run results
+        // Annotate nodes with trace results (status + duration)
         setNodes(ns => ns.map(n=>{
           if(n.data.type==="note") return n;
-          const nodeResult = ctx[n.id];
-          if(nodeResult === undefined) return n;
-          let status = "ok";
-          if(nodeResult?.__disabled) status = "skip";
-          else if(nodeResult?.__error) status = "err";
-          return { ...n, data:{ ...n.data, _runStatus:status, _runOutput:nodeResult }};
+          const t = traceMap[n.id];
+          if(t){
+            const status = t.status==="ok"?"ok":t.status==="error"?"err":"skip";
+            return { ...n, data:{ ...n.data, _runStatus:status, _runOutput:t.output, _runInput:t.input, _runDurationMs:t.duration_ms }};
+          }
+          // Node wasn't reached — clear pending
+          return { ...n, data:{ ...n.data, _runStatus:undefined }};
         }));
 
         // Update selected node if open
         setSelectedNode(s => {
           if(!s) return s;
-          const nr = ctx[s.id];
-          if(nr===undefined) return s;
-          const st = nr?.__disabled?"skip":nr?.__error?"err":"ok";
-          return { ...s, data:{ ...s.data, _runStatus:st, _runOutput:nr }};
+          const t = traceMap[s.id];
+          if(!t) return {...s, data:{...s.data, _runStatus:undefined}};
+          const st = t.status==="ok"?"ok":t.status==="error"?"err":"skip";
+          return { ...s, data:{ ...s.data, _runStatus:st, _runOutput:t.output, _runInput:t.input, _runDurationMs:t.duration_ms }};
         });
       } catch(e){ /* keep polling */ }
-    }, 1500);
+    }, 800);
 
     // Safety timeout after 5 min
     setTimeout(()=>{ clearInterval(poll); setRunning(false) }, 300000);
@@ -7572,21 +7629,28 @@ function App(){
 
   return (
     <>
+      {/* Hidden import file input */}
+      <input type="file" accept=".json" style={{display:"none"}} ref={importFileRef} onChange={importFlow}/>
+
       {/* Top bar */}
       <div className="topbar">
         <span className="logo">⚡ HiveRunr</span>
         <div className="tb-divider"/>
-        <button className="btn btn-ghost btn-sm" onClick={()=>setShowModal(true)}>📂 Open / New</button>
-        <button className="btn btn-ghost btn-sm" onClick={exportFlow} disabled={!currentGraph}>⬇ Export</button>
-        <label className="btn btn-ghost btn-sm" style={{cursor:"pointer"}} title="Import flow from JSON file">
-          ⬆ Import
-          <input type="file" accept=".json" style={{display:"none"}} onChange={importFlow}/>
-        </label>
+        <button className="btn btn-ghost btn-sm" onClick={()=>setShowModal(true)}>📂 Open</button>
+        <MoreMenu
+          onExport={exportFlow}
+          onImport={()=>importFileRef.current&&importFileRef.current.click()}
+          onLayout={doAutoLayout}
+          onValidate={()=>validateAndRun()}
+          onHistory={()=>setShowHistoryModal(true)}
+          disabled={!currentGraph}
+        />
+        <div className="tb-divider"/>
         <input className="name-input" value={graphName}
-          onChange={e=>setGraphName(e.target.value)} placeholder="Graph name…"/>
+          onChange={e=>setGraphName(e.target.value)} placeholder="Flow name…"/>
         {currentGraph && (
-          <span style={{fontSize:10,color:"#64748b",whiteSpace:"nowrap"}}>
-            #{currentGraph.id} · {currentGraph.enabled?"✓ on":"○ off"}
+          <span style={{fontSize:10,color:"#475569",whiteSpace:"nowrap"}}>
+            #{currentGraph.id}
           </span>
         )}
         <div className="topbar-spacer"/>
@@ -7596,19 +7660,13 @@ function App(){
         <button className="btn btn-ghost btn-sm" onClick={doRedo}
           disabled={histState.idx>=histState.len-1} title="Redo (Ctrl+Y)">↪</button>
         <div className="tb-divider"/>
-        {/* Minimap toggle */}
         <button className="btn btn-ghost btn-sm" onClick={()=>setShowMap(m=>!m)}
           title="Toggle minimap" style={{opacity:showMap?1:0.45}}>🗺</button>
-        <button className="btn btn-ghost btn-sm" onClick={doAutoLayout} title="Auto-layout nodes">⊞ Layout</button>
         <div className="tb-divider"/>
-        <button className="btn btn-ghost btn-sm" onClick={()=>validateAndRun()} disabled={!currentGraph}>✔ Validate</button>
-        <button className="btn btn-ghost btn-sm" onClick={()=>setShowTestModal(true)} disabled={!currentGraph}>🧪 Test</button>
-        <button className="btn btn-ghost btn-sm" onClick={()=>setShowHistoryModal(true)} disabled={!currentGraph}>📜 History</button>
-        <div className="tb-divider"/>
-        {/* Live Data Inspector */}
+        {/* Live run inspector */}
         <select
           className="btn btn-ghost btn-sm"
-          style={{cursor:"pointer",maxWidth:170,padding:"2px 6px"}}
+          style={{cursor:"pointer",maxWidth:165,padding:"2px 6px"}}
           title="Load a past run to inspect node inputs/outputs"
           value={inspectorRunId||""}
           onClick={refreshInspectorRuns}
@@ -7623,10 +7681,11 @@ function App(){
           ))}
         </select>
         {inspectorRunId && (
-          <button className="btn btn-ghost btn-sm" style={{color:"#f87171"}} onClick={()=>loadInspectorRun(null)} title="Clear inspection overlay">✕ Clear</button>
+          <button className="btn btn-ghost btn-sm" style={{color:"#f87171"}} onClick={()=>loadInspectorRun(null)} title="Clear run overlay">✕</button>
         )}
         <div className="tb-divider"/>
         <a href={`/admin?token=${token}`} className="btn btn-ghost btn-sm">← Admin</a>
+        <button className="btn btn-ghost btn-sm" onClick={()=>setShowTestModal(true)} disabled={!currentGraph}>🧪 Test</button>
         <button className="btn btn-ghost btn-sm" onClick={saveGraph} disabled={saving} title="Save (Ctrl+S)">
           {saving ? <><span style={{animation:"spin .8s linear infinite",display:"inline-block"}}>⟳</span> Saving…</> : "💾 Save"}
         </button>
