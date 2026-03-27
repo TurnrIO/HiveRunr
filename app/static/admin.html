@@ -823,12 +823,69 @@ function Credentials({ showToast }) {
 }
 
 // ── Schedules ─────────────────────────────────────────────────────────────
+// ── Searchable flow picker ─────────────────────────────────────────────────
+function FlowPicker({ value, onChange, graphs }) {
+  const [query, setQuery] = useState(value || "");
+  const [open,  setOpen]  = useState(false);
+  const wrapRef = useRef(null);
+
+  useEffect(()=>{ if(!value) setQuery(""); }, [value]);
+
+  useEffect(()=>{
+    if(!open) return;
+    function close(e){ if(wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false); }
+    document.addEventListener("mousedown", close);
+    return ()=>document.removeEventListener("mousedown", close);
+  },[open]);
+
+  const filtered = graphs.filter(g =>
+    g.name.toLowerCase().includes((query||"").toLowerCase())
+  ).slice(0, 30);
+
+  function select(g) { setQuery(g.name); onChange(g.name); setOpen(false); }
+
+  function handleInput(e) { setQuery(e.target.value); onChange(e.target.value); setOpen(true); }
+
+  return (
+    <div ref={wrapRef} style={{position:"relative"}}>
+      <input required value={query} onChange={handleInput} onFocus={()=>setOpen(true)}
+        placeholder="Search flows…" autoComplete="off" style={{width:"100%"}}/>
+      {open && filtered.length > 0 && (
+        <div style={{position:"absolute",top:"calc(100% + 4px)",left:0,right:0,background:"#1a1d2e",
+          border:"1px solid #7c3aed",borderRadius:8,zIndex:999,maxHeight:220,overflowY:"auto",
+          boxShadow:"0 8px 24px rgba(0,0,0,.5)"}}>
+          {filtered.map(g=>(
+            <div key={g.id} onMouseDown={()=>select(g)}
+              style={{padding:"8px 12px",cursor:"pointer",display:"flex",alignItems:"center",
+                justifyContent:"space-between",borderBottom:"1px solid #1e2130",fontSize:13}}
+              onMouseEnter={e=>e.currentTarget.style.background="#252840"}
+              onMouseLeave={e=>e.currentTarget.style.background=""}>
+              <span style={{color:"#e2e8f0"}}>{g.name}</span>
+              <span style={{fontSize:10,color:"#475569",fontFamily:"monospace"}}>#{g.id}</span>
+            </div>
+          ))}
+        </div>
+      )}
+      {open && query && filtered.length === 0 && (
+        <div style={{position:"absolute",top:"calc(100% + 4px)",left:0,right:0,background:"#1a1d2e",
+          border:"1px solid #2a2d3e",borderRadius:8,padding:"10px 12px",fontSize:13,color:"#475569",zIndex:999}}>
+          No matching flows
+        </div>
+      )}
+    </div>
+  );
+}
+
 function Schedules({ showToast }) {
   const [schedules, setSchedules] = useState([]);
+  const [graphs,    setGraphs]    = useState([]);
   const [form, setForm] = useState({name:"",workflow:"",cron:"0 9 * * *",payload:"{}",timezone:"UTC"});
 
   const load = async () => { try { setSchedules(await api("GET","/api/schedules")); } catch(e){} };
-  useEffect(()=>{ load(); },[]);
+  useEffect(()=>{
+    load();
+    api("GET","/api/graphs").then(setGraphs).catch(()=>{});
+  },[]);
 
   async function create(e) {
     e.preventDefault();
@@ -849,7 +906,10 @@ function Schedules({ showToast }) {
         <form onSubmit={create}>
           <div className="form-row">
             <div className="form-group"><label>Name</label><input required value={form.name} onChange={e=>setForm({...form,name:e.target.value})} placeholder="Daily digest"/></div>
-            <div className="form-group"><label>Workflow / Graph name</label><input required value={form.workflow} onChange={e=>setForm({...form,workflow:e.target.value})} placeholder="example"/></div>
+            <div className="form-group">
+              <label>Flow</label>
+              <FlowPicker value={form.workflow} graphs={graphs} onChange={v=>setForm({...form,workflow:v})}/>
+            </div>
           </div>
           <div className="form-row">
             <div className="form-group"><label>Cron</label><input required value={form.cron} onChange={e=>setForm({...form,cron:e.target.value})} placeholder="0 9 * * *"/></div>
