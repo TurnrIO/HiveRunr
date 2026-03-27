@@ -126,6 +126,29 @@ def init_db():
                         break
                 cur.execute("UPDATE graph_workflows SET slug=%s WHERE id=%s", (candidate, rid))
 
+        # ── users + sessions (v12 auth) ────────────────────────────────
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                id            SERIAL PRIMARY KEY,
+                username      TEXT UNIQUE NOT NULL,
+                email         TEXT UNIQUE NOT NULL,
+                password_hash TEXT NOT NULL,
+                role          TEXT DEFAULT 'owner',
+                created_at    TIMESTAMPTZ DEFAULT NOW(),
+                updated_at    TIMESTAMPTZ DEFAULT NOW()
+            )
+        """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS sessions (
+                id         SERIAL PRIMARY KEY,
+                user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                token_hash TEXT UNIQUE NOT NULL,
+                created_at TIMESTAMPTZ DEFAULT NOW(),
+                last_seen  TIMESTAMPTZ DEFAULT NOW(),
+                expires_at TIMESTAMPTZ DEFAULT NOW() + INTERVAL '30 days'
+            )
+        """)
+
 # ── runs ──────────────────────────────────────────────────────────────────
 def list_runs():
     with get_conn() as conn:
@@ -449,3 +472,79 @@ def get_run_metrics():
             'top_failing':  top_failing,
             'recent':       recent,
         }
+
+# ── users ──────────────────────────────────────────────────────────────────
+def users_exist() -> bool:
+    with get_conn() as conn:
+        cur = conn.cursor()
+        cur.execute("SELECT 1 FROM users LIMIT 1")
+        return cur.fetchone() is not None
+
+def create_user(username: str, email: str, password_hash: str, role: str = 'owner') -> dict:
+    with get_conn() as conn:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur.execute(
+            "INSERT INTO users (username, email, password_hash, role) VALUES (%s, %s, %s, %s) RETURNING *",
+            (username, email, password_hash, role)
+        )
+        return dict(cur.fetchone())
+
+def get_user_by_username(username: str):
+    with get_conn() as conn:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur.execute("SELECT * FROM users WHERE username=%s", (username,))
+        row = cur.fetchone()
+        return dict(row) if row else None
+
+def get_user_by_id(user_id: int):
+    with get_conn() as conn:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur.execute("SELECT * FROM users WHERE id=%s", (user_id,))
+        row = cur.fetchone()
+        return dict(row) if row else None
+
+def list_users() -> list:
+    with get_conn() as conn:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur.execute("SELECT id, username, email, role, created_at FROM users ORDER BY id")
+        return [dict(r) for r in cur.fetchall()]
+
+def update_user_password(user_id: int, password_hash: str):
+    with get_conn() as conn:
+        conn.cursor().execute(
+            "UPDATE users SET password_hash=%s, updated_at=NOW() WHERE id=%s",
+            (password_hash, user_id)
+        )
+
+# ── sessions ───────────────────────────────────────────────────────────────
+def create_session(user_id: int, token_hash: str):
+    with get_conn() as conn:
+        conn.cursor().execute(
+            "INSERT INTO sessions (user_id, token_hash) VALUES (%s, %s)",
+            (user_id, token_hash)
+        )
+
+def get_session_by_token_hash(token_hash: str):
+    with get_conn() as conn:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur.execute(
+            "SELECT * FROM sessions WHERE token_hash=%s AND expires_at > NOW()",
+            (token_hash,)
+        )
+        row = cur.fetchone()
+        return dict(row) if row else None
+
+def refresh_session(token_hash: str):
+    with get_conn() as conn:
+        conn.cursor().execute(
+            "UPDATE sessions SET last_seen=NOW(), expires_at=NOW() + INTERVAL '30 days' WHERE token_hash=%s",
+            (token_hash,)
+        )
+
+def delete_session_by_token_hash(token_hash: str):
+    with get_conn() as conn:
+        conn.cursor().execute("DELETE FROM sessions WHERE token_hash=%s", (token_hash,))
+
+def purge_expired_sessions():
+    with get_conn() as conn:
+        conn.cursor().execute("DELETE FROM sessions WHERE expires_at < NOW()")

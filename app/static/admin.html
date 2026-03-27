@@ -120,15 +120,14 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:#7c3aed}
 <script type="text/babel">
 const { useState, useEffect, useCallback, useRef } = React;
 
-const params = new URLSearchParams(window.location.search);
-const TOKEN  = params.get("token") || "";
-
 async function api(method, path, body) {
   const r = await fetch(path, {
     method,
-    headers: {"Content-Type":"application/json","x-admin-token": TOKEN},
+    headers: {"Content-Type":"application/json"},
+    credentials: "same-origin",
     body: body ? JSON.stringify(body) : undefined
   });
+  if (r.status === 401) { window.location.href = "/login"; return; }
   if (!r.ok) { const e = await r.json().catch(()=>({detail:r.statusText})); throw new Error(e.detail || r.statusText); }
   return r.json();
 }
@@ -1423,9 +1422,6 @@ function Settings({ showToast }) {
     setResetting(false);
   }
 
-  function copyToken() {
-    navigator.clipboard.writeText(TOKEN||"").then(()=>showToast("Token copied")).catch(()=>{});
-  }
   function copyWebhook() {
     navigator.clipboard.writeText(webhookBase).then(()=>showToast("Webhook URL copied")).catch(()=>{});
   }
@@ -1478,14 +1474,12 @@ function Settings({ showToast }) {
         )}
       </div>
 
-      {/* ── Admin Token ── */}
+      {/* ── API Token (service account) ── */}
       <div className="card">
-        <div className="card-title">Admin Token</div>
-        <p style={{fontSize:13,color:"#94a3b8",marginBottom:10}}>Passed as <code style={{color:"#a78bfa"}}>?token=…</code> in the URL or as the <code style={{color:"#a78bfa"}}>x-admin-token</code> request header.</p>
-        <div style={{display:"flex",gap:8,alignItems:"center"}}>
-          <code style={{flex:1,padding:"9px 12px",background:"#0f1117",borderRadius:6,fontSize:13,color:"#a78bfa",userSelect:"all",border:"1px solid #2a2d3e"}}>{TOKEN||"(no token set)"}</code>
-          <button className="btn btn-ghost btn-sm" onClick={copyToken}>⎘ Copy</button>
-        </div>
+        <div className="card-title">API Access</div>
+        <p style={{fontSize:13,color:"#94a3b8",marginBottom:10}}>
+          Browser access uses session cookies. For API / service-account access, set the <code style={{color:"#a78bfa"}}>ADMIN_TOKEN</code> environment variable and pass it as the <code style={{color:"#a78bfa"}}>x-admin-token</code> request header.
+        </p>
       </div>
 
       {/* ── Webhook URL ── */}
@@ -1502,7 +1496,7 @@ function Settings({ showToast }) {
       <div className="card">
         <div className="card-title">Quick Links</div>
         <div style={{display:"flex",gap:10,flexWrap:"wrap"}}>
-          <button className="btn btn-primary btn-sm" onClick={()=>window.open(`/canvas?token=${TOKEN}`)}>⚡ Open Canvas →</button>
+          <button className="btn btn-primary btn-sm" onClick={()=>window.open("/canvas")}>⚡ Open Canvas →</button>
           <a href="/flower/" target="_blank" className="btn btn-ghost btn-sm">🌸 Flower monitor ↗</a>
           <a href="/docs"    target="_blank" className="btn btn-ghost btn-sm">📖 Swagger docs ↗</a>
         </div>
@@ -1632,7 +1626,7 @@ function Graphs({ showToast }) {
           <button className="btn btn-ghost" disabled={reseeding} onClick={reseedExamples} title="Restore any missing example flows">
             {reseeding ? "Reseeding…" : "↺ Restore examples"}
           </button>
-          <a href={`/canvas?token=${TOKEN}`} className="btn btn-primary">+ New in Canvas</a>
+          <a href={`/canvas`} className="btn btn-primary">+ New in Canvas</a>
         </div>
       </div>
 
@@ -1646,7 +1640,7 @@ function Graphs({ showToast }) {
         <div className="card">
           <div className="empty-state" style={{padding:"40px 0"}}>
             No graphs yet.<br/>
-            <a href={`/canvas?token=${TOKEN}`} style={{color:"#a78bfa",textDecoration:"none",marginTop:8,display:"inline-block"}}>Open the canvas to create your first flow →</a>
+            <a href={`/canvas`} style={{color:"#a78bfa",textDecoration:"none",marginTop:8,display:"inline-block"}}>Open the canvas to create your first flow →</a>
           </div>
         </div>
       ) : filtered.length === 0 ? (
@@ -1722,7 +1716,7 @@ function GraphRow({ g, running, onRun, onToggle, onDuplicate, onDelete, onRename
             {g.description && <div style={{fontSize:12,color:"#64748b"}}>{g.description}</div>}
           </div>
           <div style={{display:"flex",gap:6,flex:"none"}}>
-            <a href={`/canvas?token=${TOKEN}`} className="btn btn-ghost"
+            <a href={`/canvas`} className="btn btn-ghost"
                onClick={()=>sessionStorage.setItem("canvas_open_graph",g.id)}>✏️ Edit</a>
             <button className="btn btn-success" disabled={running===g.id||!g.enabled}
                     onClick={()=>onRun(g.id,g.name)}>{running===g.id?"…":"▶"}</button>
@@ -1898,20 +1892,28 @@ function App() {
   };
   const [page, setPageState] = useState(hashPage);
   const [toast, setToast]    = useState(null);
+  const [currentUser, setCurrentUser] = useState(null);
   const showToast = useCallback((msg, type="success") => setToast({msg,type,key:Date.now()}), []);
 
-  // Keep hash in sync with page state
+  useEffect(()=>{
+    api("GET","/api/auth/me").then(u=>{ if(u) setCurrentUser(u); }).catch(()=>{});
+  },[]);
+
   const setPage = useCallback((id) => {
     window.location.hash = id;
     setPageState(id);
   }, []);
 
-  // Handle browser back/forward
   useEffect(() => {
     const onHashChange = () => setPageState(hashPage());
     window.addEventListener("hashchange", onHashChange);
     return () => window.removeEventListener("hashchange", onHashChange);
   }, []);
+
+  async function logout() {
+    try { await fetch("/api/auth/logout", {method:"POST", credentials:"same-origin"}); } catch(e){}
+    window.location.href = "/login";
+  }
 
   return (
     <>
@@ -1924,7 +1926,7 @@ function App() {
         ))}
         <div className="sidebar-footer">
           <div className="footer-label">Quick links</div>
-          <a className="ext-link" href={`/canvas?token=${TOKEN}`}>
+          <a className="ext-link" href="/canvas">
             <span className="el-icon">🎨</span>Node Canvas
           </a>
           <a className="ext-link" href="/flower/" target="_blank" rel="noopener">
@@ -1936,6 +1938,28 @@ function App() {
           <a className="ext-link" href="/health" target="_blank" rel="noopener">
             <span className="el-icon">💚</span>Health check
           </a>
+          {currentUser && (
+            <div style={{marginTop:12,borderTop:"1px solid #2a2d3e",paddingTop:10}}>
+              <div style={{display:"flex",alignItems:"center",gap:8,padding:"4px 8px",marginBottom:2}}>
+                <div style={{width:26,height:26,borderRadius:"50%",background:"#7c3aed22",
+                  border:"1px solid #7c3aed55",display:"flex",alignItems:"center",justifyContent:"center",
+                  fontSize:11,fontWeight:700,color:"#a78bfa",flexShrink:0}}>
+                  {currentUser.username[0].toUpperCase()}
+                </div>
+                <div style={{overflow:"hidden",flex:1}}>
+                  <div style={{fontSize:12,fontWeight:600,color:"#e2e8f0",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{currentUser.username}</div>
+                  <div style={{fontSize:10,color:"#475569",textTransform:"capitalize"}}>{currentUser.role}</div>
+                </div>
+              </div>
+              <button onClick={logout} style={{width:"100%",textAlign:"left",background:"none",border:"none",
+                color:"#64748b",fontSize:12,cursor:"pointer",padding:"6px 8px",borderRadius:6,
+                display:"flex",alignItems:"center",gap:6,transition:"color .15s"}}
+                onMouseEnter={e=>e.currentTarget.style.color="#f87171"}
+                onMouseLeave={e=>e.currentTarget.style.color="#64748b"}>
+                <span style={{fontSize:14}}>⎋</span> Sign out
+              </button>
+            </div>
+          )}
         </div>
       </div>
       <div className="main">

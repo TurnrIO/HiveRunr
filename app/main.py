@@ -1,7 +1,7 @@
-import os, json, logging
+import os, json, logging, secrets as _sec
 from pathlib import Path
 from fastapi import FastAPI, HTTPException, Header, Request
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, RedirectResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from typing import Optional
@@ -17,6 +17,8 @@ from app.core.db import (
     list_credentials, upsert_credential, delete_credential,
     list_graph_versions, save_graph_version, get_graph_version,
     get_run_metrics,
+    users_exist, create_user, get_user_by_username, get_user_by_id, list_users,
+    update_user_password, create_session, delete_session_by_token_hash,
 )
 from app.worker import enqueue_workflow, enqueue_graph, enqueue_script
 
@@ -28,17 +30,33 @@ STATIC_DIR   = Path(__file__).parent / "static"
 RUNLOGS_DIR  = Path("/app/runlogs")
 WORKFLOWS    = ["example"]
 API_KEY      = os.environ.get("API_KEY",      "dev_api_key")
-ADMIN_TOKEN  = os.environ.get("ADMIN_TOKEN",  "dev_admin_token")
+ADMIN_TOKEN  = os.environ.get("ADMIN_TOKEN",  "")   # empty = disabled; set for API-client access
 
 # ── auth ──────────────────────────────────────────────────────────────────
 def _check_admin(request: Request):
+    """Accept session cookie (browser) OR x-admin-token header (API clients)."""
+    from app.auth import get_current_user
+    user = get_current_user(request)
+    if user:
+        return user
+    # Legacy token fallback for API / service clients
     token = request.headers.get("x-admin-token") or request.query_params.get("token", "")
-    if ADMIN_TOKEN and token != ADMIN_TOKEN:
-        raise HTTPException(401, "Admin token required")
+    if ADMIN_TOKEN and token == ADMIN_TOKEN:
+        return {"id": 0, "username": "admin", "role": "owner"}
+    raise HTTPException(401, "Authentication required")
 
 def _check_api_key(key: str):
     if API_KEY and key != API_KEY:
         raise HTTPException(401, "Invalid API key")
+
+def _auth_redirect(request: Request):
+    """Returns a redirect to /setup or /login if the browser is not authenticated."""
+    if not users_exist():
+        return RedirectResponse("/setup", status_code=302)
+    from app.auth import get_current_user
+    if not get_current_user(request):
+        return RedirectResponse("/login", status_code=302)
+    return None
 
 # ── startup ───────────────────────────────────────────────────────────────
 @app.on_event("startup")
@@ -190,16 +208,127 @@ def _sync_cron_triggers(graph_id: int, graph_data: dict):
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 # ── page routes ───────────────────────────────────────────────────────────
+@app.get("/login")
+def login_page(request: Request):
+    if not users_exist():
+        return RedirectResponse("/setup", status_code=302)
+    from app.auth import get_current_user
+    if get_current_user(request):
+        return RedirectResponse("/", status_code=302)
+    return FileResponse(str(STATIC_DIR / "login.html"), media_type="text/html")
+
+@app.get("/setup")
+def setup_page(request: Request):
+    if users_exist():
+        return RedirectResponse("/", status_code=302)
+    return FileResponse(str(STATIC_DIR / "setup.html"), media_type="text/html")
+
 @app.get("/")
-def root(): return FileResponse(str(STATIC_DIR / "admin.html"), media_type="text/html")
+def root(request: Request):
+    redir = _auth_redirect(request)
+    if redir: return redir
+    return FileResponse(str(STATIC_DIR / "admin.html"), media_type="text/html")
 
 @app.get("/admin")
 @app.get("/admin/{rest:path}")
-def admin_page(rest: str = ""): return FileResponse(str(STATIC_DIR / "admin.html"), media_type="text/html")
+def admin_page(request: Request, rest: str = ""):
+    redir = _auth_redirect(request)
+    if redir: return redir
+    return FileResponse(str(STATIC_DIR / "admin.html"), media_type="text/html")
 
 @app.get("/canvas")
 @app.get("/admin/canvas")
-def canvas_page(): return FileResponse(str(STATIC_DIR / "canvas.html"), media_type="text/html")
+def canvas_page(request: Request):
+    redir = _auth_redirect(request)
+    if redir: return redir
+    return FileResponse(str(STATIC_DIR / "canvas.html"), media_type="text/html")
+
+# ── auth endpoints ────────────────────────────────────────────────────────
+@app.get("/api/auth/status")
+def auth_status(request: Request):
+    from app.auth import get_current_user
+    setup_needed = not users_exist()
+    user = get_current_user(request)
+    return {
+        "setup_needed": setup_needed,
+        "logged_in": user is not None,
+        "user": {"id": user["id"], "username": user["username"],
+                 "email": user["email"], "role": user["role"]} if user else None,
+    }
+
+class SetupBody(BaseModel):
+    username: str
+    email: str
+    password: str
+
+@app.post("/api/auth/setup")
+def auth_setup(body: SetupBody):
+    from app.auth import hash_password, hash_token, generate_token, SESSION_COOKIE, SESSION_DAYS
+    if users_exist():
+        raise HTTPException(400, "Setup already completed — an owner account already exists")
+    if len(body.password) < 8:
+        raise HTTPException(422, "Password must be at least 8 characters")
+    user = create_user(body.username.strip(), body.email.strip().lower(),
+                       hash_password(body.password), "owner")
+    token = generate_token()
+    create_session(user["id"], hash_token(token))
+    resp = JSONResponse({"ok": True, "user": {"id": user["id"],
+                         "username": user["username"], "role": user["role"]}})
+    resp.set_cookie(SESSION_COOKIE, token, httponly=True, samesite="lax",
+                    max_age=SESSION_DAYS * 86400)
+    return resp
+
+class LoginBody(BaseModel):
+    username: str
+    password: str
+
+@app.post("/api/auth/login")
+def auth_login(body: LoginBody):
+    from app.auth import verify_password, hash_token, generate_token, SESSION_COOKIE, SESSION_DAYS
+    user = get_user_by_username(body.username.strip())
+    if not user or not verify_password(body.password, user["password_hash"]):
+        raise HTTPException(401, "Invalid username or password")
+    token = generate_token()
+    create_session(user["id"], hash_token(token))
+    resp = JSONResponse({"ok": True, "user": {"id": user["id"],
+                         "username": user["username"], "role": user["role"]}})
+    resp.set_cookie(SESSION_COOKIE, token, httponly=True, samesite="lax",
+                    max_age=SESSION_DAYS * 86400)
+    return resp
+
+@app.post("/api/auth/logout")
+def auth_logout(request: Request):
+    from app.auth import SESSION_COOKIE, hash_token
+    token = request.cookies.get(SESSION_COOKIE)
+    if token:
+        delete_session_by_token_hash(hash_token(token))
+    resp = JSONResponse({"ok": True})
+    resp.delete_cookie(SESSION_COOKIE)
+    return resp
+
+@app.get("/api/auth/me")
+def auth_me(request: Request):
+    user = _check_admin(request)
+    return {"id": user["id"], "username": user["username"],
+            "email": user.get("email", ""), "role": user["role"]}
+
+class ChangePasswordBody(BaseModel):
+    current_password: str
+    new_password: str
+
+@app.post("/api/auth/change-password")
+def auth_change_password(body: ChangePasswordBody, request: Request):
+    from app.auth import verify_password, hash_password
+    user = _check_admin(request)
+    if user["id"] == 0:
+        raise HTTPException(400, "Token-based admin cannot change password here")
+    db_user = get_user_by_id(user["id"])
+    if not verify_password(body.current_password, db_user["password_hash"]):
+        raise HTTPException(401, "Current password is incorrect")
+    if len(body.new_password) < 8:
+        raise HTTPException(422, "New password must be at least 8 characters")
+    update_user_password(user["id"], hash_password(body.new_password))
+    return {"ok": True}
 
 # ── health ────────────────────────────────────────────────────────────────
 @app.get("/health")
