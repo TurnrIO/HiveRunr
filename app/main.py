@@ -273,6 +273,15 @@ def api_runs(request: Request):
     _sync_stuck_runs()
     return list_runs()
 
+@app.get("/api/runs/by-task/{task_id}")
+def api_run_by_task(task_id: str, request: Request):
+    """Lightweight single-run polling endpoint — used by canvas during execution."""
+    _check_admin(request)
+    run = get_run_by_task(task_id)
+    if not run:
+        raise HTTPException(404, "Run not found")
+    return run
+
 @app.delete("/api/runs/{run_id}")
 def api_delete_run(run_id: int, request: Request): _check_admin(request); delete_run(run_id); return {"deleted": True}
 
