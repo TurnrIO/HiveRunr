@@ -11,7 +11,7 @@ Usage (local):
 Environment variables:
     HIVERUNR_BASE_URL   — base URL of the running stack (no trailing slash)
     HIVERUNR_USER       — username (default: admin)
-    HIVERUNR_PASS       — password (default: admin)
+    HIVERUNR_PASS       — password (default: adminadmin)
 """
 import os
 import time
@@ -25,7 +25,7 @@ pytestmark = pytest.mark.skipif(
 )
 
 USERNAME = os.environ.get("HIVERUNR_USER", "admin")
-PASSWORD = os.environ.get("HIVERUNR_PASS", "admin")
+PASSWORD = os.environ.get("HIVERUNR_PASS", "adminadmin")
 
 
 @pytest.fixture(scope="module")
@@ -41,7 +41,7 @@ def client():
 # ── health check ──────────────────────────────────────────────────────────────
 
 def test_health(client):
-    resp = client.get("/api/health")
+    resp = client.get("/health")
     assert resp.status_code == 200
     data = resp.json()
     assert data.get("status") == "ok"
