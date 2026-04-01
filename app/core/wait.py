@@ -1,3 +1,5 @@
+import time
+
 
 def do_wait(seconds: float) -> dict:
     """Block the Celery worker for `seconds` seconds."""
