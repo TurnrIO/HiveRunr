@@ -337,21 +337,26 @@ def list_credentials():
         return [dict(r) for r in cur.fetchall()]
 
 def get_credential_secret(name):
-    """Fetch the raw secret for a named credential. Used by executor only."""
+    """Fetch the decrypted secret for a named credential. Used by executor only."""
+    from app.crypto import decrypt
     with get_conn() as conn:
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         cur.execute("SELECT secret FROM credentials WHERE name=%s", (name,))
         row = cur.fetchone()
-        return row['secret'] if row else None
+        if row is None:
+            return None
+        return decrypt(row['secret'])
 
 def load_all_credentials():
-    """Return name→secret mapping. Called once per graph run."""
+    """Return name→decrypted-secret mapping. Called once per graph run."""
+    from app.crypto import decrypt
     with get_conn() as conn:
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         cur.execute("SELECT name, secret FROM credentials")
-        return {r['name']: r['secret'] for r in cur.fetchall()}
+        return {r['name']: decrypt(r['secret']) for r in cur.fetchall()}
 
 def upsert_credential(name, type_, secret, note=""):
+    from app.crypto import encrypt
     with get_conn() as conn:
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         cur.execute("""
@@ -361,7 +366,7 @@ def upsert_credential(name, type_, secret, note=""):
               SET type=EXCLUDED.type, secret=EXCLUDED.secret,
                   note=EXCLUDED.note, updated_at=NOW()
             RETURNING id, name, type, note, created_at, updated_at
-        """, (name, type_, secret, note))
+        """, (name, type_, encrypt(secret), note))
         return dict(cur.fetchone())
 
 def delete_credential(cred_id):

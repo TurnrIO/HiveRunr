@@ -317,11 +317,13 @@ def auth_check(request: Request):
 @app.get("/api/auth/status")
 def auth_status(request: Request):
     from app.auth import get_current_user
+    from app.crypto import encryption_configured
     setup_needed = not users_exist()
     user = get_current_user(request)
     return {
         "setup_needed": setup_needed,
         "logged_in": user is not None,
+        "encryption_configured": encryption_configured(),
         "user": {"id": user["id"], "username": user["username"],
                  "email": user["email"], "role": user["role"]} if user else None,
     }
