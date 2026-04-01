@@ -11,7 +11,7 @@ SCRIPTS_DIR = Path(__file__).parent / 'workflows'
 
 log    = logging.getLogger(__name__)
 broker = os.environ.get("CELERY_BROKER_URL", "redis://redis:6379/0")
-app    = Celery("automations", broker=broker, backend=broker)
+app    = Celery("hiverunr", broker=broker, backend=broker)
 app.conf.task_serializer   = "json"
 app.conf.result_serializer = "json"
 app.conf.accept_content    = ["json"]

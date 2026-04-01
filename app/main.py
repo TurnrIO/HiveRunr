@@ -234,6 +234,10 @@ def _sync_cron_triggers(graph_id: int, graph_data: dict):
 
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
+@app.get("/favicon.ico", include_in_schema=False)
+def favicon():
+    return RedirectResponse("/static/favicon.svg", status_code=302)
+
 # ── page routes ───────────────────────────────────────────────────────────
 @app.get("/login")
 def login_page(request: Request):
