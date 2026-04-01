@@ -25,7 +25,7 @@ for target in TARGETS:
     url  = target["url"]
     t0   = time.time()
     try:
-        req  = urllib.request.Request(url, headers={"User-Agent": "automations-health-check/1.0"})
+        req  = urllib.request.Request(url, headers={"User-Agent": "hiverunr-health-check/1.0"})
         resp = urllib.request.urlopen(req, timeout=TIMEOUT)
         ms   = int((time.time() - t0) * 1000)
         results.append({"name": name, "url": url, "status": resp.status, "ms": ms, "ok": True})

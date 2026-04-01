@@ -2,13 +2,13 @@ services:
   db:
     image: postgres:16-alpine
     environment:
-      POSTGRES_DB: automations
-      POSTGRES_USER: automations
-      POSTGRES_PASSWORD: automations
+      POSTGRES_DB: hiverunr
+      POSTGRES_USER: hiverunr
+      POSTGRES_PASSWORD: hiverunr
     volumes:
       - pg_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL","pg_isready -U automations"]
+      test: ["CMD-SHELL","pg_isready -U hiverunr"]
       interval: 5s
       retries: 10
 

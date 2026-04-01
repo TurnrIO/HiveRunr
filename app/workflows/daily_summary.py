@@ -10,7 +10,7 @@ import psycopg2
 import psycopg2.extras
 from datetime import datetime, timezone
 
-DATABASE_URL = os.environ.get("DATABASE_URL", "postgresql://automations:automations@db:5432/automations")
+DATABASE_URL = os.environ.get("DATABASE_URL", "postgresql://hiverunr:hiverunr@db:5432/hiverunr")
 
 conn = psycopg2.connect(DATABASE_URL)
 cur  = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)

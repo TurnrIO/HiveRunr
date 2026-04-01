@@ -13,7 +13,7 @@ KEEP_DAYS = 30   # delete runs older than this many days
 DRY_RUN   = False  # set True to preview without deleting
 # ───────────────────────────────────────────────────────────────────────────────
 
-DATABASE_URL = os.environ.get("DATABASE_URL", "postgresql://automations:automations@db:5432/automations")
+DATABASE_URL = os.environ.get("DATABASE_URL", "postgresql://hiverunr:hiverunr@db:5432/hiverunr")
 
 conn = psycopg2.connect(DATABASE_URL)
 cur  = conn.cursor()

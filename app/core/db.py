@@ -7,7 +7,7 @@ import psycopg2
 import psycopg2.extras
 
 log = logging.getLogger(__name__)
-DSN = os.environ.get("DATABASE_URL", "postgresql://auto:auto@db:5432/auto")
+DSN = os.environ.get("DATABASE_URL", "postgresql://hiverunr:hiverunr@db:5432/hiverunr")
 
 @contextmanager
 def get_conn():
