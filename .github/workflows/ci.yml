@@ -108,10 +108,17 @@ jobs:
           exit 1
       - name: Bootstrap first admin user
         run: |
-          resp=$(curl -sf -X POST http://localhost/api/auth/setup \
+          # -s = silent, -w = append HTTP code; no -f so we can inspect the code ourselves
+          resp=$(curl -s -w "\nHTTP:%{http_code}" -X POST http://localhost/api/auth/setup \
             -H "Content-Type: application/json" \
             -d '{"username":"admin","email":"admin@ci.local","password":"adminadmin"}')
           echo "Setup response: $resp"
+          http_code=$(echo "$resp" | grep "^HTTP:" | cut -d: -f2)
+          # 200 = created, 400 = already exists (idempotent re-run) — both are fine
+          if [ "$http_code" != "200" ] && [ "$http_code" != "400" ]; then
+            echo "Unexpected HTTP code: $http_code"
+            exit 1
+          fi
       - uses: actions/setup-python@v5.6.0
         with:
           python-version: "3.11"

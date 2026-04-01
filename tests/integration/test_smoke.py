@@ -32,19 +32,29 @@ PASSWORD = os.environ.get("HIVERUNR_PASS", "adminadmin")
 def client():
     """Authenticated httpx client for the test session."""
     c = httpx.Client(base_url=BASE_URL, follow_redirects=True, timeout=30)
-    # Log in and get session cookie
     resp = c.post("/api/auth/login", json={"username": USERNAME, "password": PASSWORD})
     assert resp.status_code == 200, f"Login failed: {resp.text}"
     return c
 
 
-# ── health check ──────────────────────────────────────────────────────────────
+def _poll_run(client, task_id, timeout=45):
+    """Poll /api/runs/by-task/{task_id} until the run reaches a terminal state."""
+    for _ in range(timeout):
+        r = client.get(f"/api/runs/by-task/{task_id}")
+        if r.status_code == 200:
+            status = r.json().get("status")
+            if status in ("succeeded", "failed"):
+                return r.json()
+        time.sleep(1)
+    raise AssertionError(f"Run {task_id} did not complete within {timeout}s")
+
+
+# ── health ────────────────────────────────────────────────────────────────────
 
 def test_health(client):
     resp = client.get("/health")
     assert resp.status_code == 200
-    data = resp.json()
-    assert data.get("status") == "ok"
+    assert resp.json().get("status") == "ok"
 
 
 # ── auth ──────────────────────────────────────────────────────────────────────
@@ -53,7 +63,8 @@ def test_auth_status(client):
     resp = client.get("/api/auth/status")
     assert resp.status_code == 200
     data = resp.json()
-    assert data.get("authenticated") is True
+    # endpoint returns "logged_in", not "authenticated"
+    assert data.get("logged_in") is True
 
 
 def test_unauthenticated_redirects_to_login():
@@ -65,15 +76,16 @@ def test_unauthenticated_redirects_to_login():
 
 # ── graph CRUD + run ──────────────────────────────────────────────────────────
 
+# GraphCreate expects graph_data (dict), not graph_json (string)
 _SMOKE_GRAPH = {
     "name": "smoke-test-graph",
-    "graph_json": """{
+    "graph_data": {
         "nodes": [
             {"id": "t1", "type": "trigger.manual", "data": {"config": {}}},
-            {"id": "l1", "type": "action.log",     "data": {"config": {"message": "smoke ok"}}}
+            {"id": "l1", "type": "action.log",     "data": {"config": {"message": "smoke ok"}}},
         ],
-        "edges": [{"source": "t1", "target": "l1"}]
-    }""",
+        "edges": [{"source": "t1", "target": "l1"}],
+    },
 }
 
 
@@ -81,10 +93,9 @@ _SMOKE_GRAPH = {
 def graph_id(client):
     resp = client.post("/api/graphs", json=_SMOKE_GRAPH)
     assert resp.status_code == 200, f"Create graph failed: {resp.text}"
-    gid = resp.json().get("id") or resp.json().get("graph_id")
-    assert gid, "No graph id in response"
+    gid = resp.json().get("id")
+    assert gid, f"No id in response: {resp.json()}"
     yield gid
-    # Cleanup
     client.delete(f"/api/graphs/{gid}")
 
 
@@ -95,7 +106,7 @@ def test_graph_created(graph_id):
 def test_graph_appears_in_list(client, graph_id):
     resp = client.get("/api/graphs")
     assert resp.status_code == 200
-    ids = [g.get("id") or g.get("graph_id") for g in resp.json()]
+    ids = [g.get("id") for g in resp.json()]
     assert graph_id in ids
 
 
@@ -105,30 +116,16 @@ def test_manual_run_succeeds(client, graph_id):
     task_id = resp.json().get("task_id")
     assert task_id
 
-    # Poll for completion (up to 30 s)
-    for _ in range(30):
-        r = client.get(f"/api/runs/{task_id}")
-        if r.status_code == 200:
-            status = r.json().get("status")
-            if status in ("succeeded", "failed"):
-                break
-        time.sleep(1)
-
-    assert status == "succeeded", f"Run ended with status={status}"
+    run = _poll_run(client, task_id)
+    assert run["status"] == "succeeded", f"Run ended with status={run['status']}"
 
 
 def test_run_has_traces(client, graph_id):
-    # Trigger another run and inspect its traces
     resp = client.post(f"/api/graphs/{graph_id}/run", json={})
+    assert resp.status_code == 200
     task_id = resp.json()["task_id"]
 
-    for _ in range(30):
-        r = client.get(f"/api/runs/{task_id}")
-        if r.status_code == 200 and r.json().get("status") in ("succeeded", "failed"):
-            run = r.json()
-            break
-        time.sleep(1)
-
+    run = _poll_run(client, task_id)
     traces = run.get("traces") or []
     assert len(traces) > 0, "Expected at least one trace"
     assert all(t.get("status") in ("ok", "skipped") for t in traces)
