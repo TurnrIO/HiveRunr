@@ -4,6 +4,58 @@ All notable changes are documented here, newest first.
 
 ---
 
+## [v12] — 2026-04-01 — Auth · Encryption · Security Hardening
+
+### Session-based authentication
+- Replaced token-in-URL auth with session cookies (`hr_session`, 30-day rolling window, SHA-256 hash stored in DB)
+- First-run setup wizard at `/setup` — creates the owner account before any other route is accessible
+- Login page at `/login` with username + password; redirects preserve the intended destination via `?next=`
+- All protected routes (`/`, `/admin`, `/canvas`, `/docs`, `/flower/*`) redirect to `/login` if unauthenticated
+
+### Role system
+- Three roles: `owner` > `admin` > `viewer`
+- Viewer role is read-only across all pages (no create/edit/run/delete)
+- Role badge and user avatar in sidebar footer
+- Role documentation card on the Users page
+
+### User management
+- Owner-only Users page: create users, change roles, reset passwords, delete users
+- Inline role-change dropdown; one-time password reset modal
+
+### API tokens
+- Owners generate named API tokens from Settings (replaces `ADMIN_TOKEN` env var)
+- Tokens have `hr_` prefix, stored as SHA-256 hashes — shown only once at creation
+- Accepted via `x-api-token` header for CI/CD and service-to-service calls
+
+### Credential encryption-at-rest
+- All credentials now encrypted using **Fernet** (AES-128-CBC + HMAC-SHA256) via the `cryptography` library
+- `SECRET_KEY` env var holds the master key; `setup.sh` auto-generates a unique key on first install
+- Transparent migration: existing plaintext credentials are read normally and re-encrypted on next save
+- Credentials page shows 🔒 green badge when `SECRET_KEY` is set, ⚠️ amber banner when it is not
+- `encryption_configured` flag exposed in `/api/auth/status`
+
+### Flower and API docs protected
+- `/flower/*` gated via Caddy `forward_auth` calling `/api/auth/check` — unauthenticated requests redirect to `/login`
+- `/docs`, `/redoc`, `/openapi.json` replaced with auth-gated equivalents (FastAPI auto-routes disabled)
+
+### setup.sh replaces bootstrap.sh
+- `bootstrap.sh` removed — it was 10k lines and substantially out of date with the codebase
+- New `setup.sh` (35 lines): copies `.env.example` → `.env` and generates a unique `SECRET_KEY`
+- Quick Start is now: `git clone` → `bash setup.sh` → `docker compose up -d --build`
+
+### Bug fixes
+- Canvas black screen: removed stale `getToken()` call left over from auth migration
+- Note nodes (`type:"note"`) no longer crash graph execution — skipped silently by the executor
+- Login redirect now preserves destination via `?next=` (previously always sent to `/` after login)
+- Removed false "stored encrypted" claim from Credentials UI copy
+
+### Docs / config
+- README rewritten: auth model, roles, API tokens, credential encryption, setup flow
+- `ADMIN_TOKEN` removed from `.env.example` and all documentation
+- `CHANGELOG`, `README`, and `.env.example` aligned with actual codebase behaviour
+
+---
+
 ## [v11] — 2026-03-26 — Modular Nodes · HiveRunr Brand · Run Logs · URL Persistence
 
 ### Platform rename
