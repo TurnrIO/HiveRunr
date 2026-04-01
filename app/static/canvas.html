@@ -864,9 +864,13 @@ function ConfigPanel({ node, onChange, onDelete, edges }){
           </div>
         )}
         {node.data.type === "action.run_script" && (
-          <div style={{background:"#0f1117",border:"1px solid #2a2d3e",borderRadius:6,padding:"8px 10px",fontSize:10,color:"#94a3b8",marginTop:6}}>
-            Variables: <code style={{color:"#a78bfa"}}>input</code>, <code style={{color:"#a78bfa"}}>context</code>, <code style={{color:"#a78bfa"}}>log</code>, <code style={{color:"#a78bfa"}}>json</code>, <code style={{color:"#a78bfa"}}>os</code>, <code style={{color:"#a78bfa"}}>time</code><br/>
-            Assign your output to <code style={{color:"#a78bfa"}}>result</code>.
+          <div style={{background:"#2d0a0a",border:"1px solid #7f1d1d",borderRadius:6,padding:"8px 10px",fontSize:10,marginTop:6}}>
+            <div style={{color:"#f87171",fontWeight:700,marginBottom:4}}>⚠️ Danger — arbitrary code execution</div>
+            <div style={{color:"#fca5a5",lineHeight:1.7}}>
+              This node runs Python via <code style={{color:"#fca5a5"}}>exec()</code> with <code style={{color:"#fca5a5"}}>os</code>, <code style={{color:"#fca5a5"}}>json</code>, and <code style={{color:"#fca5a5"}}>time</code> in scope.<br/>
+              It is <strong>disabled by default</strong> — set <code style={{color:"#fca5a5"}}>ENABLE_RUN_SCRIPT=true</code> in <code style={{color:"#fca5a5"}}>.env</code> to allow execution.<br/>
+              Every run is written to the audit log. Assign output to <code style={{color:"#fca5a5"}}>result</code>.
+            </div>
           </div>
         )}
         {node.data.type === "action.send_email" && (
@@ -1819,9 +1823,13 @@ function NodeEditorModal({ node, onChange, onDelete, onClose, edges, allNodes, c
               </div>
             )}
             {node.data.type==="action.run_script"&&(
-              <div style={{background:"#0f1117",border:"1px solid #2a2d3e",borderRadius:6,padding:"8px 10px",fontSize:10,color:"#94a3b8",marginTop:6}}>
-                Variables: <code style={{color:"#a78bfa"}}>input</code>, <code style={{color:"#a78bfa"}}>context</code>, <code style={{color:"#a78bfa"}}>log</code>, <code style={{color:"#a78bfa"}}>json</code>, <code style={{color:"#a78bfa"}}>os</code>, <code style={{color:"#a78bfa"}}>time</code><br/>
-                Assign output to <code style={{color:"#a78bfa"}}>result</code>.
+              <div style={{background:"#2d0a0a",border:"1px solid #7f1d1d",borderRadius:6,padding:"8px 10px",fontSize:10,marginTop:6}}>
+                <div style={{color:"#f87171",fontWeight:700,marginBottom:4}}>⚠️ Danger — arbitrary code execution</div>
+                <div style={{color:"#fca5a5",lineHeight:1.7}}>
+                  Runs Python via <code style={{color:"#fca5a5"}}>exec()</code> with <code style={{color:"#fca5a5"}}>os</code>, <code style={{color:"#fca5a5"}}>json</code>, <code style={{color:"#fca5a5"}}>time</code> in scope.<br/>
+                  <strong>Disabled by default</strong> — set <code style={{color:"#fca5a5"}}>ENABLE_RUN_SCRIPT=true</code> in <code style={{color:"#fca5a5"}}>.env</code> to enable.<br/>
+                  Every execution is written to the audit log. Assign output to <code style={{color:"#fca5a5"}}>result</code>.
+                </div>
               </div>
             )}
             {node.data.type==="action.send_email"&&(

@@ -43,6 +43,18 @@ All notable changes are documented here, newest first.
 - New `setup.sh` (35 lines): copies `.env.example` → `.env` and generates a unique `SECRET_KEY`
 - Quick Start is now: `git clone` → `bash setup.sh` → `docker compose up -d --build`
 
+### Run Script node — feature flag + audit logging
+- `action.run_script` is now **disabled by default** — set `ENABLE_RUN_SCRIPT=true` in `.env` to allow execution
+- Every execution writes two audit log entries (before and after) to the `audit` Python logger at `WARNING` level, capturing a SHA-256 hash and 120-character preview of the script
+- Run log messages also include the audit entry so it appears inline in run traces
+- Canvas warning boxes replaced with red ⚠️ danger banners explaining the risk and the feature flag
+- `.env.example` documents `ENABLE_RUN_SCRIPT=false` with a threat model note
+
+### Housekeeping — HiveRunr rename complete
+- All remaining `automations`/`auto` DSN fallbacks replaced with `hiverunr` across `db.py`, `.env.example`, workflow scripts
+- Health check User-Agent updated to `hiverunr-health-check/1.0`
+- Added HiveRunr favicon (`app/static/favicon.svg` — purple hexagon + lightning bolt) served on all pages and `/favicon.ico`
+
 ### Bug fixes
 - Canvas black screen: removed stale `getToken()` call left over from auth migration
 - Note nodes (`type:"note"`) no longer crash graph execution — skipped silently by the executor
