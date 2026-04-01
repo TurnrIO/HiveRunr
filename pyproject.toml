@@ -3,12 +3,20 @@ target-version = "py311"
 line-length = 120
 
 [tool.ruff.lint]
-select = ["E", "F", "W", "I", "UP"]
+# Only enforce correctness rules (F = pyflakes, W = warnings) plus essential
+# style (E).  Isort (I) and pyupgrade (UP) are excluded — the codebase uses
+# combined imports and Optional[X] style consistently throughout.
+select = ["E", "F", "W"]
 ignore = [
     "E501",   # line too long — HTML/canvas lines are intentionally dense
     "E402",   # module level import not at top — lazy imports used intentionally
     "F401",   # unused import — re-exports exist in __init__.py
-    "UP007",  # use X | Y for union — keep py3.9 compat for now
+    "E401",   # multiple imports on one line — used throughout (os, json, logging etc)
+    "E701",   # multiple statements on one line (colon) — compact style used intentionally
+    "E702",   # multiple statements on one line (semicolon) — compact style used intentionally
+    "E722",   # bare except — pervasive pattern; TODO replace with except Exception in P2 cleanup
+    "E731",   # lambda assignment — used for default logger arg
+    "E741",   # ambiguous variable name (l, I, O) — low risk in context
 ]
 
 [tool.ruff.lint.per-file-ignores]

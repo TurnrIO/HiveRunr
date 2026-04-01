@@ -443,7 +443,7 @@ class UpdateRoleBody(BaseModel):
 
 @app.patch("/api/users/{user_id}/role")
 def api_update_user_role(user_id: int, body: UpdateRoleBody, request: Request):
-    actor = _require_owner(request)
+    _require_owner(request)
     target = get_user_by_id(user_id)
     if not target:
         raise HTTPException(404, "User not found")
@@ -672,34 +672,6 @@ def api_trim_runs(body: TrimRunsBody, request: Request):
         """, (body.keep,))
         deleted = cur.rowcount
     return {"deleted": deleted, "kept": body.keep}
-
-@app.post("/api/runs/{run_id}/replay")
-async def api_replay_run(run_id: int, request: Request):
-    _check_admin(request)
-    runs = list_runs()
-    run  = next((r for r in runs if r['id'] == run_id), None)
-    if not run: raise HTTPException(404, "Run not found")
-    gid = run.get('graph_id')
-    if not gid: raise HTTPException(400, "Run has no associated graph")
-    g = get_graph(gid)
-    if not g: raise HTTPException(404, "Graph not found")
-    try:    payload = run.get('initial_payload') or {}
-    except: payload = {}
-    task = enqueue_graph.delay(gid, payload)
-    # create a new run record for the replay
-    from app.core.db import init_db
-    try:
-        from app.core.db import get_conn
-        import psycopg2.extras
-        with get_conn() as conn:
-            cur = conn.cursor()
-            cur.execute(
-                "INSERT INTO runs(task_id, graph_id, status, initial_payload) VALUES(%s,%s,'queued',%s)",
-                (task.id, gid, json.dumps(payload))
-            )
-    except Exception as e:
-        log.warning(f"Could not record replay run: {e}")
-    return {"queued": True, "task_id": task.id, "graph": g["name"]}
 
 # ── API: workflows ────────────────────────────────────────────────────────
 @app.get("/api/workflows")

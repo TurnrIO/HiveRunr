@@ -31,7 +31,6 @@ def run(config, inp, context, logger, creds=None, **kwargs):
     title = _render(config.get('title', ''), context, creds)
     body = _render(config.get('body', ''), context, creds)
     path = _render(config.get('path', ''), context, creds)
-    content = _render(config.get('content', ''), context, creds)
     branch = _render(config.get('branch', 'main'), context, creds)
     state = _render(config.get('state', 'open'), context, creds)
     labels = _render(config.get('labels', ''), context, creds)
