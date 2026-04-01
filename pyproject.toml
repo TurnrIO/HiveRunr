@@ -1,0 +1,20 @@
+[tool.ruff]
+target-version = "py311"
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP"]
+ignore = [
+    "E501",   # line too long — HTML/canvas lines are intentionally dense
+    "E402",   # module level import not at top — lazy imports used intentionally
+    "F401",   # unused import — re-exports exist in __init__.py
+    "UP007",  # use X | Y for union — keep py3.9 compat for now
+]
+
+[tool.ruff.lint.per-file-ignores]
+"app/nodes/action_run_script.py" = ["S102"]   # exec() is intentional here
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-v --tb=short"

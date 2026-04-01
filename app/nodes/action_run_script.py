@@ -45,19 +45,24 @@ def run(config, inp, context, logger, creds=None, **kwargs):
     )
     logger(f"[AUDIT] run_script executing | hash={script_hash} | preview={script_preview!r}")
 
+    _UNSET = object()
     ns = {
         'input':   inp,
         'context': context,
-        'result':  None,
+        'result':  _UNSET,      # sentinel — distinguishes "not assigned" from None
         'log':     logger,
         'json':    json,
         'os':      os,
         'time':    time,
     }
-    exec(script, ns)  # noqa: S102
+    try:
+        exec(script, ns)  # noqa: S102
+    except Exception as exc:
+        raise RuntimeError(f"run_script raised {type(exc).__name__}: {exc}") from exc
 
     _audit.warning(
         "AUDIT run_script | hash=%s | completed_ok",
         script_hash,
     )
-    return ns.get('result', inp)
+    r = ns.get('result', _UNSET)
+    return inp if r is _UNSET else r
