@@ -43,6 +43,14 @@ All notable changes are documented here, newest first.
 - New `setup.sh` (35 lines): copies `.env.example` → `.env` and generates a unique `SECRET_KEY`
 - Quick Start is now: `git clone` → `bash setup.sh` → `docker compose up -d --build`
 
+### CI pipeline + unit tests
+- `.github/workflows/ci.yml` with four jobs: **lint** (ruff), **audit** (pip-audit), **test** (pytest), **build** (docker build), and a non-blocking **scan** (Trivy CRITICAL/HIGH CVEs)
+- Integration smoke test in `tests/integration/test_smoke.py` — auto-skipped unless `HIVERUNR_BASE_URL` is set; runs as a separate CI job on push to main (spins up docker compose, waits for health, exercises auth → graph create → run → trace assertions)
+- 53 unit tests across `tests/test_executor.py`, `tests/test_crypto.py`, `tests/test_run_script.py`, `tests/test_utils.py`
+- `pyproject.toml` with ruff config (select E/F/W/I/UP, ignore E501/E402) and pytest config (`pythonpath = ["."]`)
+- pyright omitted for now — too noisy without full stub coverage; tracked as future P2 item
+- `/api/admin/reload_nodes` confirmed working — hot-reloads `app/nodes/custom/` without restart
+
 ### Run Script node — feature flag + audit logging
 - `action.run_script` is now **disabled by default** — set `ENABLE_RUN_SCRIPT=true` in `.env` to allow execution
 - Every execution writes two audit log entries (before and after) to the `audit` Python logger at `WARNING` level, capturing a SHA-256 hash and 120-character preview of the script
