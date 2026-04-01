@@ -79,7 +79,10 @@ def _auth_redirect(request: Request):
         return RedirectResponse("/setup", status_code=302)
     from app.auth import get_current_user
     if not get_current_user(request):
-        return RedirectResponse("/login", status_code=302)
+        next_path = request.url.path
+        if request.url.query:
+            next_path += "?" + request.url.query
+        return RedirectResponse(f"/login?next={next_path}", status_code=302)
     return None
 
 # ── startup ───────────────────────────────────────────────────────────────
@@ -306,7 +309,9 @@ def auth_check(request: Request):
         if tok:
             touch_api_token(th)
             return Response(status_code=200)
-    return RedirectResponse("/login", status_code=302)
+    # X-Forwarded-Uri is set by Caddy forward_auth with the original request path
+    next_path = request.headers.get("x-forwarded-uri", "/flower/")
+    return RedirectResponse(f"/login?next={next_path}", status_code=302)
 
 # ── auth endpoints ────────────────────────────────────────────────────────
 @app.get("/api/auth/status")
