@@ -690,7 +690,7 @@ function credFieldSummary(type) {
   return schema.fields.filter(f=>!f.secret).map(f=>f.l).join(' · ');
 }
 
-function Credentials({ showToast, user }) {
+function Credentials({ showToast, user, encryptionOk }) {
   const [credentials, setCredentials] = useState([]);
   const [form, setForm] = useState({name:"", type:"generic", note:"", sub: blankSubFields("generic")});
   const [loading, setLoading] = useState(true);
@@ -734,7 +734,7 @@ function Credentials({ showToast, user }) {
   // Usage hint shown in the info box based on selected type
   const usageHints = {
     generic:    <>Use <code style={{color:"#a78bfa"}}>{"{{creds.name}}"}</code> to inject the secret value anywhere in a node config.</>,
-    slack:      <>In the Slack node set <strong>Webhook URL</strong> to <code style={{color:"#a78bfa"}}>{"{{creds.name.webhook_url}}"}</code>. The URL is stored encrypted.</>,
+    slack:      <>In the Slack node set <strong>Webhook URL</strong> to <code style={{color:"#a78bfa"}}>{"{{creds.name.webhook_url}}"}</code>.</>,
     webhook:    <>Use <code style={{color:"#a78bfa"}}>{"{{creds.name.url}}"}</code> in any node field that accepts a URL (e.g. HTTP Request, Slack).</>,
     telegram:   <>Use <code style={{color:"#a78bfa"}}>{"{{creds.name}}"}</code> for the token, <code style={{color:"#a78bfa"}}>{"{{creds.name.chat_id}}"}</code> for the chat ID in Telegram nodes.</>,
     api_key:    <>In HTTP Request headers use <code style={{color:"#a78bfa"}}>{'{"Authorization":"Bearer {{creds.name.key}}"}'}</code>. <code style={{color:"#a78bfa"}}>{"{{creds.name.header}}"}</code> gives the header name if set.</>,
@@ -749,6 +749,24 @@ function Credentials({ showToast, user }) {
   const ro = user?.role === "viewer";
   return (
     <div>
+      {!encryptionOk && (
+        <div style={{background:"#1c1400",border:"1px solid #ca8a04",borderRadius:8,padding:"10px 14px",marginBottom:16,display:"flex",alignItems:"flex-start",gap:10}}>
+          <span style={{fontSize:16,flexShrink:0}}>⚠️</span>
+          <div>
+            <div style={{fontSize:13,fontWeight:600,color:"#fde047"}}>Credential encryption is not configured</div>
+            <div style={{fontSize:12,color:"#fbbf24",marginTop:3}}>
+              Secrets are protected by a weak fallback key. Set <code style={{background:"#2a2000",padding:"1px 5px",borderRadius:3}}>SECRET_KEY</code> in your <code style={{background:"#2a2000",padding:"1px 5px",borderRadius:3}}>.env</code> file and restart the stack.
+              Generate a key with: <code style={{background:"#2a2000",padding:"1px 5px",borderRadius:3,userSelect:"all"}}>python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"</code>
+            </div>
+          </div>
+        </div>
+      )}
+      {encryptionOk && (
+        <div style={{background:"#0a1f14",border:"1px solid #16a34a",borderRadius:8,padding:"8px 14px",marginBottom:16,display:"flex",alignItems:"center",gap:8}}>
+          <span style={{fontSize:14}}>🔒</span>
+          <span style={{fontSize:12,color:"#4ade80"}}>Credentials are encrypted at rest (AES-128-CBC via Fernet)</span>
+        </div>
+      )}
       <h1 className="page-title">Credentials</h1>
       {ro && <ViewerBanner/>}
       <div className="info-box">
@@ -2193,13 +2211,15 @@ function App() {
     const h = window.location.hash.slice(1);
     return validIds.includes(h) ? h : "dashboard";
   };
-  const [page, setPageState] = useState(hashPage);
-  const [toast, setToast]    = useState(null);
-  const [currentUser, setCurrentUser] = useState(null);
+  const [page, setPageState]               = useState(hashPage);
+  const [toast, setToast]                  = useState(null);
+  const [currentUser, setCurrentUser]      = useState(null);
+  const [encryptionOk, setEncryptionOk]   = useState(true);
   const showToast = useCallback((msg, type="success") => setToast({msg,type,key:Date.now()}), []);
 
   useEffect(()=>{
     api("GET","/api/auth/me").then(u=>{ if(u) setCurrentUser(u); }).catch(()=>{});
+    api("GET","/api/auth/status").then(s=>{ if(s) setEncryptionOk(!!s.encryption_configured); }).catch(()=>{});
   },[]);
 
   const setPage = useCallback((id) => {
@@ -2271,7 +2291,7 @@ function App() {
         {page==="templates"  && <Templates   showToast={showToast} user={currentUser}/>}
         {page==="metrics"    && <Metrics     showToast={showToast} user={currentUser}/>}
         {page==="scripts"    && <Scripts     showToast={showToast} user={currentUser}/>}
-        {page==="credentials"&& <Credentials showToast={showToast} user={currentUser}/>}
+        {page==="credentials"&& <Credentials showToast={showToast} user={currentUser} encryptionOk={encryptionOk}/>}
         {page==="schedules"  && <Schedules   showToast={showToast} user={currentUser}/>}
         {page==="logs"       && <Logs        showToast={showToast} user={currentUser}/>}
         {page==="users"      && <Users       showToast={showToast} user={currentUser}/>}
