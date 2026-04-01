@@ -109,11 +109,31 @@ EOF
 
 
 # ── 3. .env ────────────────────────────────────────────────────────────────
-cat > "$PROJECT/.env" << 'EOF'
+# Generate a random Fernet-compatible SECRET_KEY (32 random bytes, URL-safe base64).
+# Falls back to openssl if python3 is unavailable.
+SECRET_KEY=$(python3 -c "import base64,os; print(base64.urlsafe_b64encode(os.urandom(32)).decode())" 2>/dev/null \
+  || openssl rand -base64 32 | tr '+/' '-_' | tr -d '=\n')
+
+if [ -z "$SECRET_KEY" ]; then
+  echo "⚠ Warning: could not generate a SECRET_KEY — set it manually in .env before storing credentials."
+  SECRET_KEY="REPLACE_ME_run_python3_-c_import_base64_os_print_base64.urlsafe_b64encode_os.urandom_32_.decode__"
+fi
+
+echo "✓ Generated SECRET_KEY"
+
+cat > "$PROJECT/.env" << EOF
 DATABASE_URL=postgresql://automations:automations@db:5432/automations
 REDIS_URL=redis://redis:6379/0
-API_KEY=dev_api_key
-ADMIN_TOKEN=dev_admin_token
+
+# API_KEY gates all inbound /webhook/* endpoints.
+# Admin access is via the setup/login flow — no ADMIN_TOKEN needed.
+API_KEY=change-me-before-deployment
+
+# Credential encryption key (Fernet / AES-128-CBC + HMAC-SHA256).
+# Auto-generated at bootstrap time. Back this up — changing it will make
+# existing credentials unreadable.
+SECRET_KEY=$SECRET_KEY
+
 # Email (SMTP)
 SMTP_HOST=smtp.gmail.com
 SMTP_PORT=587
@@ -128,15 +148,13 @@ OPENAI_API_KEY=
 # Slack (for action.slack node)
 SLACK_WEBHOOK_URL=
 
-# ── Failure notifications (v9) ────────────────────────────────────────────
+# ── Failure notifications ─────────────────────────────────────────────────
 # Set either or both to receive alerts when any run fails.
-# NOTIFY_SLACK_WEBHOOK sends a Slack message via an incoming webhook URL.
-# NOTIFY_EMAIL sends an email — requires SMTP_HOST/USER/PASS above.
 NOTIFY_SLACK_WEBHOOK=
 NOTIFY_EMAIL=
 
-# ── Webhook rate limiting (v11) ───────────────────────────────────────────
-# Max webhook calls per token per window. Set WEBHOOK_RATE_LIMIT=0 to disable.
+# ── Webhook rate limiting ─────────────────────────────────────────────────
+# Max webhook calls per endpoint per window. Set WEBHOOK_RATE_LIMIT=0 to disable.
 WEBHOOK_RATE_LIMIT=60
 WEBHOOK_RATE_WINDOW=60
 EOF
@@ -168,6 +186,8 @@ apscheduler==3.10.4
 openai>=1.30.0
 paramiko==3.4.0
 google-auth
+bcrypt==4.1.3
+cryptography==42.0.8
 EOF
 
 
