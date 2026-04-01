@@ -26,13 +26,41 @@ bash bootstrap.sh /your/path/hiverunr
 # 2. Copy and configure environment
 cd /your/path/hiverunr
 cp .env.example .env
-# Edit .env — at minimum set API_KEY and ADMIN_TOKEN
+# Edit .env — at minimum review DATABASE_URL and REDIS_URL
 
 # 3. Start the stack
 docker compose up -d --build
 ```
 
-Then open **http://localhost/admin?token=your_admin_token**
+Then open **http://localhost** — on first run you will be prompted to create an owner account.
+
+---
+
+## Authentication
+
+HiveRunr uses session-based authentication. No tokens in URLs.
+
+| Path | Access |
+|---|---|
+| `http://localhost/setup` | First-run owner account creation |
+| `http://localhost/login` | Sign in with username + password |
+| All other routes | Redirect to `/login` if not authenticated |
+
+### Roles
+
+| Role | Can do |
+|---|---|
+| **Owner** | Everything including user management and API token generation |
+| **Admin** | All operational actions (create/edit/run flows, manage credentials) |
+| **Viewer** | Read-only access — view runs, flows, metrics, schedules |
+
+### API tokens
+
+For CI/CD and service-to-service calls, owners can generate API tokens from **Settings → API Tokens**. Pass them via the `x-api-token` header:
+
+```
+x-api-token: hr_your_token_here
+```
 
 ---
 
@@ -46,7 +74,7 @@ Then open **http://localhost/admin?token=your_admin_token**
 | `scheduler` | DB-driven cron scheduler | — |
 | `db` | PostgreSQL | 5432 |
 | `redis` | Celery broker + result backend | 6379 |
-| `flower` | Celery monitoring UI at `/flower/` | 5555 |
+| `flower` | Celery monitoring UI at `/flower/` (auth-gated) | 5555 |
 
 ---
 
@@ -55,10 +83,9 @@ Then open **http://localhost/admin?token=your_admin_token**
 | Path | Description |
 |---|---|
 | `http://localhost/` | Admin dashboard |
-| `http://localhost/admin?token=...` | Admin dashboard (explicit) |
-| `http://localhost/canvas?token=...` | Visual node canvas editor |
-| `http://localhost/flower/` | Flower / Celery monitor |
-| `http://localhost/docs` | Swagger API docs |
+| `http://localhost/canvas` | Visual node canvas editor |
+| `http://localhost/flower/` | Flower / Celery monitor (requires login) |
+| `http://localhost/docs` | Swagger API docs (requires login) |
 | `http://localhost/health` | Health check |
 
 ---
@@ -72,10 +99,11 @@ Then open **http://localhost/admin?token=your_admin_token**
 | **Templates** | One-click flow templates by category |
 | **Metrics** | Run volume charts, success/failure rates, top failing flows |
 | **Scripts** | Manage and edit Python scripts executed by `action.run_script` |
-| **Credentials** | Encrypted credential store for nodes (SMTP, SSH, Telegram, etc.) |
+| **Credentials** | Credential store for nodes (SMTP, SSH, Telegram, etc.) |
 | **Schedules** | Cron schedule manager with timezone support |
 | **Run Logs** | Per-node execution traces with input/output inspector |
-| **Settings** | Token info, maintenance tools |
+| **Users** | Manage users and roles (owner only) |
+| **Settings** | API token management, maintenance tools |
 
 URL state is preserved via hash routing — refreshing the page restores your last location.
 
@@ -149,9 +177,9 @@ def run(config, inp, context, logger, creds=None, **kwargs):
     return {"result": "..."}
 ```
 
-### Hot-loadable custom nodes
+### Custom nodes
 
-Drop a `.py` file into `app/nodes/custom/` and call `POST /api/admin/reload_nodes` — no container restart required.
+Drop a `.py` file into `app/nodes/custom/` and restart the `api` container — it will be auto-discovered at startup.
 
 ---
 
@@ -160,7 +188,7 @@ Drop a `.py` file into `app/nodes/custom/` and call `POST /api/admin/reload_node
 Each flow has a unique 8-character slug generated at creation. The canvas URL reflects the currently open flow:
 
 ```
-/canvas?token=...#flow-a3f2e1c9
+/canvas#flow-a3f2e1c9
 ```
 
 Refreshing the page restores the same flow automatically.
@@ -169,7 +197,7 @@ Refreshing the page restores the same flow automatically.
 
 ## Webhook Rate Limiting
 
-Inbound webhooks are rate-limited per token using a Redis token bucket. Configure via `.env`:
+Inbound webhooks are rate-limited per endpoint using a Redis token bucket. Configure via `.env`:
 
 ```
 WEBHOOK_RATE_LIMIT=60    # max requests per window (0 = disabled)
@@ -194,14 +222,13 @@ See `.env.example` for the full list. Key variables:
 
 | Variable | Description |
 |---|---|
-| `API_KEY` | Required for `/webhook/*` endpoints |
-| `ADMIN_TOKEN` | Required for all admin UI + API routes |
 | `DATABASE_URL` | PostgreSQL connection string |
 | `REDIS_URL` | Redis connection string |
+| `API_KEY` | Required for `/webhook/*` endpoints |
 | `OPENAI_API_KEY` | Required for `action.llm_call` |
 | `SLACK_WEBHOOK_URL` | For `action.slack` and failure notifications |
 | `NOTIFY_EMAIL` | Email address for failure alerts |
-| `WEBHOOK_RATE_LIMIT` | Max webhook calls per window per token |
+| `WEBHOOK_RATE_LIMIT` | Max webhook calls per window per endpoint |
 
 ---
 
@@ -229,9 +256,10 @@ docker compose down -v
 
 ## Security Notes
 
-- Change `ADMIN_TOKEN` and `API_KEY` before any public deployment.
-- Put Caddy behind HTTPS when exposing to the internet.
-- The admin routes are protected by `ADMIN_TOKEN` only — consider adding IP allowlisting for production.
+- On first run, create an owner account immediately — the `/setup` page is only available before any user exists.
+- Use HTTPS (update the Caddyfile) before exposing HiveRunr to the internet.
+- API tokens are generated per-owner from Settings and passed via `x-api-token` header — never put tokens in URLs.
+- `action.run_script` executes arbitrary Python as the container user. Only grant admin/owner roles to users you trust.
 
 ---
 

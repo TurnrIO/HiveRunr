@@ -135,6 +135,13 @@ def run_graph(graph_data: dict, initial_payload: dict = None, logger=None, _dept
             'error':       None,
         }
 
+        # ── skip UI-only nodes (e.g. sticky notes) ───────────────────
+        if ntype == 'note':
+            results[nid] = {'__ui_only': True}
+            trace['status'] = 'skipped'
+            traces.append(trace)
+            continue
+
         # ── skip disabled nodes ───────────────────────────────────────
         if ndata.get('disabled', False):
             logger(f"SKIP (disabled) {ntype} [{nid}]")
