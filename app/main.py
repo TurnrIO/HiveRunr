@@ -876,6 +876,24 @@ def api_reset(request: Request):
             cur.execute(f"DELETE FROM {t}")
     return {"reset": True}
 
+@app.post("/api/maintenance/reset_sequences")
+def api_reset_sequences(request: Request):
+    """Reset all PostgreSQL SERIAL sequences back to 1.
+    Only safe when all tables are empty — use /api/admin/reset first."""
+    _require_owner(request)
+    from app.core.db import get_conn
+    tables = [
+        "runs", "workflows", "schedules", "graph_workflows",
+        "credentials", "graph_versions", "users", "sessions", "api_tokens",
+    ]
+    with get_conn() as conn:
+        cur = conn.cursor()
+        for t in tables:
+            cur.execute(
+                "SELECT setval(pg_get_serial_sequence(%s, 'id'), 1, false)", (t,)
+            )
+    return {"reset": True, "tables": tables}
+
 # ── API: metrics ────────────────────────────────────────────────────────────
 @app.get("/api/metrics")
 def api_metrics(request: Request):
