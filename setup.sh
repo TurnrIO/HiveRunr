@@ -9,9 +9,18 @@
 
 set -e
 
-if [ -f ".env" ]; then
-  echo "✗ .env already exists — remove it first if you want to regenerate."
+# Make sure we're in the repo root (docker-compose.yml should be here)
+if [ ! -f "docker-compose.yml" ]; then
+  echo "✗ docker-compose.yml not found."
+  echo "  Run this script from the root of the HiveRunr repo."
+  echo "  If you just cloned, try: git pull && bash setup.sh"
   exit 1
+fi
+
+if [ -f ".env" ]; then
+  echo "ℹ  .env already exists — skipping generation."
+  echo "   Delete it and re-run if you want a fresh setup: rm .env && bash setup.sh"
+  exit 0
 fi
 
 cp .env.example .env
