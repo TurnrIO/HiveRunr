@@ -4,6 +4,19 @@ All notable changes are documented here, newest first.
 
 ---
 
+## [Unreleased] — 2026-04-02 — Alembic migrations (P3)
+
+### Database schema management
+- **Alembic** replaces the hand-rolled `CREATE TABLE IF NOT EXISTS` / `ALTER TABLE ADD COLUMN IF NOT EXISTS` block in `init_db()` with proper versioned migrations under `migrations/`
+- `migrations/versions/0001_initial_schema.py` — initial migration capturing the full v12 schema; uses `IF NOT EXISTS` throughout so it is safe to run against a database that was already created by the legacy `init_db()`
+- `app/core/db.py` — new `run_migrations()` function calls `alembic upgrade head` via the Python API at startup; `init_db()` is now a one-line wrapper that calls `run_migrations()` for backwards compatibility; the original implementation is preserved as `_init_db_legacy()` for reference
+- All three process entry points (`main.py`, `worker.py`, `scheduler.py`) continue to call `init_db()` unchanged — they transparently get Alembic
+- `alembic.ini` + `migrations/env.py` configured to read `DATABASE_URL` from the environment — no credentials in source control
+- Future schema changes: add a new file in `migrations/versions/` with `alembic revision --autogenerate -m "description"` and deploy as usual
+- `alembic>=1.13.0` added to `requirements.txt`
+
+---
+
 ## [Unreleased] — 2026-04-02 — External secrets provider (P3)
 
 ### External secrets provider

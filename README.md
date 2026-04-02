@@ -249,6 +249,29 @@ docker compose restart api worker scheduler
 
 ---
 
+## Database Migrations
+
+HiveRunr uses **Alembic** for schema management. Migrations run automatically at startup — no manual steps needed during normal development.
+
+```bash
+# Apply all pending migrations (runs automatically on container start)
+docker compose exec api alembic upgrade head
+
+# Check current migration state
+docker compose exec api alembic current
+
+# Create a new migration after changing the schema
+docker compose exec api alembic revision -m "add my_new_column"
+# Edit the generated file in migrations/versions/, then commit it.
+
+# Roll back one step (rarely needed)
+docker compose exec api alembic downgrade -1
+```
+
+Migration files live in `migrations/versions/`. Each file has an `upgrade()` and a `downgrade()` function. The initial migration (`0001_initial_schema.py`) is idempotent — safe to run against a database that was already created by an older version of HiveRunr.
+
+---
+
 ## Docker Operations
 
 ```bash
