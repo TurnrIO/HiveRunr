@@ -109,12 +109,17 @@ banner "Step 2 — API key"
 info "API_KEY protects all inbound /webhook/* endpoints."
 current_api=$(grep '^API_KEY=' .env | cut -d'=' -f2-)
 if [ "$current_api" = "change-me-before-deployment" ] || [ -z "$current_api" ]; then
-  new_api=$(ask_val "API_KEY (leave blank to keep placeholder)" "")
+  # Generate a random default so the placeholder is never left in place
+  default_api=$(python3 -c "import secrets; print(secrets.token_urlsafe(24))" 2>/dev/null \
+    || openssl rand -base64 18 | tr -d '=\n+/')
+  new_api=$(ask_val "API_KEY (leave blank to auto-generate)" "")
   if [ -n "$new_api" ]; then
     set_env "API_KEY" "$new_api"
     ok "API_KEY saved"
   else
-    warn "API_KEY left as placeholder — change it before exposing to the internet"
+    set_env "API_KEY" "$default_api"
+    ok "API_KEY auto-generated: ${BOLD}${default_api}${RESET}"
+    info "Copy this somewhere safe — you'll need it to call /webhook/* endpoints."
   fi
 else
   ok "API_KEY already configured"
@@ -125,49 +130,6 @@ banner "Step 3 — Optional integrations"
 info "Select which services you want to configure now."
 info "You can always edit .env manually later and restart the stack."
 echo ""
-
-# ── SMTP ──────────────────────────────────────────────────────────────────────
-if ask_yn "Configure SMTP (for Send Email nodes / failure alerts)?" n; then
-  echo ""
-  info "Default settings use agentmail.to (port 587 / STARTTLS)."
-  info "Leave a field blank to keep its current value."
-  host=$(ask_val "SMTP_HOST" "$(grep '^SMTP_HOST=' .env | cut -d'=' -f2-)")
-  port=$(ask_val "SMTP_PORT" "$(grep '^SMTP_PORT=' .env | cut -d'=' -f2-)")
-  user=$(ask_val "SMTP_USER" "$(grep '^SMTP_USER=' .env | cut -d'=' -f2-)")
-  pass=$(ask_val "SMTP_PASS (API key / app password)" "$(grep '^SMTP_PASS=' .env | cut -d'=' -f2-)")
-  from=$(ask_val "SMTP_FROM  (optional, defaults to SMTP_USER)" "$(grep '^SMTP_FROM=' .env | cut -d'=' -f2-)")
-  [ -n "$host" ] && set_env "SMTP_HOST" "$host"
-  [ -n "$port" ] && set_env "SMTP_PORT" "$port"
-  [ -n "$user" ] && set_env "SMTP_USER" "$user"
-  [ -n "$pass" ] && set_env "SMTP_PASS" "$pass"
-  [ -n "$from" ] && set_env "SMTP_FROM" "$from"
-  ok "SMTP configured"
-fi
-
-# ── OpenAI ────────────────────────────────────────────────────────────────────
-if ask_yn "Configure OpenAI API key (for LLM Call nodes)?" n; then
-  key=$(ask_val "OPENAI_API_KEY" "$(grep '^OPENAI_API_KEY=' .env | cut -d'=' -f2-)")
-  [ -n "$key" ] && set_env "OPENAI_API_KEY" "$key" && ok "OpenAI key saved"
-fi
-
-# ── Slack ─────────────────────────────────────────────────────────────────────
-if ask_yn "Configure Slack webhook (for Slack nodes / failure alerts)?" n; then
-  url=$(ask_val "SLACK_WEBHOOK_URL" "$(grep '^SLACK_WEBHOOK_URL=' .env | cut -d'=' -f2-)")
-  [ -n "$url" ] && set_env "SLACK_WEBHOOK_URL" "$url"
-  if ask_yn "  Also use this webhook for run-failure notifications?" y; then
-    [ -n "$url" ] && set_env "NOTIFY_SLACK_WEBHOOK" "$url"
-  fi
-  ok "Slack configured"
-fi
-
-# ── Telegram ──────────────────────────────────────────────────────────────────
-if ask_yn "Configure Telegram bot (for Telegram nodes)?" n; then
-  token=$(ask_val "TELEGRAM_BOT_TOKEN" "$(grep '^TELEGRAM_BOT_TOKEN=' .env | cut -d'=' -f2-)")
-  chat=$(ask_val "TELEGRAM_CHAT_ID  (optional)" "$(grep '^TELEGRAM_CHAT_ID=' .env | cut -d'=' -f2-)")
-  [ -n "$token" ] && set_env "TELEGRAM_BOT_TOKEN" "$token"
-  [ -n "$chat"  ] && set_env "TELEGRAM_CHAT_ID"   "$chat"
-  ok "Telegram configured"
-fi
 
 # ── Failure notifications e-mail ──────────────────────────────────────────────
 if ask_yn "Send run-failure alerts to an email address?" n; then
@@ -191,13 +153,11 @@ banner "Step 4 — Review"
 echo ""
 echo -e "  ${BOLD}Your .env is ready.${RESET} Here are the values that matter most:"
 echo ""
-printf "  %-20s %s\n" "API_KEY:"      "$(grep '^API_KEY='      .env | cut -d'=' -f2-)"
-printf "  %-20s %s\n" "SMTP_HOST:"    "$(grep '^SMTP_HOST='    .env | cut -d'=' -f2-)"
-printf "  %-20s %s\n" "SMTP_USER:"    "$(grep '^SMTP_USER='    .env | cut -d'=' -f2-)"
-printf "  %-20s %s\n" "OPENAI_API_KEY:" "$(grep '^OPENAI_API_KEY=' .env | cut -d'=' -f2- | sed 's/.\{8\}$/********/')"
-printf "  %-20s %s\n" "SLACK_WEBHOOK:" "$(grep '^SLACK_WEBHOOK_URL=' .env | cut -d'=' -f2- | head -c 40)..."
+printf "  %-20s %s\n" "API_KEY:"      "$(grep '^API_KEY=' .env | cut -d'=' -f2-)"
+printf "  %-20s %s\n" "NOTIFY_EMAIL:" "$(grep '^NOTIFY_EMAIL=' .env | cut -d'=' -f2-)"
+printf "  %-20s %s\n" "RUN_SCRIPT:"   "$(grep '^ENABLE_RUN_SCRIPT=' .env | cut -d'=' -f2-)"
 echo ""
-info "You can always edit .env manually and restart the stack."
+info "Add integration keys (SMTP, OpenAI, Slack, Telegram…) to .env at any time and restart."
 
 # ── Docker ────────────────────────────────────────────────────────────────────
 banner "Step 5 — Start the stack"
