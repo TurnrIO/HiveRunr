@@ -4,6 +4,20 @@ All notable changes are documented here, newest first.
 
 ---
 
+## [Unreleased] — 2026-04-02 — Security hardening (Critical fixes)
+
+### Error handling
+- **Replaced all 15 bare `except:` clauses** across node handler files with specific exception types (`json.JSONDecodeError`, `ValueError`, `TypeError`) — prevents accidental swallowing of `KeyboardInterrupt`, `SystemExit`, and other non-error exceptions, and makes failures easier to trace in logs
+- Files updated: `action_http_request.py`, `action_notion.py`, `action_github.py`, `action_call_graph.py`, `action_google_sheets.py`
+
+### Authentication
+- **`Authorization: Bearer <token>` header** is now the recommended and highest-priority authentication method for API clients — safer than query parameters because it never appears in server access logs or browser history
+- Legacy `x-api-token` / `x-admin-token` headers continue to work unchanged
+- `?token=` query parameter is still accepted for backwards-compatibility but now emits a `WARNING` log line on every use with the request path, making it easy to find and migrate callers
+- Logic extracted into a standalone `_extract_raw_token()` helper in `deps.py` for clarity and future testability
+
+---
+
 ## [Unreleased] — 2026-04-02 — Alembic migrations (P3)
 
 ### Database schema management

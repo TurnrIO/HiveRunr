@@ -19,7 +19,7 @@ def run(config, inp, context, logger, creds=None, **kwargs):
         if raw:
             try:
                 token = json.loads(raw).get('token', raw)
-            except:
+            except (json.JSONDecodeError, ValueError):
                 token = raw
 
     if not token:

@@ -1,4 +1,5 @@
 """Shared FastAPI dependencies — auth guards used across all routers."""
+import logging
 import os
 from fastapi import HTTPException, Request
 from fastapi.responses import RedirectResponse
@@ -7,16 +8,47 @@ from app.core.db import users_exist, get_api_token_by_hash, touch_api_token
 
 ROLE_LEVELS = {"viewer": 0, "admin": 1, "owner": 2}
 
+log = logging.getLogger(__name__)
+
+
+def _extract_raw_token(request: Request) -> str:
+    """Extract the raw API token from the request, in preference order.
+
+    Preferred (safe): Authorization: Bearer <token> header or legacy x-api-token /
+    x-admin-token headers.  Deprecated (leaks into server logs): ?token= query
+    parameter — still accepted for backwards-compatibility but emits a warning so
+    callers can migrate.
+    """
+    # 1. Standard Bearer header — recommended for all API clients
+    auth_header = request.headers.get("Authorization", "")
+    if auth_header.lower().startswith("bearer "):
+        return auth_header[7:].strip()
+
+    # 2. Legacy custom headers — safe (not exposed in URLs or logs)
+    raw = request.headers.get("x-api-token") or request.headers.get("x-admin-token")
+    if raw:
+        return raw
+
+    # 3. Query parameter — DEPRECATED: token appears in server logs and browser history
+    raw = request.query_params.get("token", "")
+    if raw:
+        log.warning(
+            "API token supplied via ?token= query parameter (deprecated). "
+            "Switch to 'Authorization: Bearer <token>'. Path: %s",
+            request.url.path,
+        )
+        return raw
+
+    return ""
+
 
 def _check_admin(request: Request):
-    """Accept session cookie (browser) OR x-api-token / x-admin-token header (API clients)."""
+    """Accept session cookie (browser) OR token via Authorization: Bearer / legacy headers."""
     from app.auth import get_current_user, hash_token
     user = get_current_user(request)
     if user:
         return user
-    raw = (request.headers.get("x-api-token")
-           or request.headers.get("x-admin-token")
-           or request.query_params.get("token", ""))
+    raw = _extract_raw_token(request)
     if raw:
         th = hash_token(raw)
         tok = get_api_token_by_hash(th)
