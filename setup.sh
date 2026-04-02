@@ -1,46 +1,224 @@
 #!/usr/bin/env bash
-# HiveRunr — first-time setup
-# Run once after cloning the repo to generate a .env with a unique SECRET_KEY.
+# HiveRunr — interactive first-time setup
+# Generates a .env, walks you through optional integrations, then offers to
+# start the stack with docker compose.
 #
 # Usage:
 #   bash setup.sh
-#   # edit .env as needed (API_KEY, SMTP, integrations…)
-#   docker compose up -d --build
 
 set -e
 
-# Make sure we're in the repo root (docker-compose.yml should be here)
+# ── Colours ──────────────────────────────────────────────────────────────────
+if [ -t 1 ]; then
+  BOLD="\033[1m"; RESET="\033[0m"
+  GREEN="\033[32m"; YELLOW="\033[33m"; CYAN="\033[36m"; RED="\033[31m"; DIM="\033[2m"
+else
+  BOLD=""; RESET=""; GREEN=""; YELLOW=""; CYAN=""; RED=""; DIM=""
+fi
+
+banner() { echo -e "\n${CYAN}${BOLD}$*${RESET}"; }
+ok()     { echo -e "${GREEN}✓${RESET} $*"; }
+warn()   { echo -e "${YELLOW}⚠${RESET}  $*"; }
+info()   { echo -e "${DIM}  $*${RESET}"; }
+err()    { echo -e "${RED}✗${RESET} $*" >&2; }
+
+# ── Helpers ──────────────────────────────────────────────────────────────────
+
+# ask_yn "Question?" [default: y|n]
+# Returns 0 for yes, 1 for no.
+ask_yn() {
+  local prompt="$1" default="${2:-y}"
+  local hint
+  [ "$default" = "y" ] && hint="[Y/n]" || hint="[y/N]"
+  while true; do
+    printf "%b %s %b" "${BOLD}" "$prompt $hint" "${RESET}"
+    read -r reply </dev/tty
+    reply="${reply:-$default}"
+    case "$reply" in
+      [Yy]*) return 0 ;;
+      [Nn]*) return 1 ;;
+      *)     echo "  Please answer y or n." ;;
+    esac
+  done
+}
+
+# ask_val "Label" "current_value" — prints the updated value
+ask_val() {
+  local label="$1" current="$2"
+  if [ -n "$current" ]; then
+    printf "  %s [%s]: " "$label" "$current"
+  else
+    printf "  %s: " "$label"
+  fi
+  read -r val </dev/tty
+  echo "${val:-$current}"
+}
+
+# set_env KEY VALUE — replaces the line in .env (in-place)
+set_env() {
+  local key="$1" value="$2"
+  # Escape forward-slashes and ampersands in the value for sed
+  local escaped
+  escaped=$(printf '%s' "$value" | sed 's/[\/&]/\\&/g')
+  sed -i.bak "s|^${key}=.*|${key}=${escaped}|" .env && rm -f .env.bak
+}
+
+# ── Guard: repo root ──────────────────────────────────────────────────────────
 if [ ! -f "docker-compose.yml" ]; then
-  echo "✗ docker-compose.yml not found."
-  echo "  Run this script from the root of the HiveRunr repo."
-  echo "  If you just cloned, try: git pull && bash setup.sh"
+  err "docker-compose.yml not found."
+  info "Run this script from the root of the HiveRunr repo."
   exit 1
 fi
 
-if [ -f ".env" ]; then
-  echo "ℹ  .env already exists — skipping generation."
-  echo "   Delete it and re-run if you want a fresh setup: rm .env && bash setup.sh"
-  exit 0
-fi
-
-cp .env.example .env
-
-# Generate a unique Fernet-compatible SECRET_KEY (32 random bytes, URL-safe base64).
-SECRET_KEY=$(python3 -c "import base64,os; print(base64.urlsafe_b64encode(os.urandom(32)).decode())" 2>/dev/null \
-  || openssl rand -base64 32 | tr '+/' '-_' | tr -d '=\n')
-
-if [ -z "$SECRET_KEY" ]; then
-  echo "⚠  Could not generate a SECRET_KEY automatically."
-  echo "   Set it manually in .env before storing credentials:"
-  echo '   python3 -c "import base64,os; print(base64.urlsafe_b64encode(os.urandom(32)).decode())"'
-else
-  # Replace the blank SECRET_KEY= line in .env with the generated value
-  sed -i.bak "s|^SECRET_KEY=$|SECRET_KEY=$SECRET_KEY|" .env && rm -f .env.bak
-  echo "✓ Generated SECRET_KEY"
-fi
-
 echo ""
-echo "✓ .env created. Next steps:"
-echo "  1. Edit .env — set API_KEY and any integration keys you need"
-echo "  2. docker compose up -d --build"
-echo "  3. Open http://localhost and create your owner account"
+echo -e "${BOLD}╔══════════════════════════════════════╗${RESET}"
+echo -e "${BOLD}║      HiveRunr — First-time setup     ║${RESET}"
+echo -e "${BOLD}╚══════════════════════════════════════╝${RESET}"
+
+# ── .env creation ─────────────────────────────────────────────────────────────
+banner "Step 1 — Environment file"
+
+if [ -f ".env" ]; then
+  warn ".env already exists."
+  if ! ask_yn "Re-run setup anyway (existing values will be preserved)?" n; then
+    info "Nothing changed. To start the stack: docker compose up -d --build"
+    exit 0
+  fi
+else
+  cp .env.example .env
+  ok "Created .env from .env.example"
+fi
+
+# Generate SECRET_KEY if blank
+current_key=$(grep '^SECRET_KEY=' .env | cut -d'=' -f2-)
+if [ -z "$current_key" ]; then
+  SECRET_KEY=$(python3 -c "import base64,os; print(base64.urlsafe_b64encode(os.urandom(32)).decode())" 2>/dev/null \
+    || openssl rand -base64 32 | tr '+/' '-_' | tr -d '=\n')
+  if [ -n "$SECRET_KEY" ]; then
+    set_env "SECRET_KEY" "$SECRET_KEY"
+    ok "Generated SECRET_KEY"
+  else
+    warn "Could not generate SECRET_KEY automatically — set it manually in .env"
+  fi
+else
+  ok "SECRET_KEY already set"
+fi
+
+# API_KEY
+banner "Step 2 — API key"
+info "API_KEY protects all inbound /webhook/* endpoints."
+current_api=$(grep '^API_KEY=' .env | cut -d'=' -f2-)
+if [ "$current_api" = "change-me-before-deployment" ] || [ -z "$current_api" ]; then
+  new_api=$(ask_val "API_KEY (leave blank to keep placeholder)" "")
+  if [ -n "$new_api" ]; then
+    set_env "API_KEY" "$new_api"
+    ok "API_KEY saved"
+  else
+    warn "API_KEY left as placeholder — change it before exposing to the internet"
+  fi
+else
+  ok "API_KEY already configured"
+fi
+
+# ── Optional integrations ─────────────────────────────────────────────────────
+banner "Step 3 — Optional integrations"
+info "Select which services you want to configure now."
+info "You can always edit .env manually later and restart the stack."
+echo ""
+
+# ── SMTP ──────────────────────────────────────────────────────────────────────
+if ask_yn "Configure SMTP (for Send Email nodes / failure alerts)?" n; then
+  echo ""
+  info "Default settings use agentmail.to (port 587 / STARTTLS)."
+  info "Leave a field blank to keep its current value."
+  host=$(ask_val "SMTP_HOST" "$(grep '^SMTP_HOST=' .env | cut -d'=' -f2-)")
+  port=$(ask_val "SMTP_PORT" "$(grep '^SMTP_PORT=' .env | cut -d'=' -f2-)")
+  user=$(ask_val "SMTP_USER" "$(grep '^SMTP_USER=' .env | cut -d'=' -f2-)")
+  pass=$(ask_val "SMTP_PASS (API key / app password)" "$(grep '^SMTP_PASS=' .env | cut -d'=' -f2-)")
+  from=$(ask_val "SMTP_FROM  (optional, defaults to SMTP_USER)" "$(grep '^SMTP_FROM=' .env | cut -d'=' -f2-)")
+  [ -n "$host" ] && set_env "SMTP_HOST" "$host"
+  [ -n "$port" ] && set_env "SMTP_PORT" "$port"
+  [ -n "$user" ] && set_env "SMTP_USER" "$user"
+  [ -n "$pass" ] && set_env "SMTP_PASS" "$pass"
+  [ -n "$from" ] && set_env "SMTP_FROM" "$from"
+  ok "SMTP configured"
+fi
+
+# ── OpenAI ────────────────────────────────────────────────────────────────────
+if ask_yn "Configure OpenAI API key (for LLM Call nodes)?" n; then
+  key=$(ask_val "OPENAI_API_KEY" "$(grep '^OPENAI_API_KEY=' .env | cut -d'=' -f2-)")
+  [ -n "$key" ] && set_env "OPENAI_API_KEY" "$key" && ok "OpenAI key saved"
+fi
+
+# ── Slack ─────────────────────────────────────────────────────────────────────
+if ask_yn "Configure Slack webhook (for Slack nodes / failure alerts)?" n; then
+  url=$(ask_val "SLACK_WEBHOOK_URL" "$(grep '^SLACK_WEBHOOK_URL=' .env | cut -d'=' -f2-)")
+  [ -n "$url" ] && set_env "SLACK_WEBHOOK_URL" "$url"
+  if ask_yn "  Also use this webhook for run-failure notifications?" y; then
+    [ -n "$url" ] && set_env "NOTIFY_SLACK_WEBHOOK" "$url"
+  fi
+  ok "Slack configured"
+fi
+
+# ── Telegram ──────────────────────────────────────────────────────────────────
+if ask_yn "Configure Telegram bot (for Telegram nodes)?" n; then
+  token=$(ask_val "TELEGRAM_BOT_TOKEN" "$(grep '^TELEGRAM_BOT_TOKEN=' .env | cut -d'=' -f2-)")
+  chat=$(ask_val "TELEGRAM_CHAT_ID  (optional)" "$(grep '^TELEGRAM_CHAT_ID=' .env | cut -d'=' -f2-)")
+  [ -n "$token" ] && set_env "TELEGRAM_BOT_TOKEN" "$token"
+  [ -n "$chat"  ] && set_env "TELEGRAM_CHAT_ID"   "$chat"
+  ok "Telegram configured"
+fi
+
+# ── Failure notifications e-mail ──────────────────────────────────────────────
+if ask_yn "Send run-failure alerts to an email address?" n; then
+  addr=$(ask_val "NOTIFY_EMAIL" "$(grep '^NOTIFY_EMAIL=' .env | cut -d'=' -f2-)")
+  [ -n "$addr" ] && set_env "NOTIFY_EMAIL" "$addr" && ok "Failure email saved"
+fi
+
+# ── Run Script node ───────────────────────────────────────────────────────────
+echo ""
+if ask_yn "Enable the 'Run Python Script' node? ${RED}(security risk — read the warning below)${RESET}" n; then
+  warn "Run Python Script executes arbitrary code with access to env vars and the filesystem."
+  warn "Only enable this if every user who can edit flows is fully trusted."
+  if ask_yn "  Are you sure you want to enable it?" n; then
+    set_env "ENABLE_RUN_SCRIPT" "true"
+    ok "Run Python Script node enabled"
+  fi
+fi
+
+# ── Summary ───────────────────────────────────────────────────────────────────
+banner "Step 4 — Review"
+echo ""
+echo -e "  ${BOLD}Your .env is ready.${RESET} Here are the values that matter most:"
+echo ""
+printf "  %-20s %s\n" "API_KEY:"      "$(grep '^API_KEY='      .env | cut -d'=' -f2-)"
+printf "  %-20s %s\n" "SMTP_HOST:"    "$(grep '^SMTP_HOST='    .env | cut -d'=' -f2-)"
+printf "  %-20s %s\n" "SMTP_USER:"    "$(grep '^SMTP_USER='    .env | cut -d'=' -f2-)"
+printf "  %-20s %s\n" "OPENAI_API_KEY:" "$(grep '^OPENAI_API_KEY=' .env | cut -d'=' -f2- | sed 's/.\{8\}$/********/')"
+printf "  %-20s %s\n" "SLACK_WEBHOOK:" "$(grep '^SLACK_WEBHOOK_URL=' .env | cut -d'=' -f2- | head -c 40)..."
+echo ""
+info "You can always edit .env manually and restart the stack."
+
+# ── Docker ────────────────────────────────────────────────────────────────────
+banner "Step 5 — Start the stack"
+echo ""
+if ask_yn "Start HiveRunr now with docker compose up -d --build?" y; then
+  echo ""
+  info "Running: docker compose up -d --build"
+  echo ""
+  docker compose up -d --build
+  echo ""
+  ok "Stack started."
+  echo ""
+  echo -e "  ${BOLD}Open HiveRunr:${RESET}  http://localhost"
+  echo -e "  ${BOLD}View logs:${RESET}       docker compose logs -f api"
+  echo -e "  ${BOLD}Stop:${RESET}            docker compose down"
+  echo ""
+  ok "First-time setup complete. Create your owner account at http://localhost/setup"
+else
+  echo ""
+  info "When you're ready, start the stack with:"
+  echo -e "  ${BOLD}docker compose up -d --build${RESET}"
+  echo ""
+  ok "Setup complete. Open http://localhost after starting the stack."
+fi
