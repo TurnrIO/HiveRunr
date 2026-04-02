@@ -1,5 +1,6 @@
-"""Database layer — v8
-New: credentials vault, graph version history, node traces + initial_payload in runs
+"""Database layer — v12
+New: credentials vault, graph version history, node traces + initial_payload in runs.
+Schema management is now handled by Alembic (see migrations/).
 """
 import os, json, logging
 from contextlib import contextmanager
@@ -20,7 +21,35 @@ def get_conn():
 
 psycopg2.extras.register_uuid()
 
+def run_migrations() -> None:
+    """Apply all pending Alembic migrations (runs `alembic upgrade head`).
+
+    Called at startup from main.py, worker.py, and scheduler.py in place of
+    the legacy init_db().  Safe to call concurrently — Alembic's migration
+    lock prevents duplicate execution.
+    """
+    import os as _os
+    from alembic.config import Config as _Cfg
+    from alembic import command as _cmd
+
+    # Resolve alembic.ini relative to the repo root (two levels up from this file)
+    _here = _os.path.dirname(_os.path.abspath(__file__))
+    _root = _os.path.join(_here, "..", "..")
+    _ini  = _os.path.join(_root, "alembic.ini")
+
+    cfg = _Cfg(_ini)
+    # Ensure the correct DATABASE_URL is used even when run inside Docker
+    cfg.set_main_option("sqlalchemy.url", DSN)
+    _cmd.upgrade(cfg, "head")
+
+
 def init_db():
+    """Legacy wrapper — calls run_migrations().  Kept for back-compat."""
+    run_migrations()
+
+
+def _init_db_legacy():
+    """Original CREATE TABLE IF NOT EXISTS implementation — kept for reference only."""
     with get_conn() as conn:
         cur = conn.cursor()
         cur.execute("""
