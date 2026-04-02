@@ -14,7 +14,7 @@ EXAMPLE_GRAPHS = [
             "nodes": [
                 {"id":"ex1_n1","type":"trigger.manual","position":{"x":60,"y":200},"data":{"label":"Start","config":{}}},
                 {"id":"ex1_n2","type":"action.http_request","position":{"x":300,"y":200},"data":{"label":"Fetch HN Top Stories","config":{"url":"https://hacker-news.firebaseio.com/v0/topstories.json","method":"GET"}}},
-                {"id":"ex1_n3","type":"action.transform","position":{"x":560,"y":200},"data":{"label":"Take Top 5","config":{"expression":"{'ids': input[:5], 'count': len(input[:5])}"}}},
+                {"id":"ex1_n3","type":"action.transform","position":{"x":560,"y":200},"data":{"label":"Take Top 5","config":{"expression":"{'ids': input['body'][:5], 'count': len(input['body'][:5])}"}}},
                 {"id":"ex1_n4","type":"action.send_email","position":{"x":820,"y":200},"data":{"label":"Send Digest","config":{"to":"you@example.com","subject":"Daily HN Digest","body":"Today's top HN story IDs: {{ex1_n3.ids}}\n\nFetched {{ex1_n3.count}} stories."}}}
             ],
             "edges": [
