@@ -11,6 +11,9 @@ from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Resp
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+from app.core.secrets import load_secrets
+load_secrets()  # populate os.environ from provider BEFORE any other imports use env vars
+
 from app.core.db import init_db, list_workflows, upsert_workflow
 from app.worker import enqueue_workflow
 from app.deps import _auth_redirect

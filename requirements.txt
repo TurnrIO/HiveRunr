@@ -16,3 +16,5 @@ google-auth
 bcrypt==4.1.3
 cryptography>=46.0.6
 starlette>=0.47.2
+# Optional: install boto3 to use SECRETS_PROVIDER=aws (AWS Secrets Manager)
+# boto3>=1.34.0
