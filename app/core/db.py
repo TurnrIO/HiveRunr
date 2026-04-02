@@ -27,18 +27,34 @@ def run_migrations() -> None:
     Called at startup from main.py, worker.py, and scheduler.py in place of
     the legacy init_db().  Safe to call concurrently — Alembic's migration
     lock prevents duplicate execution.
+
+    Falls back to the legacy CREATE TABLE IF NOT EXISTS approach if alembic is
+    not installed or alembic.ini cannot be found (e.g. image not yet rebuilt).
     """
     import os as _os
-    from alembic.config import Config as _Cfg
-    from alembic import command as _cmd
+    try:
+        from alembic.config import Config as _Cfg
+        from alembic import command as _cmd
+    except ImportError:
+        log.warning("alembic not installed — falling back to legacy init_db")
+        _init_db_legacy()
+        return
 
-    # Resolve alembic.ini relative to the repo root (two levels up from this file)
+    # Resolve alembic.ini: try CWD first (Docker WORKDIR /app), then relative
+    # to this file (two levels up = repo root)
     _here = _os.path.dirname(_os.path.abspath(__file__))
-    _root = _os.path.join(_here, "..", "..")
-    _ini  = _os.path.join(_root, "alembic.ini")
+    _candidates = [
+        _os.path.join(_os.getcwd(), "alembic.ini"),
+        _os.path.join(_here, "..", "..", "alembic.ini"),
+    ]
+    _ini = next((p for p in _candidates if _os.path.isfile(p)), None)
+    if _ini is None:
+        log.warning("alembic.ini not found — falling back to legacy init_db")
+        _init_db_legacy()
+        return
 
     cfg = _Cfg(_ini)
-    # Ensure the correct DATABASE_URL is used even when run inside Docker
+    # Always override with the live DATABASE_URL so Docker env vars take effect
     cfg.set_main_option("sqlalchemy.url", DSN)
     _cmd.upgrade(cfg, "head")
 
