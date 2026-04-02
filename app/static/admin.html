@@ -666,6 +666,16 @@ const CRED_SCHEMAS = {
 };
 
 
+// CSS class suffix for the type badge (maps CRED_SCHEMAS keys → .badge-credential.* class)
+const typeColors = {
+  openai_api: "openai_api",
+  smtp:       "smtp",
+  telegram:   "telegram",
+  aws:        "aws",
+  ssh:        "ssh",
+  sftp:       "ftp",  // CSS class is .ftp
+};
+
 // Build blank sub-field state for a given type
 function blankSubFields(type) {
   const schema = CRED_SCHEMAS[type] || CRED_SCHEMAS.generic;
