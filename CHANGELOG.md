@@ -4,6 +4,23 @@ All notable changes are documented here, newest first.
 
 ---
 
+## [Unreleased] — 2026-04-02 — Codebase refactor
+
+### Router / services split
+- `app/main.py` reduced from ~1100 lines to ~130 lines — now contains only app wiring, static mounts, page routes, health, and startup lifecycle
+- `app/deps.py` — shared auth guards (`_check_admin`, `_require_writer`, `_require_owner`, `_auth_redirect`) extracted into one place
+- `app/seeds.py` — example graph seed data and `seed_example_graphs()` function extracted from main
+- `app/routers/auth.py` — auth, user management, and API token endpoints
+- `app/routers/graphs.py` — graph CRUD, graph versions, graph-run endpoint; helpers `_graph_with_data` and `_sync_cron_triggers` co-located
+- `app/routers/runs.py` — run list/delete/trim/replay and `_sync_stuck_runs` reconciliation logic
+- `app/routers/schedules.py` — schedule CRUD + toggle
+- `app/routers/credentials.py` — credential CRUD
+- `app/routers/webhooks.py` — webhook trigger + per-token Redis rate limiting
+- `app/routers/admin.py` — system status, metrics, run logs, admin reset, maintenance, node registry, scripts, and workflow templates
+- All 53 unit tests pass; ruff reports zero violations across the new files
+
+---
+
 ## [v12] — 2026-04-01 — Auth · Encryption · Security Hardening
 
 ### Session-based authentication
