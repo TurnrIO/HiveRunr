@@ -84,6 +84,7 @@ def enqueue_workflow(self, workflow_name: str, payload: dict):
 @app.task(bind=True, name="app.worker.enqueue_script")
 def enqueue_script(self, script_name: str, payload: dict):
     """Execute a standalone Python script from the workflows directory."""
+    import time as _time
     task_id = self.request.id
     try:
         from app.core.db import init_db
@@ -92,6 +93,7 @@ def enqueue_script(self, script_name: str, payload: dict):
         pass
     buf = io.StringIO()
     old_stdout, old_stderr = sys.stdout, sys.stderr
+    t_start = _time.time()
     try:
         # Mark running first — inside try so any DB error is caught too
         update_run(task_id, "running")
@@ -103,14 +105,41 @@ def enqueue_script(self, script_name: str, payload: dict):
                        init_globals={"__payload__": payload})
         sys.stdout, sys.stderr = old_stdout, old_stderr
         output = buf.getvalue()
-        update_run(task_id, "succeeded", result={"output": output, "script": script_name})
+        duration_ms = int((_time.time() - t_start) * 1000)
+        traces = [{
+            'node_id':     'script',
+            'type':        'script',
+            'label':       script_name,
+            'status':      'ok',
+            'duration_ms': duration_ms,
+            'attempts':    1,
+            'input':       payload,
+            'output':      output or "(no output)",
+            'error':       None,
+        }]
+        update_run(task_id, "succeeded", result={"output": output, "script": script_name},
+                   traces=traces)
     except Exception as e:
         sys.stdout, sys.stderr = old_stdout, old_stderr
         log.exception(f"Script {script_name} failed")
         _notify_failure(script_name, str(e), task_id)
+        output = buf.getvalue()
+        duration_ms = int((_time.time() - t_start) * 1000)
+        traces = [{
+            'node_id':     'script',
+            'type':        'script',
+            'label':       script_name,
+            'status':      'error',
+            'duration_ms': duration_ms,
+            'attempts':    1,
+            'input':       payload,
+            'output':      output or None,
+            'error':       f"{type(e).__name__}: {e}",
+        }]
         try:
             update_run(task_id, "failed",
-                       result={"error": str(e), "script": script_name, "output": buf.getvalue()})
+                       result={"error": str(e), "script": script_name, "output": output},
+                       traces=traces)
         except Exception:
             pass  # best-effort — don't let a DB error create a second FAILURE
 
