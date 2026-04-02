@@ -1,6 +1,11 @@
 import os, time, logging
 from apscheduler.schedulers.blocking import BlockingScheduler
 from apscheduler.triggers.cron import CronTrigger
+
+# Load secrets before DB connection (DATABASE_URL may come from provider)
+from app.core.secrets import load_secrets
+load_secrets()
+
 from app.core.db import init_db, list_schedules
 
 log = logging.getLogger(__name__)

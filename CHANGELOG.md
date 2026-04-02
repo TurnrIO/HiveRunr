@@ -4,6 +4,18 @@ All notable changes are documented here, newest first.
 
 ---
 
+## [Unreleased] — 2026-04-02 — External secrets provider (P3)
+
+### External secrets provider
+- `app/core/secrets.py` — lightweight adapter that fetches secrets from an external provider at startup and merges them into `os.environ`; existing env vars always take precedence so local `.env` overrides keep working
+- **AWS Secrets Manager** (`SECRETS_PROVIDER=aws`): fetches a JSON secret by `AWS_SECRET_NAME`; credentials resolved automatically via IAM role, `~/.aws`, or standard AWS env vars; requires `boto3` (optional, not in default `requirements.txt`)
+- **HashiCorp Vault KV v2** (`SECRETS_PROVIDER=vault`): reads from `VAULT_SECRET_PATH` (default `secret/data/hiverunr`) using either a static `VAULT_TOKEN` or AppRole (`VAULT_ROLE_ID` + `VAULT_SECRET_ID`); uses `httpx` which is already a HiveRunr dependency — no extra package needed
+- `load_secrets()` wired into `app/main.py`, `app/worker.py`, and `app/scheduler.py` before any env-var reads — covers all three process entry points
+- Both providers fail gracefully (log error, continue with env vars) so a provider outage never prevents the app from starting
+- `.env.example` extended with all new provider variables and inline comments
+
+---
+
 ## [Unreleased] — 2026-04-02 — SMTP fix + Observability
 
 ### SMTP STARTTLS / SSL fix

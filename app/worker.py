@@ -2,6 +2,10 @@ import os, json, logging, io, sys, runpy
 from pathlib import Path
 from email.mime.text import MIMEText
 from celery import Celery
+
+# Load secrets before any env-var reads (Celery broker URL, SMTP creds, etc.)
+from app.core.secrets import load_secrets
+load_secrets()
 from app.core.db import (
     get_run_by_task, update_run,
     list_workflows, get_graph
