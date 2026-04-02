@@ -10,6 +10,17 @@ def run(config, inp, context, logger, creds=None, **kwargs):
     """Evaluate a Python expression and return result."""
     expr = _render(config.get('expression') or 'input', context, creds)
     safe_builtins = {'len': len, 'str': str, 'int': int, 'float': float, 'bool': bool, 'list': list, 'dict': dict, 'tuple': tuple}
-    result = eval(expr, {'__builtins__': safe_builtins}, {'input': inp, 'context': context, 'json': json})
+    try:
+        result = eval(expr, {'__builtins__': safe_builtins}, {'input': inp, 'context': context, 'json': json})
+    except KeyError as e:
+        if e.args and isinstance(e.args[0], slice):
+            s = e.args[0]
+            notation = f"[:{s.stop}]" if s.start is None and s.step is None else repr(s)
+            keys = list(inp.keys()) if isinstance(inp, dict) else None
+            hint = f" Available keys: {keys}. Try input['key']{notation} instead." if keys else ""
+            raise KeyError(
+                f"Cannot slice a dict with {notation} — 'input' is a dict, not a list.{hint}"
+            ) from None
+        raise
     return result
 
