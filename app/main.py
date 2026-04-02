@@ -197,8 +197,6 @@ async def api_run_workflow(name: str, request: Request):
     workflows = {w["name"]: w for w in list_workflows()}
     if name not in workflows:
         raise HTTPException(404, f"Workflow '{name}' not found")
-    if not workflows[name].get("enabled", True) is False:
-        pass  # allow running even if toggled off (UI button is disabled anyway)
     try:
         payload = await request.json()
         if not isinstance(payload, dict):
