@@ -1,16 +1,22 @@
 """Shared SMTP send helper.
 
 Auto-selects the connection mode based on port:
-  465        → SMTP_SSL  (implicit TLS — the old default everywhere)
-  587        → SMTP + STARTTLS (explicit TLS — required by Gmail, Outlook, etc.)
-  25 / other → plain SMTP (LAN relay, MTA, etc.)
+  465        → SMTP_SSL  (implicit TLS)
+  587        → SMTP + STARTTLS (explicit TLS — agentmail.to, Outlook, Gmail, etc.)
+  25 / other → plain SMTP (LAN relay / MTA)
+
+The default timeout is 30 s, which is enough for slower providers like
+agentmail.to.  Override with the SMTP_TIMEOUT env var.
 
 Usage:
     from app.core.smtp import send_message
     send_message(host, port, user, pwd, from_addr, to_addr, msg.as_string())
 """
+import os
 import ssl
 import smtplib
+
+_DEFAULT_TIMEOUT = int(os.environ.get('SMTP_TIMEOUT', '30'))
 
 
 def send_message(
@@ -21,7 +27,7 @@ def send_message(
     from_addr: str,
     to_addr: str,
     msg_str: str,
-    timeout: int = 15,
+    timeout: int = _DEFAULT_TIMEOUT,
 ) -> None:
     """Send a pre-built RFC-2822 message string via SMTP.
 
