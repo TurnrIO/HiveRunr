@@ -1661,13 +1661,17 @@ function NodeEditorModal({ node, onChange, onDelete, onClose, edges, allNodes, c
   const upstreamPinned = upstreamNode?.data?._pinnedOutput;
   const upstreamLabel  = upstreamNode?.data?.label || upstreamNode?.data?.type || null;
 
-  // Auto-populate testInput from upstream pinned output when the test panel opens
+  // Always-fresh ref so reset handler never reads a stale closure value
+  const upstreamPinnedRef = useRef(upstreamPinned);
+  upstreamPinnedRef.current = upstreamPinned;
+
+  // Auto-populate testInput when the panel opens, or when upstream pin/node changes
   useEffect(()=>{
     if(!testOpen) return;
-    if(upstreamPinned){
-      setTestInput(JSON.stringify(upstreamPinned, null, 2));
-    }
-  },[testOpen]);
+    const pinned = upstreamPinnedRef.current;
+    if(pinned) setTestInput(JSON.stringify(pinned, null, 2));
+    else       setTestInput("{}");
+  },[testOpen, node.id, upstreamNode?.id]);
 
   function update(key,val){ onChange(node.id,{...node.data,config:{...node.data.config,[key]:val}}); }
   function updateLabel(val){ onChange(node.id,{...node.data,label:val}); }
@@ -1995,7 +1999,7 @@ function NodeEditorModal({ node, onChange, onDelete, onClose, edges, allNodes, c
                         <span style={{fontSize:10,color:"#fbbf24"}}>
                           📌 from {upstreamLabel}
                           <button
-                            onClick={()=>setTestInput(JSON.stringify(upstreamPinned, null, 2))}
+                            onClick={()=>{ const p=upstreamPinnedRef.current; if(p) setTestInput(JSON.stringify(p, null, 2)); }}
                             style={{marginLeft:4,fontSize:10,color:"#fbbf24",background:"none",border:"none",cursor:"pointer",padding:0,textDecoration:"underline"}}
                           >reset</button>
                         </span>
@@ -2795,6 +2799,7 @@ function App(){
       {/* Node Editor Modal — opens when a node is selected */}
       {selectedNode && (
         <NodeEditorModal
+          key={selectedNode.id}
           node={selectedNode}
           onChange={onNodeChange}
           onDelete={onDeleteNode}
