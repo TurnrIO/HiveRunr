@@ -1,4 +1,4 @@
-import os, json, logging, io, sys, runpy, smtplib
+import os, json, logging, io, sys, runpy
 from pathlib import Path
 from email.mime.text import MIMEText
 from celery import Celery
@@ -39,20 +39,20 @@ def _notify_failure(name: str, error: str, task_id: str):
             smtp_host = os.environ.get("SMTP_HOST", "")
             smtp_user = os.environ.get("SMTP_USER", "")
             smtp_pass = os.environ.get("SMTP_PASS", "")
-            smtp_port = int(os.environ.get("SMTP_PORT", 465))
+            smtp_port = int(os.environ.get("SMTP_PORT", 587))
             if not smtp_host:
                 log.warning("NOTIFY_EMAIL set but SMTP_HOST not configured")
                 return
+            from_addr = os.environ.get("SMTP_FROM", "") or smtp_user or "hiverunr@noreply.local"
             msg = MIMEText(
                 f"Task ID:  {task_id}\nWorkflow: {name}\n\nError:\n{error}"
             )
             msg["Subject"] = f"[HiveRunr] {name} failed"
-            msg["From"]    = smtp_user or "hiverunr@noreply.local"
+            msg["From"]    = from_addr
             msg["To"]      = notify_email
-            with smtplib.SMTP_SSL(smtp_host, smtp_port) as s:
-                if smtp_user and smtp_pass:
-                    s.login(smtp_user, smtp_pass)
-                s.sendmail(smtp_user, notify_email, msg.as_string())
+            from app.core.smtp import send_message
+            send_message(smtp_host, smtp_port, smtp_user, smtp_pass,
+                         from_addr, notify_email, msg.as_string())
         except Exception as ex:
             log.warning(f"Email notify failed: {ex}")
 
