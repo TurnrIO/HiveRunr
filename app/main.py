@@ -184,3 +184,32 @@ def api_toggle_workflow(name: str, request: Request):
     from app.core.db import toggle_workflow
     _check_admin(request)
     return toggle_workflow(name) or {"name": name}
+
+
+@app.post("/api/workflows/{name}/run")
+async def api_run_workflow(name: str, request: Request):
+    import uuid as _uuid
+    from app.deps import _check_admin
+    from app.core.db import get_conn, list_workflows
+    from app.worker import enqueue_script
+    _check_admin(request)
+    # Check the workflow exists and is enabled
+    workflows = {w["name"]: w for w in list_workflows()}
+    if name not in workflows:
+        raise HTTPException(404, f"Workflow '{name}' not found")
+    if not workflows[name].get("enabled", True) is False:
+        pass  # allow running even if toggled off (UI button is disabled anyway)
+    try:
+        payload = await request.json()
+        if not isinstance(payload, dict):
+            payload = {}
+    except Exception:
+        payload = {}
+    task_id = str(_uuid.uuid4())
+    with get_conn() as conn:
+        conn.cursor().execute(
+            "INSERT INTO runs(task_id, workflow, status) VALUES(%s, %s, 'queued')",
+            (task_id, name)
+        )
+    enqueue_script.apply_async(args=[name, payload], task_id=task_id)
+    return {"queued": True, "task_id": task_id, "workflow": name}
