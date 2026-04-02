@@ -644,10 +644,10 @@ const CRED_SCHEMAS = {
                                                          {k:"base_url", l:"Base URL (optional)", ph:"https://api.openai.com/v1"}] },
 
   // ── email ─────────────────────────────────────────────────────────────────
-  smtp:       { label:"SMTP Server",             fields:[{k:"host",    l:"Host",              ph:"smtp.gmail.com"},
-                                                         {k:"port",    l:"Port",              ph:"465"},
-                                                         {k:"user",    l:"Username",          ph:"you@gmail.com"},
-                                                         {k:"pass",    l:"Password",          ph:"app-password",                    secret:true}] },
+  smtp:       { label:"SMTP Server",             fields:[{k:"host",    l:"Host",              ph:"smtp.agentmail.to"},
+                                                         {k:"port",    l:"Port",              ph:"587"},
+                                                         {k:"user",    l:"Username",          ph:"inbox@agentmail.to"},
+                                                         {k:"pass",    l:"Password / API key",ph:"your-api-key",                    secret:true}] },
 
   // ── infrastructure ────────────────────────────────────────────────────────
   ssh:        { label:"SSH Server",              fields:[{k:"host",    l:"Host / IP",         ph:"192.168.1.1"},
