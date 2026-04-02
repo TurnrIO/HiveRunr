@@ -1665,6 +1665,15 @@ function NodeEditorModal({ node, onChange, onDelete, onClose, edges, allNodes, c
   const upstreamPinnedRef = useRef(upstreamPinned);
   upstreamPinnedRef.current = upstreamPinned;
 
+  // Left INPUT panel shows the test textarea content while the panel is open,
+  // so the schema tree (and drag-to-config) always reflects what will actually be sent.
+  const displayInput = React.useMemo(()=>{
+    if(testOpen){
+      try { return JSON.parse(testInput); } catch(e) { return upstreamPinned || runInput; }
+    }
+    return runInput;
+  }, [testOpen, testInput, upstreamPinned, runInput]);
+
   // Auto-populate testInput when the panel opens, or when upstream pin/node changes
   useEffect(()=>{
     if(!testOpen) return;
@@ -1738,7 +1747,7 @@ function NodeEditorModal({ node, onChange, onDelete, onClose, edges, allNodes, c
               <button className={`nem-io-view-tab${inputView==="json"?" active":""}`} onClick={()=>setInputView("json")}>JSON</button>
             </div>
             <div className="nem-io-col-body">
-              <NioBody data={runInput} view={inputView} sourceNodeId={upstreamNodeId} isTruncated={!!(runInput&&runInput.__truncated)}/>
+              <NioBody data={displayInput} view={inputView} sourceNodeId={upstreamNodeId} isTruncated={!!(displayInput&&displayInput.__truncated)}/>
             </div>
           </div>
 
@@ -1826,6 +1835,13 @@ function NodeEditorModal({ node, onChange, onDelete, onClose, edges, allNodes, c
                 <div style={{color:"#7e22ce",marginBottom:3}}>● Body → runs per item</div>
                 <div style={{color:"#64748b",marginBottom:4}}>● Done → after all iterations</div>
                 Each body node receives the current item as input.
+              </div>
+            )}
+            {node.data.type==="action.transform"&&(
+              <div style={{background:"#0f1117",border:"1px solid #2a2d3e",borderRadius:6,padding:"8px 10px",fontSize:10,color:"#94a3b8",marginTop:6,lineHeight:1.8}}>
+                <code style={{color:"#a78bfa"}}>input</code> is the upstream output (often a dict).<br/>
+                To slice a nested list: <code style={{color:"#6ee7b7"}}>input['body'][:5]</code> not <code style={{color:"#f87171"}}>input[:5]</code>.<br/>
+                Also available: <code style={{color:"#a78bfa"}}>context</code>, <code style={{color:"#a78bfa"}}>json</code>.
               </div>
             )}
             {node.data.type==="action.filter"&&(
