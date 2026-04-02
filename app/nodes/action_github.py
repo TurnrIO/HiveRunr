@@ -1,7 +1,7 @@
 """GitHub API action node."""
 import os
 import json
-from app.nodes._utils import _render
+from app.nodes._utils import _render, _resolve_cred_raw
 
 NODE_TYPE = "action.github"
 LABEL = "GitHub"
@@ -15,7 +15,7 @@ def run(config, inp, context, logger, creds=None, **kwargs):
     cred_name = _render(config.get('credential', ''), context, creds)
 
     if cred_name and creds and not token:
-        raw = creds.get(cred_name)
+        raw = _resolve_cred_raw(cred_name, creds)
         if raw:
             try:
                 token = json.loads(raw).get('token', raw)

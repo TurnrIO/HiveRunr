@@ -3,7 +3,7 @@ import os
 import json
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-from app.nodes._utils import _render
+from app.nodes._utils import _render, _resolve_cred_raw
 from app.core.smtp import send_message
 
 NODE_TYPE = "action.send_email"
@@ -29,7 +29,7 @@ def run(config, inp, context, logger, creds=None, **kwargs):
     # Structured credential shortcut
     cred_name = _render(config.get('credential', ''), context, creds)
     if cred_name and creds:
-        raw = creds.get(cred_name)
+        raw = _resolve_cred_raw(cred_name, creds)
         if raw:
             try:
                 c = json.loads(raw)

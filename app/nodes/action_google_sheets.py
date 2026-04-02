@@ -1,6 +1,6 @@
 """Google Sheets API action node."""
 import json
-from app.nodes._utils import _render
+from app.nodes._utils import _render, _resolve_cred_raw
 
 NODE_TYPE = "action.google_sheets"
 LABEL = "Google Sheets"
@@ -14,7 +14,7 @@ def run(config, inp, context, logger, creds=None, **kwargs):
     service_account_json = ''
 
     if cred_name and creds:
-        raw = creds.get(cred_name)
+        raw = _resolve_cred_raw(cred_name, creds)
         if raw:
             try:
                 service_account_json = json.loads(raw).get('json', raw)
