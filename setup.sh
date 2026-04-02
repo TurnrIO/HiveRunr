@@ -10,8 +10,8 @@ set -e
 
 # ── Colours ──────────────────────────────────────────────────────────────────
 if [ -t 1 ]; then
-  BOLD="\033[1m"; RESET="\033[0m"
-  GREEN="\033[32m"; YELLOW="\033[33m"; CYAN="\033[36m"; RED="\033[31m"; DIM="\033[2m"
+  BOLD=$'\033[1m'; RESET=$'\033[0m'
+  GREEN=$'\033[32m'; YELLOW=$'\033[33m'; CYAN=$'\033[36m'; RED=$'\033[31m'; DIM=$'\033[2m'
 else
   BOLD=""; RESET=""; GREEN=""; YELLOW=""; CYAN=""; RED=""; DIM=""
 fi
@@ -31,7 +31,7 @@ ask_yn() {
   local hint
   [ "$default" = "y" ] && hint="[Y/n]" || hint="[y/N]"
   while true; do
-    printf "%b %s %b" "${BOLD}" "$prompt $hint" "${RESET}"
+    printf "%s" "${BOLD}${prompt} ${hint}${RESET} "
     read -r reply </dev/tty
     reply="${reply:-$default}"
     case "$reply" in
