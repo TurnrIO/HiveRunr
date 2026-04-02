@@ -4,6 +4,24 @@ All notable changes are documented here, newest first.
 
 ---
 
+## [Unreleased] — 2026-04-02 — SMTP fix + Observability
+
+### SMTP STARTTLS / SSL fix
+- Extracted `app/core/smtp.py` — single `send_message()` helper that auto-selects the connection mode by port: 587 → STARTTLS, 465 → implicit TLS (SMTP_SSL), 25/other → plain
+- `action_send_email.py` and `worker.py` both use the shared helper; inline `smtplib.SMTP_SSL` hardcoding removed
+- Default port changed from 465 to 587 (matching `.env.example` and the vast majority of modern providers)
+- `.env.example` updated with a comment explaining each port's connection mode
+
+### Observability: Prometheus metrics + structured JSON logging
+- `app/observability.py` — single module housing all observability concerns
+- **Structured logging**: `configure_logging()` replaces the root handler with a JSON formatter (`python-json-logger`); every log line is a single parseable JSON object with `service`, `level`, `name`, `message`, and timestamp fields; falls back to plain logging if the library is absent
+- **HTTP metrics** via `PrometheusMiddleware` (Starlette `BaseHTTPMiddleware`): tracks `hiverunr_http_requests_total` (counter, labels: method / path template / status_code) and `hiverunr_http_request_duration_seconds` (histogram); path is normalised to the route template to prevent per-ID cardinality explosion
+- **Run-count metrics** via `_RunMetricsCollector` (custom Prometheus collector): queries PostgreSQL on each scrape to expose `hiverunr_runs_total{status}` — avoids multi-process counter sync issues between the API and Celery worker processes
+- `/metrics` endpoint added (auth-gated) — returns standard Prometheus text exposition
+- `prometheus_client>=0.20.0` and `python-json-logger>=2.0.7` added to `requirements.txt`
+
+---
+
 ## [Unreleased] — 2026-04-02 — Codebase refactor
 
 ### Router / services split

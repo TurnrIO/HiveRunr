@@ -13,6 +13,16 @@ TEMPLATES_DIR = Path(__file__).parent.parent / 'templates'
 router = APIRouter()
 
 
+# ── Prometheus /metrics ───────────────────────────────────────────────────────
+@router.get("/metrics", include_in_schema=False)
+def prometheus_metrics(request: Request):
+    """Prometheus text exposition — auth-gated so metrics aren't public."""
+    _check_admin(request)
+    from app.observability import metrics_response
+    return metrics_response()
+
+
+
 # ── System status ─────────────────────────────────────────────────────────────
 @router.get("/api/system/status")
 def api_system_status(request: Request):

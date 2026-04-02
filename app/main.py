@@ -15,6 +15,10 @@ from app.core.db import init_db, list_workflows, upsert_workflow
 from app.worker import enqueue_workflow
 from app.deps import _auth_redirect
 from app.seeds import seed_example_graphs
+from app.observability import configure_logging, PrometheusMiddleware
+
+# ── Structured JSON logging (must run before any other log calls) ─────────────
+configure_logging()
 
 # ── Routers ───────────────────────────────────────────────────────────────────
 from app.routers.auth        import router as auth_router
@@ -31,6 +35,9 @@ WORKFLOWS    = ["example"]
 API_KEY      = os.environ.get("API_KEY", "dev_api_key")
 
 app = FastAPI(title="HiveRunr", docs_url=None, redoc_url=None, openapi_url=None)
+
+# ── Middleware ────────────────────────────────────────────────────────────────
+app.add_middleware(PrometheusMiddleware)
 
 # ── Include routers ───────────────────────────────────────────────────────────
 app.include_router(auth_router)
