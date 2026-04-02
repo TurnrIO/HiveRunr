@@ -2,7 +2,7 @@
 import io
 import stat as _stat
 import json
-from app.nodes._utils import _render
+from app.nodes._utils import _render, _resolve_cred_raw
 
 NODE_TYPE = "action.sftp"
 LABEL = "SFTP / FTP"
@@ -146,7 +146,7 @@ def run(config, inp, context, logger, creds=None, **kwargs):
     # ── credential shortcut ───────────────────────────────────────────────
     cred_name = _render(config.get('credential', ''), context, creds)
     if cred_name and creds:
-        raw = creds.get(cred_name)
+        raw = _resolve_cred_raw(cred_name, creds)
         if raw:
             try:
                 c = json.loads(raw)

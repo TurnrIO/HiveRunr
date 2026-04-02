@@ -5,6 +5,27 @@ import json
 _TMPL = re.compile(r'\{\{([^}]+)\}\}')
 
 
+def _resolve_cred_raw(cred_name: str, creds: dict):
+    """Return the raw credential string for *cred_name*.
+
+    Handles two calling conventions:
+    - ``cred_name`` is a plain name ("my-smtp")  → looked up in *creds*
+    - ``cred_name`` was produced by rendering ``{{creds.my-smtp}}`` and is
+      therefore already the raw JSON/secret string → returned as-is.
+
+    This prevents a silent fallback to env-var defaults when users
+    type ``{{creds.name}}`` in the "Credential (name)" node field instead
+    of the bare name ``name``.
+    """
+    if not cred_name or not creds:
+        return None
+    raw = creds.get(cred_name)
+    if raw is None and cred_name.lstrip().startswith('{'):
+        # Already resolved by _render — use the JSON value directly
+        raw = cred_name
+    return raw
+
+
 def _render(text: str, ctx: dict, creds: dict = None) -> str:
     """
     Render template variables in text.

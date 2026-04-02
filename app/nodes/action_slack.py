@@ -1,7 +1,7 @@
 """Slack message action node."""
 import os
 import json
-from app.nodes._utils import _render
+from app.nodes._utils import _render, _resolve_cred_raw
 
 NODE_TYPE = "action.slack"
 LABEL = "Slack"
@@ -18,7 +18,7 @@ def run(config, inp, context, logger, creds=None, **kwargs):
     # Structured credential shortcut (Slack or generic Webhook type)
     cred_name = _render(config.get('credential', ''), context, creds)
     if cred_name and creds and not webhook_url:
-        raw = creds.get(cred_name)
+        raw = _resolve_cred_raw(cred_name, creds)
         if raw:
             try:
                 c = json.loads(raw)
