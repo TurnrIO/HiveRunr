@@ -17,14 +17,14 @@ def run(config, inp, context, logger, creds=None, **kwargs):
 
     try:
         target_id = int(target_id)
-    except:
+    except (ValueError, TypeError):
         raise ValueError(f"Call Graph: graph_id must be an integer, got '{target_id}'")
 
     sub_payload = {}
     if config.get('payload'):
         try:
             sub_payload = json.loads(_render(config['payload'], context, creds))
-        except:
+        except (json.JSONDecodeError, ValueError):
             sub_payload = {}
 
     sub_payload = {**inp, **sub_payload} if isinstance(inp, dict) else sub_payload
@@ -35,7 +35,7 @@ def run(config, inp, context, logger, creds=None, **kwargs):
 
     try:
         gd = json.loads(g.get('graph_json') or '{}')
-    except:
+    except (json.JSONDecodeError, ValueError):
         gd = {}
 
     sub = run_graph(gd, initial_payload=sub_payload, logger=logger, _depth=kwargs.get('_depth', 0) + 1)

@@ -18,13 +18,13 @@ def run(config, inp, context, logger, creds=None, **kwargs):
     if config.get('headers_json'):
         try:
             headers = json.loads(_render(config['headers_json'], context, creds))
-        except:
+        except (json.JSONDecodeError, ValueError):
             pass
 
     if config.get('body_json'):
         try:
             body = json.loads(_render(config['body_json'], context, creds))
-        except:
+        except (json.JSONDecodeError, ValueError):
             body = _render(config['body_json'], context, creds)
 
     r = httpx.request(method, url, headers=headers,
@@ -35,7 +35,7 @@ def run(config, inp, context, logger, creds=None, **kwargs):
 
     try:
         rbody = r.json()
-    except:
+    except (json.JSONDecodeError, ValueError):
         rbody = r.text
 
     return {'status': r.status_code, 'body': rbody, 'headers': dict(r.headers)}
