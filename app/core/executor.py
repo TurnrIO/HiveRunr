@@ -1,18 +1,27 @@
-"""Graph workflow executor — v11
+"""Graph workflow executor — v12
 Architecture: pure orchestration. All node logic lives in app/nodes/.
-New in v11:
-  - Node registry dispatch (app/nodes/)
-  - continue-on-error per node (fail_mode: "abort" | "continue")
-  - Merge/Join node with upstream_ids injection
-  - _render moved to app/nodes/_utils (executor re-exports for compat)
+New in v12:
+  - Parallel branch execution: independent branches run concurrently via ThreadPoolExecutor
+  - Level-based scheduling: nodes grouped into dependency levels; all nodes in a level run
+    in parallel (reads from context are safe — only predecessors' keys are read)
+  - EXECUTOR_PARALLEL=true env var or graph_data['parallel']=True to enable
+  - EXECUTOR_MAX_WORKERS env var to cap thread pool size (default 8)
+  - _run_one_node() extracted for use by the single-node test endpoint
 """
-import re, json, time, logging
+import os
+import re
+import json
+import time
+import logging
+import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any
 
 log = logging.getLogger(__name__)
 
 # ── re-export _render for backward compatibility (call_graph etc) ──────────
 from app.nodes._utils import _render  # noqa: F401
+
 
 # ── topological sort (Kahn's) ─────────────────────────────────────────────
 def _topo(nodes, edges):
@@ -35,6 +44,7 @@ def _topo(nodes, edges):
                 queue.append(nb)
     return order, succ
 
+
 def _subgraph_order(entry, subset, edges):
     sub_edges = [e for e in edges if e['source'] in subset and e['target'] in subset]
     sub_nodes = [{'id': i} for i in subset]
@@ -42,6 +52,7 @@ def _subgraph_order(entry, subset, edges):
     if entry in order:
         order.remove(entry)
     return order, succ
+
 
 def _reachable_via_handle(start_id: str, handle: str, succ: dict) -> set:
     """BFS from start_id's successors reached via `handle`."""
@@ -57,6 +68,41 @@ def _reachable_via_handle(start_id: str, handle: str, succ: dict) -> set:
                     queue.append(t)
     return visited
 
+
+def _compute_levels(nodes, succ) -> list:
+    """Group nodes into execution levels.
+
+    All nodes within a level can run in parallel — their predecessors all
+    belong to strictly earlier levels, so there are no read/write races on
+    the shared context dict.
+    """
+    ids    = [n['id'] for n in nodes]
+    indeg  = {i: 0 for i in ids}
+    id_set = set(ids)
+    for nid in ids:
+        for (t, _) in succ.get(nid, []):
+            if t in id_set:
+                indeg[t] += 1
+
+    current = [i for i in ids if indeg[i] == 0]
+    seen    = set(current)
+    levels  = []
+
+    while current:
+        levels.append(list(current))
+        nxt = []
+        for nid in current:
+            for (t, _) in succ.get(nid, []):
+                if t not in seen:
+                    indeg[t] -= 1
+                    if indeg[t] == 0:
+                        nxt.append(t)
+                        seen.add(t)
+        current = nxt
+
+    return levels
+
+
 # ── node dispatch ─────────────────────────────────────────────────────────
 def _run_node(node_type, config, inp, context, logger, edges, nodes_map, creds=None, **kwargs):
     """Dispatch to the registered node handler."""
@@ -64,10 +110,7 @@ def _run_node(node_type, config, inp, context, logger, edges, nodes_map, creds=N
     handler = get_handler(node_type)
     if handler is None:
         raise ValueError(f"Unknown node type: {node_type!r} — not found in node registry")
-
-    # Build upstream_ids for merge node (and any future fan-in nodes)
     upstream_ids = [e['source'] for e in edges if e['target'] == kwargs.get('_nid', '')]
-
     return handler(
         config, inp, context, logger,
         creds=creds,
@@ -76,6 +119,199 @@ def _run_node(node_type, config, inp, context, logger, edges, nodes_map, creds=N
         nodes_map=nodes_map,
         **{k: v for k, v in kwargs.items() if k != '_nid'},
     )
+
+
+def run_one_node(node: dict, inp: Any, context: dict,
+                 creds: dict = None, logger=None,
+                 edges: list = None, nodes_map: dict = None,
+                 _depth: int = 0) -> dict:
+    """Execute a single node directly and return a trace-compatible result dict.
+
+    Used by the single-node test endpoint (/api/graphs/{id}/nodes/{nid}/test).
+    Does not apply retry policy, skip checks, or loop expansion — pure invocation.
+
+    Returns:
+        {"output": ..., "duration_ms": ..., "error": None | str}
+    """
+    if logger is None:
+        logger = lambda msg: log.info(msg)
+    if creds is None:
+        creds = {}
+    if edges is None:
+        edges = []
+    if nodes_map is None:
+        nodes_map = {}
+
+    nid    = node.get('id', '')
+    ntype  = node.get('type', node.get('data', {}).get('type', ''))
+    config = node.get('data', {}).get('config', {})
+
+    t_start = time.time()
+    try:
+        output = _run_node(
+            ntype, config, inp, context, logger,
+            edges, nodes_map, creds,
+            _depth=_depth, _nid=nid,
+        )
+        return {
+            "output":      output,
+            "duration_ms": int((time.time() - t_start) * 1000),
+            "error":       None,
+        }
+    except Exception as exc:
+        return {
+            "output":      None,
+            "duration_ms": int((time.time() - t_start) * 1000),
+            "error":       f"{type(exc).__name__}: {exc}",
+        }
+
+
+# ── per-node execution (used by both sequential and parallel paths) ────────
+def _exec_node(nid, nodes_map, edges, context, creds, logger, succ, _depth):
+    """Run one node and return (output, trace, skip_delta, loop_result).
+
+    Never raises — errors are encoded in the trace and returned.
+    loop_result is non-None only for action.loop nodes (caller handles expansion).
+    skip_delta is a set of node IDs that should be skipped (from condition nodes).
+    """
+    node   = nodes_map.get(nid)
+    if not node:
+        return None, None, set(), None
+
+    ntype  = node.get('type', '')
+    ndata  = node.get('data', {})
+    config = ndata.get('config', {})
+
+    # Collect input from the most-recently-connected upstream node.
+    # Root nodes (no incoming edges) receive the initial payload.
+    inp = {}
+    is_root = True
+    for e in edges:
+        if e['target'] == nid:
+            is_root = False
+            if e['source'] in context:
+                inp = context[e['source']]
+            break
+    if is_root and '__initial_payload__' in context:
+        inp = context['__initial_payload__']
+
+    _inp_str    = json.dumps(inp, default=str) if isinstance(inp, (dict, list)) else str(inp)
+    _inp_stored = inp if len(_inp_str) < 5_000_000 else {'__truncated': True, '__size': len(_inp_str)}
+
+    trace = {
+        'node_id':     nid,
+        'type':        ntype,
+        'label':       ndata.get('label', ''),
+        'status':      'skipped',
+        'duration_ms': 0,
+        'attempts':    0,
+        'input':       _inp_stored,
+        'output':      None,
+        'error':       None,
+    }
+
+    retry_max   = int(ndata.get('retry_max', 0))
+    retry_delay = float(ndata.get('retry_delay', 5))
+    fail_mode   = ndata.get('fail_mode', 'abort')
+
+    t_start  = time.time()
+    last_err = None
+    result   = None
+
+    for attempt in range(retry_max + 1):
+        try:
+            if attempt > 0:
+                logger(f"RETRY {attempt}/{retry_max} {ntype} [{nid}]")
+                time.sleep(retry_delay)
+            result = _run_node(
+                ntype, config, inp, context, logger,
+                edges, nodes_map, creds,
+                _depth=_depth, _nid=nid,
+            )
+            last_err = None
+            break
+        except Exception as e:
+            last_err = e
+            logger(f"ERROR attempt {attempt+1} {ntype} [{nid}]: {e}")
+
+    trace['duration_ms'] = int((time.time() - t_start) * 1000)
+    trace['attempts']    = attempt + 1
+
+    if last_err is not None:
+        err_msg = f"{type(last_err).__name__}: {last_err}"
+        trace['status'] = 'error'
+        trace['error']  = err_msg
+        if fail_mode == 'continue':
+            error_out = {'__error': err_msg, '__node': nid, '__type': ntype}
+            trace['output'] = error_out
+            logger(f"CONTINUE-ON-ERROR [{nid}]: {err_msg}")
+            return error_out, trace, set(), None
+        else:
+            result_err = {'__error': err_msg}
+            return result_err, trace, set(), ('abort', last_err, nid, ntype, attempt + 1)
+
+    _out_str = json.dumps(result, default=str) if isinstance(result, (dict, list)) else str(result)
+    trace['status'] = 'ok'
+    trace['output'] = result if len(_out_str) < 5_000_000 else {'__truncated': True, '__size': len(_out_str)}
+
+    # Compute condition skip delta
+    skip_delta = set()
+    if ntype == 'action.condition':
+        condition_val = result.get('result', False) if isinstance(result, dict) else bool(result)
+        true_reach  = _reachable_via_handle(nid, 'true',  succ)
+        false_reach = _reachable_via_handle(nid, 'false', succ)
+        if condition_val:
+            skip_delta = false_reach - true_reach
+            logger(f"Condition [{nid}] = True  → skipping {len(skip_delta)} false-branch node(s)")
+        else:
+            skip_delta = true_reach - false_reach
+            logger(f"Condition [{nid}] = False → skipping {len(skip_delta)} true-branch node(s)")
+
+    # Detect loop node (caller handles body expansion sequentially)
+    loop_result = result if (isinstance(result, dict) and result.get('__loop__')) else None
+
+    return result, trace, skip_delta, loop_result
+
+
+# ── loop body expansion (sequential, called after any loop node completes) ─
+def _expand_loop(nid, loop_result, nodes_map, edges, context, creds, logger, succ):
+    """Run loop body for each item and store aggregated results in context."""
+    items        = loop_result.get('items', [])
+    body_targets = [t for (t, h) in succ.get(nid, []) if h == 'body']
+    body_set     = set()
+    for bt in body_targets:
+        body_set.add(bt)
+        for (nb, _) in succ.get(bt, []):
+            body_set.add(nb)
+    loop_results = []
+    for item in items:
+        body_order, _ = _subgraph_order(nid, body_set, edges)
+        loop_ctx = {**context, nid: item, 'item': item}
+        for bid in body_order:
+            bn = nodes_map.get(bid)
+            if not bn:
+                continue
+            b_inp = loop_ctx.get(bid, item)
+            for e in edges:
+                if e['target'] == bid and e['source'] in loop_ctx:
+                    b_inp = loop_ctx[e['source']]
+                    break
+            try:
+                from app.nodes import get_handler as _gh
+                _h = _gh(bn.get('type', ''))
+                if _h:
+                    loop_ctx[bid] = _h(
+                        bn.get('data', {}).get('config', {}),
+                        b_inp, loop_ctx, logger, creds=creds,
+                        upstream_ids=[], edges=edges, nodes_map=nodes_map,
+                    )
+                else:
+                    loop_ctx[bid] = {'__error': f"Unknown node type in loop: {bn.get('type')}"}
+            except Exception as e:
+                loop_ctx[bid] = {'__error': str(e)}
+        loop_results.append(loop_ctx.get(body_targets[0]) if body_targets else item)
+    return {'loop_results': loop_results, 'count': len(loop_results)}
+
 
 # ── main graph runner ─────────────────────────────────────────────────────
 def run_graph(graph_data: dict, initial_payload: dict = None, logger=None, _depth: int = 0) -> dict:
@@ -91,7 +327,6 @@ def run_graph(graph_data: dict, initial_payload: dict = None, logger=None, _dept
     results = {}
     traces  = []
 
-    # Load credentials once for this run
     try:
         from app.core.db import load_all_credentials
         creds = load_all_credentials()
@@ -99,173 +334,226 @@ def run_graph(graph_data: dict, initial_payload: dict = None, logger=None, _dept
         log.warning(f"Could not load credentials: {e}")
         creds = {}
 
-    nodes_map  = {n['id']: n for n in nodes}
-    order, succ = _topo(nodes, edges)
-    skip_nodes  = set()   # nodes on un-taken condition branches
+    nodes_map    = {n['id']: n for n in nodes}
+    order, succ  = _topo(nodes, edges)
+    skip_nodes   = set()
 
+    # Seed initial payload so root nodes receive it as their input
+    context['__initial_payload__'] = payload.copy()
+
+    # Determine execution mode
+    parallel    = graph_data.get('parallel', False) or \
+                  os.environ.get('EXECUTOR_PARALLEL', '').lower() == 'true'
+    max_workers = int(os.environ.get('EXECUTOR_MAX_WORKERS', '8'))
+
+    if parallel and max_workers > 1:
+        levels = _compute_levels(nodes, succ)
+        _run_parallel(levels, nodes_map, edges, context, results, traces,
+                      creds, logger, succ, skip_nodes, _depth, max_workers)
+    else:
+        _run_sequential(order, nodes_map, edges, context, results, traces,
+                        creds, logger, succ, skip_nodes, _depth)
+
+    return {'context': context, 'results': results, 'traces': traces}
+
+
+# ── sequential execution path ─────────────────────────────────────────────
+def _run_sequential(order, nodes_map, edges, context, results, traces,
+                    creds, logger, succ, skip_nodes, _depth):
     for nid in order:
         node  = nodes_map.get(nid)
         if not node:
             continue
-        ntype  = node.get('type', '')
-        ndata  = node.get('data', {})
-        config = ndata.get('config', {})
+        ntype = node.get('type', '')
+        ndata = node.get('data', {})
 
-        # Collect input: prefer the most-recently-connected upstream node
-        inp = payload.copy()
+        # Collect input
+        inp = {}
         for e in edges:
             if e['target'] == nid and e['source'] in context:
                 inp = context[e['source']]
                 break
-        context[nid] = inp
 
-        # Store input in trace (capped at 5MB)
         _inp_str    = json.dumps(inp, default=str) if isinstance(inp, (dict, list)) else str(inp)
-        _inp_stored = inp if len(_inp_str) < 5000000 else {'__truncated': True, '__size': len(_inp_str)}
+        _inp_stored = inp if len(_inp_str) < 5_000_000 else {'__truncated': True, '__size': len(_inp_str)}
 
         trace = {
-            'node_id':     nid,
-            'type':        ntype,
-            'label':       ndata.get('label', ''),
-            'status':      'skipped',
-            'duration_ms': 0,
-            'attempts':    0,
-            'input':       _inp_stored,
-            'output':      None,
-            'error':       None,
+            'node_id': nid, 'type': ntype, 'label': ndata.get('label', ''),
+            'status': 'skipped', 'duration_ms': 0, 'attempts': 0,
+            'input': _inp_stored, 'output': None, 'error': None,
         }
 
-        # ── skip UI-only nodes (e.g. sticky notes) ───────────────────
         if ntype == 'note':
             results[nid] = {'__ui_only': True}
-            trace['status'] = 'skipped'
             traces.append(trace)
             continue
 
-        # ── skip disabled nodes ───────────────────────────────────────
         if ndata.get('disabled', False):
             logger(f"SKIP (disabled) {ntype} [{nid}]")
             results[nid] = {'__disabled': True}
-            trace['status'] = 'skipped'
             traces.append(trace)
             continue
 
-        # ── skip nodes on un-taken condition branch ───────────────────
         if nid in skip_nodes:
             logger(f"SKIP (branch not taken) {ntype} [{nid}]")
             results[nid] = {'__skipped': True}
-            trace['status'] = 'skipped'
-            trace['error']  = 'Branch not taken'
+            trace['error'] = 'Branch not taken'
             traces.append(trace)
             continue
 
-        # ── retry + fail_mode policy ──────────────────────────────────
-        retry_max   = int(ndata.get('retry_max', 0))
-        retry_delay = float(ndata.get('retry_delay', 5))
-        # fail_mode: "abort" raises and stops the graph (default, v10 behaviour)
-        #            "continue" stores the error in context and keeps going
-        fail_mode   = ndata.get('fail_mode', 'abort')
+        context[nid] = inp  # pre-seed so downstream can read even if node errors
 
-        t_start  = time.time()
-        last_err = None
-        result   = None
+        result, trace, skip_delta, abort_or_loop = _exec_node(
+            nid, nodes_map, edges, context, creds, logger, succ, _depth
+        )
 
-        for attempt in range(retry_max + 1):
-            try:
-                if attempt > 0:
-                    logger(f"RETRY {attempt}/{retry_max} {ntype} [{nid}]")
-                    time.sleep(retry_delay)
-                result = _run_node(
-                    ntype, config, inp, context, logger,
-                    edges, nodes_map, creds,
-                    _depth=_depth, _nid=nid,
-                )
-                last_err = None
-                break
-            except Exception as e:
-                last_err = e
-                logger(f"ERROR attempt {attempt+1} {ntype} [{nid}]: {e}")
+        skip_nodes.update(skip_delta)
 
-        t_end = time.time()
-        trace['duration_ms'] = int((t_end - t_start) * 1000)
-        trace['attempts']    = attempt + 1
-
-        if last_err is not None:
-            err_msg = f"{type(last_err).__name__}: {last_err}"
-            trace['status'] = 'error'
-            trace['error']  = err_msg
-
-            if fail_mode == 'continue':
-                # Store error in context so downstream nodes can inspect it
-                error_out = {'__error': err_msg, '__node': nid, '__type': ntype}
-                context[nid] = error_out
-                results[nid] = error_out
-                trace['output'] = error_out
-                traces.append(trace)
-                logger(f"CONTINUE-ON-ERROR [{nid}]: {err_msg}")
-                continue
-            else:
-                results[nid] = {'__error': err_msg}
-                traces.append(trace)
-                raise RuntimeError(
-                    f"Node [{nid}] ({ntype}) failed after {attempt+1} attempt(s): {last_err}"
-                ) from last_err
+        if isinstance(abort_or_loop, tuple) and abort_or_loop[0] == 'abort':
+            _, exc, a_nid, a_ntype, attempts = abort_or_loop
+            context[nid] = {'__error': str(exc)}
+            results[nid] = {'__error': str(exc)}
+            traces.append(trace)
+            raise RuntimeError(
+                f"Node [{a_nid}] ({a_ntype}) failed after {attempts} attempt(s): {exc}"
+            ) from exc
 
         context[nid] = result
         results[nid] = result
-        trace['status'] = 'ok'
-        _out_str = json.dumps(result, default=str) if isinstance(result, (dict, list)) else str(result)
-        trace['output'] = result if len(_out_str) < 5000000 else {'__truncated': True, '__size': len(_out_str)}
         traces.append(trace)
 
-        # ── condition branching ───────────────────────────────────────
-        if ntype == 'action.condition':
-            condition_val = result.get('result', False) if isinstance(result, dict) else bool(result)
-            true_reach  = _reachable_via_handle(nid, 'true',  succ)
-            false_reach = _reachable_via_handle(nid, 'false', succ)
-            if condition_val:
-                skip_nodes |= (false_reach - true_reach)
-                logger(f"Condition [{nid}] = True  → skipping {len(false_reach - true_reach)} false-branch node(s)")
-            else:
-                skip_nodes |= (true_reach - false_reach)
-                logger(f"Condition [{nid}] = False → skipping {len(true_reach - false_reach)} true-branch node(s)")
+        # Loop body expansion
+        if abort_or_loop is not None and isinstance(abort_or_loop, dict) \
+                and abort_or_loop.get('__loop__'):
+            expanded = _expand_loop(nid, abort_or_loop, nodes_map, edges,
+                                    context, creds, logger, succ)
+            context[nid] = expanded
+            results[nid] = expanded
 
-        # ── loop body expansion ───────────────────────────────────────
-        if isinstance(result, dict) and result.get('__loop__'):
-            items        = result.get('items', [])
-            body_targets = [t for (t, h) in succ.get(nid, []) if h == 'body']
-            body_set     = set()
-            for bt in body_targets:
-                body_set.add(bt)
-                for (nb, _) in succ.get(bt, []):
-                    body_set.add(nb)
-            loop_results = []
-            for item in items:
-                body_order, _ = _subgraph_order(nid, body_set, edges)
-                loop_ctx = {**context, nid: item, 'item': item}
-                for bid in body_order:
-                    bn = nodes_map.get(bid)
-                    if not bn: continue
-                    b_inp = loop_ctx.get(bid, item)
-                    for e in edges:
-                        if e['target'] == bid and e['source'] in loop_ctx:
-                            b_inp = loop_ctx[e['source']]; break
+
+# ── parallel execution path ───────────────────────────────────────────────
+def _run_parallel(levels, nodes_map, edges, context, results, traces,
+                  creds, logger, succ, skip_nodes, _depth, max_workers):
+    """Level-based parallel execution.
+
+    Nodes within the same level have no data dependencies between them —
+    they only read context keys written by earlier levels — so they are
+    safe to run concurrently.  Between levels, skip_nodes and loop expansion
+    are processed sequentially.
+    """
+    for level in levels:
+        # Filter: skip disabled, note, and branch-skipped nodes
+        active = []
+        for nid in level:
+            node  = nodes_map.get(nid)
+            if not node:
+                continue
+            ntype = node.get('type', '')
+            ndata = node.get('data', {})
+
+            if ntype == 'note':
+                results[nid] = {'__ui_only': True}
+                traces.append({'node_id': nid, 'type': ntype,
+                                'label': ndata.get('label', ''),
+                                'status': 'skipped', 'duration_ms': 0, 'attempts': 0,
+                                'input': None, 'output': None, 'error': None})
+                continue
+
+            if ndata.get('disabled', False):
+                logger(f"SKIP (disabled) {ntype} [{nid}]")
+                results[nid] = {'__disabled': True}
+                traces.append({'node_id': nid, 'type': ntype,
+                                'label': ndata.get('label', ''),
+                                'status': 'skipped', 'duration_ms': 0, 'attempts': 0,
+                                'input': None, 'output': None, 'error': None})
+                continue
+
+            if nid in skip_nodes:
+                logger(f"SKIP (branch not taken) {ntype} [{nid}]")
+                results[nid] = {'__skipped': True}
+                traces.append({'node_id': nid, 'type': ntype,
+                                'label': ndata.get('label', ''),
+                                'status': 'skipped', 'duration_ms': 0, 'attempts': 0,
+                                'input': None, 'output': None, 'error': 'Branch not taken'})
+                continue
+
+            # Pre-seed context so downstream can read even if node errors
+            for e in edges:
+                if e['target'] == nid and e['source'] in context:
+                    context[nid] = context[e['source']]
+                    break
+            active.append(nid)
+
+        if not active:
+            continue
+
+        if len(active) == 1:
+            # Fast path: avoid threading overhead for single-node levels
+            nid = active[0]
+            result, trace, skip_delta, abort_or_loop = _exec_node(
+                nid, nodes_map, edges, context, creds, logger, succ, _depth
+            )
+            _apply_node_result(nid, result, trace, skip_delta, abort_or_loop,
+                               context, results, traces, skip_nodes,
+                               nodes_map, edges, creds, logger, succ)
+        else:
+            # Parallel: run all active nodes in this level concurrently
+            node_results = {}
+            workers = min(len(active), max_workers)
+            with ThreadPoolExecutor(max_workers=workers) as pool:
+                future_map = {
+                    pool.submit(
+                        _exec_node, nid, nodes_map, edges,
+                        dict(context),  # snapshot — reads only, no races
+                        creds, logger, succ, _depth
+                    ): nid
+                    for nid in active
+                }
+                for future in as_completed(future_map):
+                    nid = future_map[future]
                     try:
-                        from app.nodes import get_handler as _gh
-                        _h = _gh(bn.get('type', ''))
-                        if _h:
-                            loop_ctx[bid] = _h(
-                                bn.get('data', {}).get('config', {}),
-                                b_inp, loop_ctx, logger, creds=creds,
-                                upstream_ids=[], edges=edges, nodes_map=nodes_map,
-                            )
-                        else:
-                            loop_ctx[bid] = {'__error': f"Unknown node type in loop: {bn.get('type')}"}
-                    except Exception as e:
-                        loop_ctx[bid] = {'__error': str(e)}
-                loop_results.append(loop_ctx.get(body_targets[0]) if body_targets else item)
-            context[nid] = {'loop_results': loop_results, 'count': len(loop_results)}
-            results[nid] = context[nid]
+                        node_results[nid] = future.result()
+                    except Exception as exc:
+                        # Shouldn't happen (_exec_node never raises), but be safe
+                        node_results[nid] = (
+                            {'__error': str(exc)},
+                            {'node_id': nid, 'status': 'error', 'error': str(exc),
+                             'duration_ms': 0, 'attempts': 1, 'output': None, 'input': None,
+                             'type': '', 'label': ''},
+                            set(),
+                            ('abort', exc, nid, '', 1),
+                        )
 
-    return {'context': context, 'results': results, 'traces': traces}
+            # Apply results in topological order of this level (preserves trace ordering)
+            for nid in active:
+                result, trace, skip_delta, abort_or_loop = node_results[nid]
+                _apply_node_result(nid, result, trace, skip_delta, abort_or_loop,
+                                   context, results, traces, skip_nodes,
+                                   nodes_map, edges, creds, logger, succ)
 
+
+def _apply_node_result(nid, result, trace, skip_delta, abort_or_loop,
+                       context, results, traces, skip_nodes,
+                       nodes_map, edges, creds, logger, succ):
+    """Apply a completed node's result to shared state. Called sequentially."""
+    skip_nodes.update(skip_delta)
+
+    if isinstance(abort_or_loop, tuple) and abort_or_loop[0] == 'abort':
+        _, exc, a_nid, a_ntype, attempts = abort_or_loop
+        context[nid] = {'__error': str(exc)}
+        results[nid] = {'__error': str(exc)}
+        traces.append(trace)
+        raise RuntimeError(
+            f"Node [{a_nid}] ({a_ntype}) failed after {attempts} attempt(s): {exc}"
+        ) from exc
+
+    context[nid] = result
+    results[nid] = result
+    traces.append(trace)
+
+    if abort_or_loop is not None and isinstance(abort_or_loop, dict) \
+            and abort_or_loop.get('__loop__'):
+        expanded = _expand_loop(nid, abort_or_loop, nodes_map, edges,
+                                context, creds, logger, succ)
+        context[nid] = expanded
+        results[nid] = expanded

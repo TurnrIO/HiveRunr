@@ -114,6 +114,63 @@ def api_graphs_reseed(request: Request):
     return {"seeded": n, "message": f"Re-seeded {n} missing example flow(s)"}
 
 
+# ── Single-node test ─────────────────────────────────────────────────────────
+class NodeTestBody(BaseModel):
+    input: dict = {}
+
+
+@router.post("/api/graphs/{graph_id}/nodes/{node_id}/test")
+def api_test_node(graph_id: int, node_id: str, body: NodeTestBody, request: Request):
+    """Execute a single node synchronously and return its output.
+
+    Loads the graph and credentials, finds the node, and calls its handler
+    directly with the provided input.  No Celery task, no run record — just
+    an instant test invocation that populates the NodeIOPanel in the canvas.
+    """
+    _check_admin(request)
+    g = get_graph(graph_id)
+    if not g:
+        raise HTTPException(404, "Graph not found")
+
+    try:
+        graph_data = json.loads(g.get('graph_json') or '{}')
+    except Exception:
+        graph_data = {}
+
+    nodes_map = {n['id']: n for n in graph_data.get('nodes', [])}
+    edges     = graph_data.get('edges', [])
+    node      = nodes_map.get(node_id)
+    if not node:
+        raise HTTPException(404, f"Node '{node_id}' not found in graph")
+
+    ntype = node.get('type', node.get('data', {}).get('type', ''))
+    if ntype in ('note',):
+        raise HTTPException(400, "Cannot test UI-only nodes")
+
+    try:
+        from app.core.db import load_all_credentials
+        creds = load_all_credentials()
+    except Exception:
+        creds = {}
+
+    from app.core.executor import run_one_node
+
+    messages = []
+    result = run_one_node(
+        node=node,
+        inp=body.input,
+        context={node_id: body.input},
+        creds=creds,
+        logger=messages.append,
+        edges=edges,
+        nodes_map=nodes_map,
+    )
+    result["node_id"]   = node_id
+    result["node_type"] = ntype
+    result["logs"]      = messages
+    return result
+
+
 # ── Graph run ─────────────────────────────────────────────────────────────────
 @router.post("/api/graphs/{graph_id}/run")
 async def api_graph_run(graph_id: int, request: Request):

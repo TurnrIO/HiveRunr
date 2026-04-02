@@ -1615,7 +1615,7 @@ function VarField({ multiline, value, onChangeValue, vars, className, placeholde
 }
 
 // ── Node Editor Modal (n8n-style) ─────────────────────────────────────────────
-function NodeEditorModal({ node, onChange, onDelete, onClose, edges, allNodes, credentials }){
+function NodeEditorModal({ node, onChange, onDelete, onClose, edges, allNodes, credentials, onTestNode }){
   const isNote    = node.data.type === "note";
   const isTrigger = node.data.type?.startsWith("trigger.");
   const def       = NODE_DEFS[node.data.type] || { label:node.data.type, icon:"?", color:"#475569", fields:[] };
@@ -1642,6 +1642,10 @@ function NodeEditorModal({ node, onChange, onDelete, onClose, edges, allNodes, c
 
   const [inputView,  setInputView]  = useState("schema");
   const [outputView, setOutputView] = useState("schema");
+  const [testOpen,    setTestOpen]    = useState(false);
+  const [testInput,   setTestInput]   = useState("{}");
+  const [testLoading, setTestLoading] = useState(false);
+  const [testError,   setTestError]   = useState(null);
 
   function update(key,val){ onChange(node.id,{...node.data,config:{...node.data.config,[key]:val}}); }
   function updateLabel(val){ onChange(node.id,{...node.data,label:val}); }
@@ -1950,6 +1954,47 @@ function NodeEditorModal({ node, onChange, onDelete, onClose, edges, allNodes, c
                 )}
               </div>
             </>)}
+
+            {!isNote && onTestNode && (
+              <div style={{marginTop:16}}>
+                <button
+                  className="btn btn-sm"
+                  style={{width:"100%",background:"#1e3a5f",color:"#93c5fd",border:"1px solid #2563eb",borderRadius:6,padding:"6px 0",fontWeight:600,cursor:"pointer"}}
+                  onClick={()=>{ setTestOpen(o=>!o); setTestError(null); }}
+                >
+                  {testOpen ? "▼ Test node" : "▶ Test node"}
+                </button>
+                {testOpen && (
+                  <div style={{marginTop:8,display:"flex",flexDirection:"column",gap:6}}>
+                    <label style={{fontSize:11,color:"#94a3b8",fontWeight:500}}>Input JSON</label>
+                    <textarea
+                      value={testInput}
+                      onChange={e=>{ setTestInput(e.target.value); setTestError(null); }}
+                      rows={4}
+                      spellCheck={false}
+                      style={{width:"100%",background:"#0f1117",color:"#e2e8f0",border:"1px solid #334155",borderRadius:4,padding:"6px 8px",fontFamily:"monospace",fontSize:12,resize:"vertical",boxSizing:"border-box"}}
+                    />
+                    {testError && <div style={{fontSize:11,color:"#f87171"}}>{testError}</div>}
+                    <button
+                      className="btn btn-sm"
+                      disabled={testLoading}
+                      style={{background:"#064e3b",color:"#6ee7b7",border:"1px solid #059669",borderRadius:6,padding:"5px 0",fontWeight:600,cursor:testLoading?"not-allowed":"pointer",opacity:testLoading?0.7:1}}
+                      onClick={async()=>{
+                        let inp;
+                        try { inp = JSON.parse(testInput); }
+                        catch(e){ setTestError("Invalid JSON: " + e.message); return; }
+                        setTestLoading(true);
+                        setTestError(null);
+                        await onTestNode(node.id, inp);
+                        setTestLoading(false);
+                      }}
+                    >
+                      {testLoading ? "Running…" : "▶ Run"}
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
 
             <button className="delete-node-btn" style={{marginTop:16}} onClick={()=>{ onDelete(node.id); onClose(); }}>🗑 Remove node</button>
           </div>
@@ -2410,6 +2455,26 @@ function App(){
     setTimeout(()=>{ clearInterval(poll); setRunning(false) }, 300000);
   }
 
+  // ── Single-node test ───────────────────────────────────────────────────────
+  async function testNode(nodeId, testInput) {
+    if (!currentGraph) { showToast("Save the graph first", "error"); return; }
+    // Show pending state on the node
+    setSelectedNode(s => s ? {...s, data:{...s.data, _runStatus:"pending", _runOutput:undefined, _runInput:testInput}} : s);
+    setNodes(ns => ns.map(n => n.id !== nodeId ? n : {...n, data:{...n.data, _runStatus:"pending"}}));
+    try {
+      const result = await api("POST", `/api/graphs/${currentGraph.id}/nodes/${nodeId}/test`, {input: testInput});
+      const status = result.error ? "err" : "ok";
+      const out    = result.error ? {__error: result.error} : result.output;
+      setSelectedNode(s => s ? {...s, data:{...s.data, _runStatus:status, _runOutput:out, _runInput:testInput, _runDurationMs:result.duration_ms}} : s);
+      setNodes(ns => ns.map(n => n.id !== nodeId ? n : {...n, data:{...n.data, _runStatus:status, _runOutput:out, _runInput:testInput, _runDurationMs:result.duration_ms}}));
+      showToast(result.error ? `Test failed: ${result.error}` : "Test succeeded ✓", result.error ? "error" : "success");
+    } catch(e) {
+      showToast(e.message || "Test request failed", "error");
+      setSelectedNode(s => s ? {...s, data:{...s.data, _runStatus:undefined}} : s);
+      setNodes(ns => ns.map(n => n.id !== nodeId ? n : {...n, data:{...n.data, _runStatus:undefined}}));
+    }
+  }
+
   // ── Live Data Inspector ────────────────────────────────────────────────────
   async function refreshInspectorRuns() {
     if (!currentGraph) { setInspectorRuns([]); return; }
@@ -2683,6 +2748,7 @@ function App(){
           edges={edges}
           allNodes={nodes}
           credentials={credentials}
+          onTestNode={testNode}
         />
       )}
 
