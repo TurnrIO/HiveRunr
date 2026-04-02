@@ -1615,7 +1615,7 @@ function VarField({ multiline, value, onChangeValue, vars, className, placeholde
 }
 
 // ── Node Editor Modal (n8n-style) ─────────────────────────────────────────────
-function NodeEditorModal({ node, onChange, onDelete, onClose, edges, allNodes, credentials, onTestNode }){
+function NodeEditorModal({ node, onChange, onDelete, onClose, edges, allNodes, credentials, onTestNode, onPinOutput }){
   const isNote    = node.data.type === "note";
   const isTrigger = node.data.type?.startsWith("trigger.");
   const def       = NODE_DEFS[node.data.type] || { label:node.data.type, icon:"?", color:"#475569", fields:[] };
@@ -1646,6 +1646,28 @@ function NodeEditorModal({ node, onChange, onDelete, onClose, edges, allNodes, c
   const [testInput,   setTestInput]   = useState("{}");
   const [testLoading, setTestLoading] = useState(false);
   const [testError,   setTestError]   = useState(null);
+
+  // Pinning
+  const isPinned = !!node.data._pinnedOutput;
+
+  // Find direct upstream node (first edge whose target is this node)
+  const upstreamNode = React.useMemo(()=>{
+    if(!edges || !allNodes) return null;
+    const e = edges.find(e => e.target === node.id);
+    if(!e) return null;
+    return allNodes.find(n => n.id === e.source) || null;
+  }, [edges, allNodes, node.id]);
+
+  const upstreamPinned = upstreamNode?.data?._pinnedOutput;
+  const upstreamLabel  = upstreamNode?.data?.label || upstreamNode?.data?.type || null;
+
+  // Auto-populate testInput from upstream pinned output when the test panel opens
+  useEffect(()=>{
+    if(!testOpen) return;
+    if(upstreamPinned){
+      setTestInput(JSON.stringify(upstreamPinned, null, 2));
+    }
+  },[testOpen]);
 
   function update(key,val){ onChange(node.id,{...node.data,config:{...node.data.config,[key]:val}}); }
   function updateLabel(val){ onChange(node.id,{...node.data,label:val}); }
@@ -1694,6 +1716,7 @@ function NodeEditorModal({ node, onChange, onDelete, onClose, edges, allNodes, c
           <span className="nem-hdr-title">{node.data.label||def.label}</span>
           {statusLabel && <span className={`run-output-status ${statusCls}`} style={{fontSize:10,flexShrink:0}}>{statusLabel}</span>}
           {runDurationMs!==undefined && <span style={{fontSize:10,color:"#64748b",flexShrink:0}}>{runDurationMs}ms</span>}
+          {isPinned && <span title="Output is pinned — downstream test nodes will use this as input" style={{fontSize:11,color:"#fbbf24",flexShrink:0,cursor:"default"}}>📌 Pinned</span>}
           <button className="nem-hdr-close" onClick={onClose}>✕</button>
         </div>
 
@@ -1966,7 +1989,18 @@ function NodeEditorModal({ node, onChange, onDelete, onClose, edges, allNodes, c
                 </button>
                 {testOpen && (
                   <div style={{marginTop:8,display:"flex",flexDirection:"column",gap:6}}>
-                    <label style={{fontSize:11,color:"#94a3b8",fontWeight:500}}>Input JSON</label>
+                    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+                      <label style={{fontSize:11,color:"#94a3b8",fontWeight:500}}>Input JSON</label>
+                      {upstreamPinned && (
+                        <span style={{fontSize:10,color:"#fbbf24"}}>
+                          📌 from {upstreamLabel}
+                          <button
+                            onClick={()=>setTestInput(JSON.stringify(upstreamPinned, null, 2))}
+                            style={{marginLeft:4,fontSize:10,color:"#fbbf24",background:"none",border:"none",cursor:"pointer",padding:0,textDecoration:"underline"}}
+                          >reset</button>
+                        </span>
+                      )}
+                    </div>
                     <textarea
                       value={testInput}
                       onChange={e=>{ setTestInput(e.target.value); setTestError(null); }}
@@ -1975,22 +2009,34 @@ function NodeEditorModal({ node, onChange, onDelete, onClose, edges, allNodes, c
                       style={{width:"100%",background:"#0f1117",color:"#e2e8f0",border:"1px solid #334155",borderRadius:4,padding:"6px 8px",fontFamily:"monospace",fontSize:12,resize:"vertical",boxSizing:"border-box"}}
                     />
                     {testError && <div style={{fontSize:11,color:"#f87171"}}>{testError}</div>}
-                    <button
-                      className="btn btn-sm"
-                      disabled={testLoading}
-                      style={{background:"#064e3b",color:"#6ee7b7",border:"1px solid #059669",borderRadius:6,padding:"5px 0",fontWeight:600,cursor:testLoading?"not-allowed":"pointer",opacity:testLoading?0.7:1}}
-                      onClick={async()=>{
-                        let inp;
-                        try { inp = JSON.parse(testInput); }
-                        catch(e){ setTestError("Invalid JSON: " + e.message); return; }
-                        setTestLoading(true);
-                        setTestError(null);
-                        await onTestNode(node.id, inp);
-                        setTestLoading(false);
-                      }}
-                    >
-                      {testLoading ? "Running…" : "▶ Run"}
-                    </button>
+                    <div style={{display:"flex",gap:6}}>
+                      <button
+                        className="btn btn-sm"
+                        disabled={testLoading}
+                        style={{flex:1,background:"#064e3b",color:"#6ee7b7",border:"1px solid #059669",borderRadius:6,padding:"5px 0",fontWeight:600,cursor:testLoading?"not-allowed":"pointer",opacity:testLoading?0.7:1}}
+                        onClick={async()=>{
+                          let inp;
+                          try { inp = JSON.parse(testInput); }
+                          catch(e){ setTestError("Invalid JSON: " + e.message); return; }
+                          setTestLoading(true);
+                          setTestError(null);
+                          await onTestNode(node.id, inp);
+                          setTestLoading(false);
+                        }}
+                      >
+                        {testLoading ? "Running…" : "▶ Run"}
+                      </button>
+                      {runOutput && runStatus === "ok" && onPinOutput && (
+                        <button
+                          className="btn btn-sm"
+                          title={isPinned ? "Unpin output" : "Pin output — downstream nodes will use this as their test input"}
+                          style={{background: isPinned ? "#78350f" : "#1c1917", color: isPinned ? "#fbbf24" : "#a8a29e", border: `1px solid ${isPinned ? "#d97706" : "#44403c"}`, borderRadius:6, padding:"5px 10px", cursor:"pointer", fontSize:14}}
+                          onClick={()=> onPinOutput(node.id, isPinned ? null : runOutput)}
+                        >
+                          📌
+                        </button>
+                      )}
+                    </div>
                   </div>
                 )}
               </div>
@@ -2475,6 +2521,14 @@ function App(){
     }
   }
 
+  // ── Pin node output ────────────────────────────────────────────────────────
+  function pinNodeOutput(nodeId, output) {
+    // output=null to unpin
+    setNodes(ns => ns.map(n => n.id !== nodeId ? n : {...n, data:{...n.data, _pinnedOutput: output || undefined}}));
+    setSelectedNode(s => s && s.id === nodeId ? {...s, data:{...s.data, _pinnedOutput: output || undefined}} : s);
+    showToast(output ? "Output pinned 📌" : "Output unpinned", "success");
+  }
+
   // ── Live Data Inspector ────────────────────────────────────────────────────
   async function refreshInspectorRuns() {
     if (!currentGraph) { setInspectorRuns([]); return; }
@@ -2749,6 +2803,7 @@ function App(){
           allNodes={nodes}
           credentials={credentials}
           onTestNode={testNode}
+          onPinOutput={pinNodeOutput}
         />
       )}
 
