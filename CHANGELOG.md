@@ -4,6 +4,17 @@ All notable changes are documented here, newest first.
 
 ---
 
+## [Unreleased] — 2026-04-07 — Sprint 2: Run log pagination + backend filtering
+
+### Run log pagination + backend filtering (#6)
+- `list_runs()` in `db.py` now accepts `page`, `page_size` (max 200), `status`, `flow_id`, and `q` parameters; returns `{runs, total, page, pages}` instead of a bare array
+- `GET /api/runs` router updated with typed `Query` params: `?page=`, `?page_size=`, `?status=`, `?flow_id=`, `?q=` — all optional, defaults to page 1 × 50 rows
+- Search (`?q=`) matches against flow name (ILIKE), task_id (ILIKE), or exact run ID
+- Frontend **Run Logs** panel replaced client-side `.filter()` with server-driven filtering: search field triggers a fresh API call on Enter / blur, status dropdown fires immediately, Prev/Next pagination controls appear when there is more than one page
+- Dashboard and Metrics call sites updated to use `?page_size=200` and extract `.runs` from the response (backward-compatible `?? r` fallback)
+
+---
+
 ## [Unreleased] — 2026-04-07 — Sprint 1: Cancel flows + login brute-force protection
 
 ### Cancel running flows
