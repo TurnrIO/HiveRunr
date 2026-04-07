@@ -4,6 +4,23 @@ All notable changes are documented here, newest first.
 
 ---
 
+## [Unreleased] — 2026-04-07 — Sprint 3: API token scoping + session cleanup
+
+### API token expiry + permission scoping (#3)
+- New columns `scope` (TEXT, default `manage`) and `expires_at` (TIMESTAMPTZ, nullable) on `api_tokens` — Alembic migration `0002` with `IF NOT EXISTS` guards; backwards-compatible (existing tokens inherit `manage` scope and no expiry)
+- Three scopes in ascending order — **read** (GET only), **run** (read + trigger/cancel/replay runs), **manage** (full API access matching previous behaviour)
+- `get_api_token_by_hash()` now checks `expires_at > NOW()` in SQL — expired tokens return `None` and yield HTTP 401
+- New helpers in `deps.py`: `_require_run_scope()` and `_require_manage_scope()` enforce scope on state-changing endpoints; session-cookie users are never affected
+- Scope applied across routers: delete/clear/trim runs → `manage`; cancel/replay/trigger runs → `run`; workflow toggle → `manage`; workflow run → `run`
+- `POST /api/tokens` now accepts `scope` and `expires_days` (optional; `None` = never expires)
+- Settings UI — token form gains a scope dropdown and optional expiry-in-days field; token table shows Scope badge, Expires column; reveal modal shows scope + expiry + preferred `Authorization: Bearer` usage hint
+- Also fixes maturity item #18: Settings page now documents `Authorization: Bearer` as the preferred method
+
+### Session cleanup nightly job (#5)
+- `purge_expired_sessions()` was defined but never called; now wired into both the HA leader scheduler and the standalone fallback as a `CronTrigger(hour=2, minute=0)` job (fires at 02:00 server time every night)
+
+---
+
 ## [Unreleased] — 2026-04-07 — Sprint 2: Run log pagination + backend filtering
 
 ### Run log pagination + backend filtering (#6)

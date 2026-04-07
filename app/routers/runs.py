@@ -5,7 +5,7 @@ from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel
 from typing import Optional
 
-from app.deps import _check_admin
+from app.deps import _check_admin, _require_run_scope, _require_manage_scope
 from app.core.db import list_runs, delete_run, clear_runs, get_run_by_task, update_run, get_graph
 
 log = logging.getLogger(__name__)
@@ -82,12 +82,12 @@ def api_run_by_task(task_id: str, request: Request):
 
 @router.delete("/api/runs/{run_id}")
 def api_delete_run(run_id: int, request: Request):
-    _check_admin(request); delete_run(run_id); return {"deleted": True}
+    _require_manage_scope(request); delete_run(run_id); return {"deleted": True}
 
 
 @router.delete("/api/runs")
 def api_clear_runs(request: Request):
-    _check_admin(request); clear_runs(); return {"cleared": True}
+    _require_manage_scope(request); clear_runs(); return {"cleared": True}
 
 
 class TrimRunsBody(BaseModel):
@@ -97,7 +97,7 @@ class TrimRunsBody(BaseModel):
 @router.post("/api/runs/trim")
 def api_trim_runs(body: TrimRunsBody, request: Request):
     """Keep only the most recent `keep` runs; delete the rest."""
-    _check_admin(request)
+    _require_manage_scope(request)
     from app.core.db import get_conn
     with get_conn() as conn:
         cur = conn.cursor()
@@ -120,7 +120,7 @@ def api_cancel_run(run_id: int, request: Request):
     Celery silently ignores the revoke in that case, and we only update the
     DB row if the run is still in a cancellable state.
     """
-    _check_admin(request)
+    _require_run_scope(request)
     from app.core.db import get_conn
     import psycopg2.extras
     with get_conn() as conn:
@@ -145,7 +145,7 @@ def api_cancel_run(run_id: int, request: Request):
 @router.post("/api/runs/{run_id}/replay")
 def api_replay_run(run_id: int, request: Request):
     """Re-enqueue a past run using its stored initial_payload."""
-    _check_admin(request)
+    _require_run_scope(request)
     from app.core.db import get_conn
     from app.worker import enqueue_graph
     with get_conn() as conn:
