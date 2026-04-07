@@ -4,6 +4,27 @@ All notable changes are documented here, newest first.
 
 ---
 
+## [Unreleased] — 2026-04-07 — Production hardening + HA scheduler (P3)
+
+### Production deployment profile
+- **Non-root Docker user** — `Dockerfile` now creates a `hiverunr` user (UID 1001) and switches to it before the `CMD`; the process can no longer write to the image filesystem or escalate privileges if a dependency is compromised
+- **`docker-compose.prod.yml` overlay** — merge on top of the default compose file to get a production-safe stack:
+  - API runs `uvicorn --workers 2` (no `--reload`)
+  - Source-code volume mounts removed — code is baked into the image at build time
+  - CPU + memory resource limits on all services (api: 1 CPU / 512 MB, worker: 2 CPU / 1 GB, scheduler/flower: 0.25 CPU / 128 MB)
+  - `restart: unless-stopped` on all services
+  - Usage: `docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build`
+
+### HA scheduler with leader election
+- **Redis distributed lock** (`SET NX PX`) prevents duplicate job firing when multiple `scheduler` replicas run side-by-side
+- Each replica generates a unique instance ID on startup; only the replica that holds the lock executes jobs — others sit in standby and poll every `SCHEDULER_STANDBY_POLL_S` seconds (default 10 s)
+- The leader atomically refreshes its lock TTL every `SCHEDULER_LOCK_REFRESH_S` seconds (default 15 s) using a Lua script, so a stale/dead leader's lock expires within `SCHEDULER_LOCK_TTL_MS` (default 45 s) and a standby takes over
+- Lock release uses a Lua compare-and-delete so a slow process can never accidentally release a lock already claimed by a new leader
+- **Graceful fallback** — if Redis is unreachable at startup the scheduler falls back to the previous single-instance behaviour with no HA; existing deployments are unaffected
+- Tunable via env vars: `SCHEDULER_LOCK_TTL_MS`, `SCHEDULER_LOCK_REFRESH_S`, `SCHEDULER_STANDBY_POLL_S`
+
+---
+
 ## [Unreleased] — 2026-04-02 — Security hardening (Critical fixes)
 
 ### Error handling
