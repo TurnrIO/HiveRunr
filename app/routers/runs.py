@@ -40,7 +40,7 @@ def _sync_stuck_runs():
                     err = str(res.result) if res.result else 'Task failed (check worker logs)'
                     update_run(row['task_id'], 'failed', result={'error': err})
                 elif state == 'REVOKED':
-                    update_run(row['task_id'], 'failed', result={'error': 'Task was revoked'})
+                    update_run(row['task_id'], 'cancelled', result={'cancelled_by': 'celery_revoke'})
                 elif state == 'PENDING':
                     if age > 120:
                         update_run(row['task_id'], 'failed',
@@ -101,6 +101,37 @@ def api_trim_runs(body: TrimRunsBody, request: Request):
         """, (body.keep,))
         deleted = cur.rowcount
     return {"deleted": deleted, "kept": body.keep}
+
+
+@router.post("/api/runs/{run_id}/cancel")
+def api_cancel_run(run_id: int, request: Request):
+    """Revoke a queued or running Celery task and mark it cancelled.
+
+    Uses terminate=True so an already-executing task is sent SIGTERM and
+    stopped immediately.  Safe to call on a task that has already finished —
+    Celery silently ignores the revoke in that case, and we only update the
+    DB row if the run is still in a cancellable state.
+    """
+    _check_admin(request)
+    from app.core.db import get_conn
+    import psycopg2.extras
+    with get_conn() as conn:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur.execute("SELECT task_id, status FROM runs WHERE id=%s", (run_id,))
+        row = cur.fetchone()
+    if not row:
+        raise HTTPException(404, f"Run {run_id} not found")
+    if row["status"] not in ("queued", "running"):
+        raise HTTPException(400, f"Run is already {row['status']} — cannot cancel")
+    task_id = row["task_id"]
+    try:
+        from celery.result import AsyncResult
+        from app.worker import app as _celery_app
+        AsyncResult(task_id, app=_celery_app).revoke(terminate=True, signal="SIGTERM")
+    except Exception as exc:
+        log.warning("Could not revoke Celery task %s: %s", task_id, exc)
+    update_run(task_id, "cancelled", result={"cancelled_by": "user"})
+    return {"cancelled": True, "run_id": run_id, "task_id": task_id}
 
 
 @router.post("/api/runs/{run_id}/replay")
