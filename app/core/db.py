@@ -416,6 +416,26 @@ def update_graph(graph_id, name=None, description=None, graph_json=None, enabled
         if graph_json  is not None: cur.execute("UPDATE graph_workflows SET graph_json=%s,  updated_at=NOW() WHERE id=%s", (graph_json,  graph_id))
         if enabled     is not None: cur.execute("UPDATE graph_workflows SET enabled=%s,      updated_at=NOW() WHERE id=%s", (enabled,     graph_id))
 
+def duplicate_graph(graph_id: int) -> dict:
+    """Clone a graph, appending ' (copy)' to the name and generating a fresh slug."""
+    src = get_graph(graph_id)
+    if not src:
+        raise ValueError(f"Graph {graph_id} not found")
+    import re as _re
+    base = _re.sub(r'\s*\(copy(?:\s+\d+)?\)\s*$', '', src['name']).strip()
+    # Find a unique name: "Name (copy)", "Name (copy 2)", …
+    with get_conn() as conn:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        candidate = f"{base} (copy)"
+        cur.execute("SELECT 1 FROM graph_workflows WHERE name=%s", (candidate,))
+        n = 2
+        while cur.fetchone():
+            candidate = f"{base} (copy {n})"
+            cur.execute("SELECT 1 FROM graph_workflows WHERE name=%s", (candidate,))
+            n += 1
+    return create_graph(candidate, src.get('description', ''), src.get('graph_json') or '{}')
+
+
 def delete_graph(graph_id):
     with get_conn() as conn:
         cur = conn.cursor()

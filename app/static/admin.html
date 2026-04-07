@@ -879,7 +879,7 @@ const HOUR_LABELS = ["Midnight","1 AM","2 AM","3 AM","4 AM","5 AM","6 AM","7 AM"
   "6 PM","7 PM","8 PM","9 PM","10 PM","11 PM"];
 const WEEKDAY_LABELS = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
 
-function CronBuilder({ value, onChange }) {
+function CronBuilder({ value, onChange, timezone }) {
   const [mode, setMode] = useState("fixed"); // "fixed" | "expression"
   const [type, setType] = useState("day");   // minute|hour|day|week|month
   const [cfg, setCfg] = useState({
@@ -890,6 +890,8 @@ function CronBuilder({ value, onChange }) {
     monthDay: 1,      monthHour: 9, monthMinute: 0,
   });
   const [expr, setExpr] = useState(value || "0 9 * * *");
+  const [nextRun, setNextRun] = useState(null);   // {valid, next[], error}
+  const [fetchingNext, setFetchingNext] = useState(false);
 
   function buildCron(t, c) {
     switch(t || type) {
@@ -930,6 +932,21 @@ function CronBuilder({ value, onChange }) {
   useEffect(()=>{ if(mode==="fixed") onChange(buildCron(type, cfg)); },[]);
 
   const preview = mode==="fixed" ? buildCron(type, cfg) : expr;
+
+  // Fetch next-run times whenever the cron expression changes (debounced 500 ms)
+  useEffect(()=>{
+    if(!preview) return;
+    const timer = setTimeout(async ()=>{
+      setFetchingNext(true);
+      try {
+        const tz = encodeURIComponent(timezone||"UTC");
+        const r = await api("GET",`/api/schedules/next-run?cron=${encodeURIComponent(preview)}&timezone=${tz}&count=3`);
+        setNextRun(r);
+      } catch(e) { setNextRun({valid:false,error:e.message}); }
+      setFetchingNext(false);
+    }, 500);
+    return ()=>clearTimeout(timer);
+  },[preview, timezone]);
 
   const pill = (active, onClick, children, extra={}) => (
     <span onClick={onClick} style={{
@@ -1026,11 +1043,23 @@ function CronBuilder({ value, onChange }) {
         </>
       )}
 
-      {/* cron preview */}
-      <div style={{marginTop:10,padding:"5px 10px",background:"#0d0f1a",borderRadius:6,
-        display:"flex",alignItems:"center",gap:8}}>
-        <span style={{fontSize:10,color:"#475569",flexShrink:0}}>cron</span>
-        <code style={{fontSize:12,color:"#a78bfa",fontFamily:"monospace"}}>{preview}</code>
+      {/* cron preview + validation */}
+      <div style={{marginTop:10,padding:"7px 10px",background:"#0d0f1a",borderRadius:6}}>
+        <div style={{display:"flex",alignItems:"center",gap:8,marginBottom: nextRun ? 4 : 0}}>
+          <span style={{fontSize:10,color:"#475569",flexShrink:0}}>cron</span>
+          <code style={{fontSize:12,color: nextRun?.valid===false ? "#f87171" : "#a78bfa",fontFamily:"monospace"}}>{preview}</code>
+          {nextRun?.valid===false && <span style={{fontSize:10,color:"#f87171",marginLeft:4}}>⚠ invalid</span>}
+        </div>
+        {nextRun?.valid===false && nextRun.error && (
+          <div style={{fontSize:11,color:"#f87171",marginTop:2}}>{nextRun.error}</div>
+        )}
+        {nextRun?.valid && nextRun.next?.length > 0 && (
+          <div style={{fontSize:11,color:"#4ade80",marginTop:2}}>
+            Next: {new Date(nextRun.next[0]).toLocaleString()}
+            {nextRun.next[1] && <span style={{color:"#475569"}}> · {new Date(nextRun.next[1]).toLocaleString()}</span>}
+          </div>
+        )}
+        {fetchingNext && <div style={{fontSize:10,color:"#475569",marginTop:2}}>checking…</div>}
       </div>
     </div>
   );
@@ -1120,6 +1149,25 @@ function FlowPicker({ value, onChange, graphs, scripts }) {
   );
 }
 
+// Fetches + displays the next fire time for a single cron expression.
+function CronNextRun({ cron, timezone, enabled }) {
+  const [info, setInfo] = useState(null);
+  useEffect(()=>{
+    if(!cron) return;
+    let cancelled = false;
+    api("GET",`/api/schedules/next-run?cron=${encodeURIComponent(cron)}&timezone=${encodeURIComponent(timezone||"UTC")}&count=1`)
+      .then(r=>{ if(!cancelled) setInfo(r); })
+      .catch(()=>{ if(!cancelled) setInfo({valid:false}); });
+    return ()=>{ cancelled=true; };
+  },[cron,timezone]);
+
+  if(!info) return <span style={{fontSize:11,color:"#475569"}}>—</span>;
+  if(!info.valid) return <span style={{fontSize:11,color:"#f87171"}}>⚠ invalid cron</span>;
+  if(!enabled) return <span style={{fontSize:11,color:"#64748b"}}>paused</span>;
+  if(!info.next?.length) return <span style={{fontSize:11,color:"#475569"}}>—</span>;
+  return <span style={{fontSize:11,color:"#94a3b8"}}>{new Date(info.next[0]).toLocaleString()}</span>;
+}
+
 function Schedules({ showToast, user }) {
   const [schedules, setSchedules] = useState([]);
   const [graphs,    setGraphs]    = useState([]);
@@ -1162,7 +1210,7 @@ function Schedules({ showToast, user }) {
           <div className="form-row" style={{alignItems:"flex-start"}}>
             <div className="form-group" style={{flex:2}}>
               <label>Schedule</label>
-              <CronBuilder value={form.cron} onChange={v=>setForm({...form,cron:v})}/>
+              <CronBuilder value={form.cron} onChange={v=>setForm({...form,cron:v})} timezone={form.timezone}/>
             </div>
             <div className="form-group" style={{flex:1}}>
               <label>Timezone</label>
@@ -1177,14 +1225,14 @@ function Schedules({ showToast, user }) {
         <div className="card-title">Scheduled Jobs</div>
         {schedules.length===0 ? <div className="empty-state">No schedules yet.</div> : (
           <table>
-            <thead><tr><th>Name</th><th>Workflow</th><th>Cron</th><th>Timezone</th><th>Status</th><th></th></tr></thead>
+            <thead><tr><th>Name</th><th>Workflow</th><th>Cron</th><th>Next run</th><th>Status</th><th></th></tr></thead>
             <tbody>
               {schedules.map(s=>(
                 <tr key={s.id}>
                   <td>{s.name}</td>
                   <td style={{fontFamily:"monospace",fontSize:12}}>{s.workflow}</td>
                   <td style={{fontFamily:"monospace",fontSize:12}}>{s.cron}</td>
-                  <td>{s.timezone}</td>
+                  <td><CronNextRun cron={s.cron} timezone={s.timezone} enabled={s.enabled}/></td>
                   <td><span className={`badge ${s.enabled?"badge-succeeded":"badge-cancelled"}`}>{s.enabled?"active":"paused"}</span></td>
                   {!ro && <td><div style={{display:"flex",gap:6}}>
                     <button className="btn btn-ghost" onClick={()=>toggle(s.id)}>{s.enabled?"Pause":"Resume"}</button>
@@ -1809,13 +1857,7 @@ function Graphs({ showToast, user }) {
 
   async function duplicateGraph(g) {
     try {
-      const full = await api("GET",`/api/graphs/${g.id}`);
-      const baseName = full.name.replace(/^[📧🤖🔄⚠⚡🔍🧪📊🐍⏰💻📁]\s*/u,"");
-      const copy = await api("POST","/api/graphs",{
-        name: baseName + " (copy)",
-        description: full.description || "",
-        graph_data: full.graph_data || {}
-      });
+      const copy = await api("POST",`/api/graphs/${g.id}/duplicate`);
       showToast(`Duplicated as "${copy.name}"`); load();
     } catch(e) { showToast(e.message,"error"); }
   }
@@ -1899,6 +1941,8 @@ function GraphRow({ g, running, onRun, onToggle, onDuplicate, onDelete, onRename
   const [showVersions, setShowVersions] = useState(false);
   const [versions, setVersions] = useState([]);
   const [loadingVersions, setLoadingVersions] = useState(false);
+  const [previewVersion, setPreviewVersion] = useState(null);  // {version, graph_data, note, saved_at}
+  const [loadingPreview, setLoadingPreview] = useState(false);
   const nodeCount = ((g.graph_data?.nodes)||[]).filter(n=>n.type!=="note").length;
 
   async function openVersionHistory() {
@@ -1911,6 +1955,15 @@ function GraphRow({ g, running, onRun, onToggle, onDuplicate, onDelete, onRename
     setLoadingVersions(false);
   }
 
+  async function previewVer(v) {
+    setLoadingPreview(v.id);
+    try {
+      const full = await api("GET",`/api/graphs/${g.id}/versions/${v.id}`);
+      setPreviewVersion(full);
+    } catch(e) { showToast(e.message,"error"); }
+    setLoadingPreview(false);
+  }
+
   async function restoreVersion(vid) {
     if(!window.confirm("Restore this version? Current changes will be lost.")) return;
     try {
@@ -1918,6 +1971,7 @@ function GraphRow({ g, running, onRun, onToggle, onDuplicate, onDelete, onRename
       showToast("Version restored");
       load();
       setShowVersions(false);
+      setPreviewVersion(null);
     } catch(e) { showToast(e.message,"error"); }
   }
 
@@ -1960,27 +2014,76 @@ function GraphRow({ g, running, onRun, onToggle, onDuplicate, onDelete, onRename
       </div>
 
       {showVersions && (
-        <div className="modal-overlay" onClick={e=>{ if(e.target.className==="modal-overlay") setShowVersions(false) }}>
-          <div className="modal">
-            <h2>📜 Version History</h2>
-            {versions.length === 0 ? (
-              <div className="empty-state" style={{padding:"20px 0"}}>No versions yet.</div>
-            ) : (
-              <div style={{marginTop:12}}>
-                {versions.map((v,idx)=>(
-                  <div key={idx} className="version-row">
-                    <div className="version-info">
-                      <div className="version-num">Version {v.version}</div>
+        <div className="modal-overlay" onClick={e=>{ if(e.target.className==="modal-overlay"){ setShowVersions(false); setPreviewVersion(null); }}}>
+          <div className="modal" style={{width: previewVersion ? 700 : 480, maxWidth:"95vw"}}>
+            <h2>📜 Version History — {g.name}</h2>
+            <div style={{display:"grid", gridTemplateColumns: previewVersion ? "220px 1fr" : "1fr", gap:16, marginTop:12}}>
+              {/* Version list */}
+              <div>
+                {versions.length === 0 ? (
+                  <div className="empty-state" style={{padding:"20px 0"}}>No versions yet.</div>
+                ) : versions.map((v,idx)=>(
+                  <div key={idx} className="version-row"
+                    style={{background: previewVersion?.id===v.id ? "#252840" : "transparent",
+                            borderLeft: `3px solid ${previewVersion?.id===v.id ? "#7c3aed" : "transparent"}`,
+                            borderRadius:4, paddingLeft:6}}>
+                    <div className="version-info" style={{flex:1, cursor:"pointer"}} onClick={()=>previewVer(v)}>
+                      <div className="version-num">v{v.version}</div>
                       <div className="version-date">{new Date(v.saved_at).toLocaleString()}</div>
                       {v.note && <div className="version-note">{v.note}</div>}
                     </div>
-                    <button className="btn btn-ghost btn-sm" onClick={()=>restoreVersion(v.version)}>Restore</button>
+                    <div style={{display:"flex",gap:4}}>
+                      <button className="btn btn-ghost btn-sm"
+                        disabled={loadingPreview===v.id}
+                        onClick={()=>previewVer(v)}>
+                        {loadingPreview===v.id ? "…" : "👁"}
+                      </button>
+                      {!ro && <button className="btn btn-ghost btn-sm" onClick={()=>restoreVersion(v.version)}>↩</button>}
+                    </div>
                   </div>
                 ))}
               </div>
-            )}
+
+              {/* Preview panel */}
+              {previewVersion && (
+                <div style={{borderLeft:"1px solid #2a2d3e", paddingLeft:16}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+                    <span style={{fontWeight:600,color:"#e2e8f0"}}>v{previewVersion.version} preview</span>
+                    <div style={{display:"flex",gap:6}}>
+                      {!ro && <button className="btn btn-primary btn-sm"
+                        onClick={()=>restoreVersion(previewVersion.version)}>↩ Restore this version</button>}
+                      <button className="btn btn-ghost btn-sm" onClick={()=>setPreviewVersion(null)}>✕</button>
+                    </div>
+                  </div>
+                  {previewVersion.note && <div style={{fontSize:12,color:"#94a3b8",marginBottom:10,fontStyle:"italic"}}>{previewVersion.note}</div>}
+                  <div style={{fontSize:11,color:"#64748b",marginBottom:8}}>
+                    {(() => {
+                      const nodes = (previewVersion.graph_data?.nodes||[]).filter(n=>n.type!=="note");
+                      const edges = previewVersion.graph_data?.edges||[];
+                      return `${nodes.length} node${nodes.length!==1?"s":""} · ${edges.length} edge${edges.length!==1?"s":""}`;
+                    })()}
+                  </div>
+                  <div style={{fontSize:11,color:"#64748b",marginBottom:6,fontWeight:600,textTransform:"uppercase",letterSpacing:"0.06em"}}>Nodes</div>
+                  <div style={{maxHeight:180,overflowY:"auto",marginBottom:10}}>
+                    {(previewVersion.graph_data?.nodes||[]).filter(n=>n.type!=="note").map((n,i)=>(
+                      <div key={i} style={{display:"flex",gap:8,padding:"3px 0",borderBottom:"1px solid #1e2130",fontSize:12}}>
+                        <span style={{color:"#94a3b8",fontFamily:"monospace",fontSize:10,flex:"none",width:90,overflow:"hidden",textOverflow:"ellipsis"}}>{n.type}</span>
+                        <span style={{color:"#e2e8f0"}}>{n.data?.label || n.id}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <details>
+                    <summary style={{fontSize:11,color:"#475569",cursor:"pointer",marginBottom:4}}>Raw JSON</summary>
+                    <pre style={{background:"#0a0c14",border:"1px solid #1e2235",borderRadius:6,padding:"8px 10px",
+                      fontSize:10,color:"#64748b",maxHeight:160,overflowY:"auto",whiteSpace:"pre-wrap",margin:0}}>
+                      {JSON.stringify(previewVersion.graph_data,null,2)}
+                    </pre>
+                  </details>
+                </div>
+              )}
+            </div>
             <div className="modal-btns">
-              <button className="btn btn-ghost" onClick={()=>setShowVersions(false)}>Close</button>
+              <button className="btn btn-ghost" onClick={()=>{ setShowVersions(false); setPreviewVersion(null); }}>Close</button>
             </div>
           </div>
         </div>

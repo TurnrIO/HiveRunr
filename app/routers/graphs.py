@@ -8,7 +8,7 @@ from typing import Optional
 from app.deps import _check_admin
 from app.core.db import (
     list_graphs, create_graph, get_graph, update_graph, delete_graph,
-    get_graph_by_slug, get_graph_by_name,
+    get_graph_by_slug, get_graph_by_name, duplicate_graph,
     list_graph_versions, save_graph_version, get_graph_version,
     sync_graph_schedules,
 )
@@ -203,6 +203,33 @@ def api_graph_versions(graph_id: int, request: Request):
     if not get_graph(graph_id):
         raise HTTPException(404, "Graph not found")
     return list_graph_versions(graph_id)
+
+
+@router.post("/api/graphs/{graph_id}/duplicate")
+def api_duplicate_graph(graph_id: int, request: Request):
+    """Clone a graph with a unique '(copy)' name suffix."""
+    _check_admin(request)
+    try:
+        new_g = duplicate_graph(graph_id)
+    except ValueError as exc:
+        raise HTTPException(404, str(exc))
+    return _graph_with_data(new_g)
+
+
+@router.get("/api/graphs/{graph_id}/versions/{version_id}")
+def api_get_graph_version(graph_id: int, version_id: int, request: Request):
+    """Return the full graph_json for a specific version (read-only preview)."""
+    _check_admin(request)
+    if not get_graph(graph_id):
+        raise HTTPException(404, "Graph not found")
+    v = get_graph_version(version_id)
+    if not v or v['graph_id'] != graph_id:
+        raise HTTPException(404, "Version not found")
+    try:
+        gd = json.loads(v.get('graph_json') or '{}')
+    except Exception:
+        gd = {}
+    return {**{k: val for k, val in v.items() if k != 'graph_json'}, 'graph_data': gd}
 
 
 @router.post("/api/graphs/{graph_id}/versions/{version_id}/restore")
