@@ -1,0 +1,65 @@
+# Production overlay for HiveRunr
+#
+# Merges on top of docker-compose.yml to make the stack production-safe:
+#   - Removes --reload from the API (live-reload is a dev convenience that
+#     can be exploited and wastes CPU in production)
+#   - Removes source-code volume mounts (code is baked into the image)
+#   - Adds CPU/memory resource limits to prevent runaway workflows from
+#     starving other containers
+#   - Adds restart: unless-stopped so containers recover after host reboots
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+#
+# Or set COMPOSE_FILE in your shell / .env:
+#   export COMPOSE_FILE=docker-compose.yml:docker-compose.prod.yml
+
+services:
+  api:
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 2
+    volumes:
+      # Remove live source-code mounts — code is baked into the image.
+      # Only keep the runlogs volume so log files persist across deploys.
+      - runlogs:/app/runlogs
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+
+  worker:
+    volumes:
+      - runlogs:/app/runlogs
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 1G
+
+  scheduler:
+    volumes: []
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 128M
+
+  flower:
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 128M
+
+  db:
+    restart: unless-stopped
+
+  redis:
+    restart: unless-stopped
+
+volumes:
+  runlogs:

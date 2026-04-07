@@ -275,8 +275,11 @@ Migration files live in `migrations/versions/`. Each file has an `upgrade()` and
 ## Docker Operations
 
 ```bash
-# Start
+# Start (development — hot-reload, source mounts)
 docker compose up -d --build
+
+# Start (production — no --reload, resource limits, non-root user)
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
 
 # View logs
 docker compose logs -f api
@@ -290,6 +293,23 @@ docker compose down
 
 # Stop and wipe all volumes
 docker compose down -v
+```
+
+### Production overlay (`docker-compose.prod.yml`)
+
+Merge `docker-compose.prod.yml` on top of the default file for a production-safe stack:
+
+- API runs with `--workers 2` instead of `--reload`
+- Source-code volume mounts are removed — code is baked into the image
+- CPU and memory limits are applied to all services
+- All services restart automatically after a host reboot (`restart: unless-stopped`)
+
+### HA Scheduler
+
+Running multiple `scheduler` replicas is safe — they use a Redis distributed lock so only one instance fires jobs at a time. If the active scheduler crashes, a standby takes over within ~45 seconds (configurable via `SCHEDULER_LOCK_TTL_MS`). Scale with:
+
+```bash
+docker compose up -d --scale scheduler=2
 ```
 
 ---
