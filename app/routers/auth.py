@@ -1,4 +1,5 @@
 """Auth, user management, and API token routers."""
+import logging
 import secrets as _sec
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse, Response, RedirectResponse
@@ -6,6 +7,64 @@ from pydantic import BaseModel
 from typing import Optional
 
 from app.deps import _check_admin, _require_writer, _require_owner
+
+log = logging.getLogger(__name__)
+
+# ── Login brute-force protection ──────────────────────────────────────────────
+_MAX_ATTEMPTS  = 5      # failed attempts before lockout
+_LOCKOUT_S     = 900    # lockout duration in seconds (15 minutes)
+_ATTEMPT_TTL_S = 3600   # sliding window for attempt counter (1 hour)
+
+
+def _login_redis():
+    """Return a Redis client, or None if Redis is unavailable."""
+    try:
+        import redis as _redis
+        import os
+        url = os.environ.get("REDIS_URL", "redis://redis:6379/0")
+        r = _redis.from_url(url, socket_connect_timeout=2, socket_timeout=2)
+        r.ping()
+        return r
+    except Exception:
+        return None
+
+
+def _check_login_allowed(ip: str) -> None:
+    """Raise HTTP 429 if this IP is currently locked out."""
+    r = _login_redis()
+    if r is None:
+        return  # Redis unavailable — fail open rather than block all logins
+    lockout_key = f"hiverunr:login:lockout:{ip}"
+    if r.exists(lockout_key):
+        ttl = r.ttl(lockout_key)
+        raise HTTPException(
+            429,
+            f"Too many failed login attempts. Try again in {ttl // 60 + 1} minute(s).",
+        )
+
+
+def _record_login_failure(ip: str) -> None:
+    """Increment the failure counter; lock out the IP after _MAX_ATTEMPTS."""
+    r = _login_redis()
+    if r is None:
+        return
+    attempt_key = f"hiverunr:login:attempts:{ip}"
+    lockout_key = f"hiverunr:login:lockout:{ip}"
+    count = r.incr(attempt_key)
+    r.expire(attempt_key, _ATTEMPT_TTL_S)
+    if count >= _MAX_ATTEMPTS:
+        r.setex(lockout_key, _LOCKOUT_S, "1")
+        r.delete(attempt_key)
+        log.warning("Login lockout triggered for IP %s after %d failed attempts", ip, count)
+
+
+def _clear_login_failures(ip: str) -> None:
+    """Clear failure counters on successful login."""
+    r = _login_redis()
+    if r is None:
+        return
+    r.delete(f"hiverunr:login:attempts:{ip}")
+    r.delete(f"hiverunr:login:lockout:{ip}")
 from app.core.db import (
     users_exist, create_user, get_user_by_username, get_user_by_id, list_users,
     update_user_password, update_user_role, delete_user,
@@ -81,11 +140,18 @@ class LoginBody(BaseModel):
 
 
 @router.post("/api/auth/login")
-def auth_login(body: LoginBody):
+def auth_login(body: LoginBody, request: Request):
     from app.auth import verify_password, hash_token, generate_token, SESSION_COOKIE, SESSION_DAYS
+    # Prefer X-Forwarded-For (set by Caddy/nginx) so we rate-limit the real client
+    ip = (request.headers.get("x-forwarded-for", "").split(",")[0].strip()
+          or request.client.host
+          or "unknown")
+    _check_login_allowed(ip)
     user = get_user_by_username(body.username.strip())
     if not user or not verify_password(body.password, user["password_hash"]):
+        _record_login_failure(ip)
         raise HTTPException(401, "Invalid username or password")
+    _clear_login_failures(ip)
     token = generate_token()
     create_session(user["id"], hash_token(token))
     resp = JSONResponse({"ok": True, "user": {"id": user["id"],

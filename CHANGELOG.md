@@ -4,6 +4,23 @@ All notable changes are documented here, newest first.
 
 ---
 
+## [Unreleased] — 2026-04-07 — Sprint 1: Cancel flows + login brute-force protection
+
+### Cancel running flows
+- New endpoint `POST /api/runs/{id}/cancel` — revokes the Celery task with `terminate=True` (sends SIGTERM to the worker process) and marks the run as `cancelled` in the database
+- Only valid for runs in `queued` or `running` state; returns HTTP 400 for already-finished runs
+- `_sync_stuck_runs` now correctly marks Celery-revoked tasks as `cancelled` instead of `failed`
+- The Cancel button already existed in the Run Logs UI — it now works end-to-end
+
+### Login brute-force protection
+- `POST /api/auth/login` now tracks failed attempts per client IP in Redis
+- After **5 consecutive failures** the IP is locked out for **15 minutes**; the response is HTTP 429 with the remaining wait time in the message
+- A successful login immediately clears the failure counter
+- Uses `X-Forwarded-For` when present (Caddy proxy sets this) so the real client IP is tracked rather than the proxy address
+- Fails open if Redis is unavailable — logins still work, protection is simply suspended
+
+---
+
 ## [Unreleased] — 2026-04-07 — Production hardening + HA scheduler (P3)
 
 ### Production deployment profile
