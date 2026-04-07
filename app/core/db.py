@@ -205,17 +205,65 @@ def _init_db_legacy():
         """)
 
 # ── runs ──────────────────────────────────────────────────────────────────
-def list_runs():
+def list_runs(page: int = 1, page_size: int = 50,
+              status: str = None, flow_id: int = None, q: str = None):
+    """Return a page of runs with optional filtering.
+
+    Args:
+        page:      1-based page number.
+        page_size: rows per page (max 200).
+        status:    filter to a single status string (e.g. "failed").
+        flow_id:   filter to a specific graph_workflows.id.
+        q:         case-insensitive substring match on flow name or task_id.
+
+    Returns:
+        dict with keys: runs (list), total (int), page (int), pages (int).
+    """
+    page      = max(1, int(page))
+    page_size = max(1, min(200, int(page_size)))
+    offset    = (page - 1) * page_size
+
+    conditions = []
+    params: list = []
+
+    if status:
+        conditions.append("r.status = %s")
+        params.append(status)
+    if flow_id:
+        conditions.append("r.graph_id = %s")
+        params.append(int(flow_id))
+    if q:
+        conditions.append(
+            "(COALESCE(g.name, r.workflow) ILIKE %s OR r.task_id ILIKE %s OR CAST(r.id AS TEXT) = %s)"
+        )
+        like = f"%{q}%"
+        params.extend([like, like, q.strip()])
+
+    where = ("WHERE " + " AND ".join(conditions)) if conditions else ""
+
+    base_query = f"""
+        FROM runs r
+        LEFT JOIN graph_workflows g ON r.graph_id = g.id
+        {where}
+    """
+
     with get_conn() as conn:
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-        cur.execute("""
-            SELECT r.*,
-                   COALESCE(g.name, r.workflow) AS flow_name
-            FROM runs r
-            LEFT JOIN graph_workflows g ON r.graph_id = g.id
-            ORDER BY r.id DESC LIMIT 200
-        """)
-        return [dict(r) for r in cur.fetchall()]
+
+        cur.execute(f"SELECT COUNT(*) {base_query}", params)
+        total = cur.fetchone()[0]
+
+        cur.execute(
+            f"""SELECT r.*, COALESCE(g.name, r.workflow) AS flow_name
+                {base_query}
+                ORDER BY r.id DESC
+                LIMIT %s OFFSET %s""",
+            params + [page_size, offset],
+        )
+        runs = [dict(r) for r in cur.fetchall()]
+
+    pages = max(1, (total + page_size - 1) // page_size)
+    return {"runs": runs, "total": total, "page": page, "pages": pages}
 
 def get_run_by_task(task_id):
     with get_conn() as conn:

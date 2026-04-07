@@ -1,8 +1,9 @@
 """Runs router — list, delete, trim, replay."""
 import json
 import logging
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel
+from typing import Optional
 
 from app.deps import _check_admin
 from app.core.db import list_runs, delete_run, clear_runs, get_run_by_task, update_run, get_graph
@@ -56,10 +57,17 @@ def _sync_stuck_runs():
 
 
 @router.get("/api/runs")
-def api_runs(request: Request):
+def api_runs(
+    request: Request,
+    page:      int            = Query(1,   ge=1,   description="Page number (1-based)"),
+    page_size: int            = Query(50,  ge=1, le=200, description="Rows per page"),
+    status:    Optional[str]  = Query(None, description="Filter by status"),
+    flow_id:   Optional[int]  = Query(None, description="Filter by graph_workflows.id"),
+    q:         Optional[str]  = Query(None, description="Search flow name / task_id"),
+):
     _check_admin(request)
     _sync_stuck_runs()
-    return list_runs()
+    return list_runs(page=page, page_size=page_size, status=status, flow_id=flow_id, q=q)
 
 
 @router.get("/api/runs/by-task/{task_id}")
