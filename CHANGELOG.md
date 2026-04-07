@@ -4,6 +4,23 @@ All notable changes are documented here, newest first.
 
 ---
 
+## [Unreleased] — 2026-04-07 — Sprint 4: UX polish — duplicate flow, version preview, cron validation
+
+### Duplicate/clone flow (#7)
+- New `POST /api/graphs/{id}/duplicate` endpoint — server-side clone with smart naming: appends "(copy)", "(copy 2)", etc. until a unique name is found; replaces the previous client-side GET+POST workaround in the dashboard
+
+### Version preview (#8)
+- New `GET /api/graphs/{id}/versions/{vid}` endpoint returns full `graph_data` for any stored version without altering the live graph
+- Version History modal now shows a side-by-side preview panel: click 👁 on any version to see its node list (type + label), edge count, optional note, and collapsible raw JSON diff — all before committing to a restore
+- The "Restore" action is available directly from the preview panel for a single-click workflow
+
+### Cron validation + next-run preview (#9)
+- New `GET /api/schedules/next-run?cron=&timezone=&count=` endpoint uses APScheduler's own `CronTrigger.from_crontab()` for validation — same parser the scheduler uses, so the preview is always accurate
+- **CronBuilder** now shows the next two upcoming fire times in green below the expression, or a red "⚠ invalid" error for bad expressions; updates debounced at 500 ms while typing in expression mode
+- **Schedules table** gains a "Next run" column — each row fetches its own next fire time on render; paused schedules show "paused" rather than a date
+
+---
+
 ## [Unreleased] — 2026-04-07 — Sprint 3: API token scoping + session cleanup
 
 ### API token expiry + permission scoping (#3)
