@@ -37,7 +37,7 @@ from apscheduler.triggers.cron import CronTrigger
 from app.core.secrets import load_secrets
 load_secrets()
 
-from app.core.db import init_db, list_schedules
+from app.core.db import init_db, list_schedules, purge_expired_sessions
 
 log = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -148,6 +148,15 @@ def _sync_schedules(scheduler, known: dict):
 
 
 # ── leader execution ──────────────────────────────────────────────────────────
+def _purge_sessions():
+    """Nightly maintenance job — remove sessions past their expires_at."""
+    try:
+        purge_expired_sessions()
+        log.info("Session purge complete")
+    except Exception as exc:
+        log.warning("Session purge failed: %s", exc)
+
+
 def _run_as_leader(r):
     """Run APScheduler for as long as we hold the lock.
 
@@ -173,6 +182,10 @@ def _run_as_leader(r):
     scheduler.add_job(
         refresh_and_sync, "interval", seconds=_REFRESH_S, id="__leader_refresh__"
     )
+    # Nightly maintenance: purge sessions that have passed their expires_at
+    scheduler.add_job(
+        _purge_sessions, CronTrigger(hour=2, minute=0), id="__session_purge__"
+    )
 
     try:
         scheduler.start()
@@ -195,6 +208,9 @@ def _run_standalone():
 
     _sync_schedules(scheduler, known)
     scheduler.add_job(refresh, "interval", seconds=30, id="__refresh__")
+    scheduler.add_job(
+        _purge_sessions, CronTrigger(hour=2, minute=0), id="__session_purge__"
+    )
     try:
         scheduler.start()
     except (KeyboardInterrupt, SystemExit):

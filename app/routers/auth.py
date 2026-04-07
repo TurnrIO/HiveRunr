@@ -296,18 +296,36 @@ def api_list_tokens(request: Request):
 
 class CreateTokenBody(BaseModel):
     name: str
+    scope: str = "manage"
+    expires_days: int | None = None   # None = never expires
 
 
 @router.post("/api/tokens")
 def api_create_token(body: CreateTokenBody, request: Request):
     from app.auth import hash_token
+    from app.core.db import API_TOKEN_SCOPES
+    import datetime as _dt
     actor = _require_owner(request)
     if not body.name.strip():
         raise HTTPException(422, "Token name is required")
+    if body.scope not in API_TOKEN_SCOPES:
+        raise HTTPException(422, f"scope must be one of {list(API_TOKEN_SCOPES)}")
+    expires_at = None
+    if body.expires_days is not None:
+        if body.expires_days < 1:
+            raise HTTPException(422, "expires_days must be at least 1")
+        expires_at = _dt.datetime.utcnow() + _dt.timedelta(days=body.expires_days)
     raw = "hr_" + _sec.token_hex(32)
     th  = hash_token(raw)
-    tok = create_api_token(body.name.strip(), th, actor.get("id") or None)
-    return {"id": tok["id"], "name": tok["name"], "created_at": tok["created_at"], "token": raw}
+    tok = create_api_token(body.name.strip(), th, actor.get("id") or None,
+                           scope=body.scope, expires_at=expires_at)
+    return {
+        "id": tok["id"], "name": tok["name"],
+        "created_at": tok["created_at"],
+        "scope": tok["scope"],
+        "expires_at": tok["expires_at"],
+        "token": raw,
+    }
 
 
 @router.delete("/api/tokens/{token_id}")

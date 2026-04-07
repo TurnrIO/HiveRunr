@@ -200,7 +200,9 @@ def _init_db_legacy():
                 token_hash TEXT UNIQUE NOT NULL,
                 created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
                 created_at TIMESTAMPTZ DEFAULT NOW(),
-                last_used  TIMESTAMPTZ
+                last_used  TIMESTAMPTZ,
+                scope      TEXT NOT NULL DEFAULT 'manage',
+                expires_at TIMESTAMPTZ DEFAULT NULL
             )
         """)
 
@@ -669,12 +671,21 @@ def purge_expired_sessions():
         conn.cursor().execute("DELETE FROM sessions WHERE expires_at < NOW()")
 
 # ── api_tokens ─────────────────────────────────────────────────────────────
-def create_api_token(name: str, token_hash: str, created_by: int) -> dict:
+
+# Valid scopes in ascending permission order.
+API_TOKEN_SCOPES = ("read", "run", "manage")
+
+def create_api_token(name: str, token_hash: str, created_by: int,
+                     scope: str = "manage", expires_at=None) -> dict:
+    if scope not in API_TOKEN_SCOPES:
+        raise ValueError(f"scope must be one of {API_TOKEN_SCOPES}")
     with get_conn() as conn:
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         cur.execute(
-            "INSERT INTO api_tokens (name, token_hash, created_by) VALUES (%s, %s, %s) RETURNING id, name, created_at",
-            (name, token_hash, created_by)
+            """INSERT INTO api_tokens (name, token_hash, created_by, scope, expires_at)
+               VALUES (%s, %s, %s, %s, %s)
+               RETURNING id, name, created_at, scope, expires_at""",
+            (name, token_hash, created_by, scope, expires_at)
         )
         return dict(cur.fetchone())
 
@@ -682,16 +693,23 @@ def list_api_tokens() -> list:
     with get_conn() as conn:
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         cur.execute("""
-            SELECT t.id, t.name, t.created_at, t.last_used, u.username AS created_by_username
+            SELECT t.id, t.name, t.created_at, t.last_used,
+                   t.scope, t.expires_at,
+                   u.username AS created_by_username
             FROM api_tokens t LEFT JOIN users u ON t.created_by = u.id
             ORDER BY t.created_at DESC
         """)
         return [dict(r) for r in cur.fetchall()]
 
 def get_api_token_by_hash(token_hash: str):
+    """Return the token row if it exists and has not expired; else None."""
     with get_conn() as conn:
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-        cur.execute("SELECT * FROM api_tokens WHERE token_hash=%s", (token_hash,))
+        cur.execute(
+            "SELECT * FROM api_tokens WHERE token_hash=%s"
+            " AND (expires_at IS NULL OR expires_at > NOW())",
+            (token_hash,),
+        )
         row = cur.fetchone()
         return dict(row) if row else None
 

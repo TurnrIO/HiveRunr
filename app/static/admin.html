@@ -1449,6 +1449,8 @@ function Settings({ showToast, user }) {
   const [keepVal,    setKeepVal]    = useState("100");
   const [tokens,     setTokens]     = useState([]);
   const [newTokenName, setNewTokenName] = useState("");
+  const [newTokenScope, setNewTokenScope] = useState("manage");
+  const [newTokenExpiry, setNewTokenExpiry] = useState("");  // days, or "" = never
   const [creatingToken, setCreatingToken] = useState(false);
   const [revealedToken, setRevealedToken] = useState(null); // shown once after creation
   const webhookBase = `${window.location.origin}/webhook/`;
@@ -1469,9 +1471,12 @@ function Settings({ showToast, user }) {
     if(!newTokenName.trim()) return;
     setCreatingToken(true);
     try {
-      const t = await api("POST","/api/tokens",{name:newTokenName.trim()});
+      const body = {name: newTokenName.trim(), scope: newTokenScope};
+      const days = parseInt(newTokenExpiry);
+      if(days > 0) body.expires_days = days;
+      const t = await api("POST","/api/tokens", body);
       setRevealedToken(t);
-      setNewTokenName("");
+      setNewTokenName(""); setNewTokenExpiry("");
       loadTokens();
     } catch(err) { showToast(err.message,"error"); }
     setCreatingToken(false);
@@ -1591,14 +1596,25 @@ function Settings({ showToast, user }) {
           <div className="card-title">API Tokens</div>
           <p style={{fontSize:13,color:"#94a3b8",marginBottom:14}}>
             Tokens allow external services and scripts to call the API without a browser session.
-            Pass a token as the <code style={{color:"#a78bfa"}}>x-api-token</code> request header.
+            Preferred: <code style={{color:"#a78bfa"}}>Authorization: Bearer &lt;token&gt;</code> header.
+            Legacy: <code style={{color:"#64748b"}}>x-api-token</code> header (also accepted).
             Tokens are shown only once at creation — store them securely.
+            Choose <strong>read</strong> for monitoring, <strong>run</strong> for CI pipelines, <strong>manage</strong> for full API access.
           </p>
 
           {/* generate form */}
-          <form onSubmit={createToken} style={{display:"flex",gap:8,marginBottom:16}}>
+          <form onSubmit={createToken} style={{display:"flex",gap:8,marginBottom:16,flexWrap:"wrap",alignItems:"center"}}>
             <input value={newTokenName} onChange={e=>setNewTokenName(e.target.value)}
-              placeholder="Token name (e.g. CI pipeline, monitoring)" style={{flex:1}}/>
+              placeholder="Token name (e.g. CI pipeline, monitoring)" style={{flex:"1 1 200px",minWidth:160}}/>
+            <select value={newTokenScope} onChange={e=>setNewTokenScope(e.target.value)}
+              title="Permission scope" style={{width:110,flex:"none"}}>
+              <option value="read">read</option>
+              <option value="run">run</option>
+              <option value="manage">manage</option>
+            </select>
+            <input value={newTokenExpiry} onChange={e=>setNewTokenExpiry(e.target.value)}
+              placeholder="Expires in days" type="number" min="1"
+              title="Leave blank for no expiry" style={{width:140,flex:"none"}}/>
             <button type="submit" className="btn btn-primary" disabled={creatingToken||!newTokenName.trim()}>
               {creatingToken?"Generating…":"+ Generate"}
             </button>
@@ -1609,18 +1625,41 @@ function Settings({ showToast, user }) {
             <div className="empty-state" style={{padding:"12px 0"}}>No API tokens yet.</div>
           ) : (
             <table>
-              <thead><tr><th>Name</th><th>Created</th><th>Last used</th><th></th></tr></thead>
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Scope</th>
+                  <th>Created</th>
+                  <th>Last used</th>
+                  <th>Expires</th>
+                  <th></th>
+                </tr>
+              </thead>
               <tbody>
-                {tokens.map(t=>(
-                  <tr key={t.id}>
-                    <td style={{fontWeight:500}}>{t.name}</td>
-                    <td style={{fontSize:12,color:"#64748b"}}>{new Date(t.created_at).toLocaleString()}</td>
-                    <td style={{fontSize:12,color:"#64748b"}}>{t.last_used ? new Date(t.last_used).toLocaleString() : "Never"}</td>
-                    <td>
-                      <button className="btn btn-danger btn-sm" onClick={()=>revokeToken(t.id,t.name)}>Revoke</button>
-                    </td>
-                  </tr>
-                ))}
+                {tokens.map(t=>{
+                  const expired = t.expires_at && new Date(t.expires_at) < new Date();
+                  const expiryLabel = !t.expires_at ? "Never"
+                    : expired ? <span style={{color:"#f87171"}}>Expired</span>
+                    : new Date(t.expires_at).toLocaleDateString();
+                  return (
+                    <tr key={t.id} style={{opacity: expired ? 0.5 : 1}}>
+                      <td style={{fontWeight:500}}>{t.name}</td>
+                      <td>
+                        <span style={{
+                          fontSize:11,fontWeight:600,padding:"2px 7px",borderRadius:10,
+                          background: t.scope==="manage"?"#3f2d70": t.scope==="run"?"#1e3a5f":"#1a2e1a",
+                          color: t.scope==="manage"?"#c4b5fd": t.scope==="run"?"#60a5fa":"#4ade80",
+                        }}>{t.scope||"manage"}</span>
+                      </td>
+                      <td style={{fontSize:12,color:"#64748b"}}>{new Date(t.created_at).toLocaleString()}</td>
+                      <td style={{fontSize:12,color:"#64748b"}}>{t.last_used ? new Date(t.last_used).toLocaleString() : "Never"}</td>
+                      <td style={{fontSize:12,color:"#64748b"}}>{expiryLabel}</td>
+                      <td>
+                        <button className="btn btn-danger btn-sm" onClick={()=>revokeToken(t.id,t.name)}>Revoke</button>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           )}
@@ -1631,7 +1670,7 @@ function Settings({ showToast, user }) {
       {revealedToken && (
         <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.7)",zIndex:2000,
           display:"flex",alignItems:"center",justifyContent:"center"}}>
-          <div className="card" style={{width:480,margin:0}}>
+          <div className="card" style={{width:500,margin:0}}>
             <div className="card-title" style={{color:"#4ade80"}}>✓ Token created — copy it now</div>
             <p style={{fontSize:13,color:"#f87171",marginBottom:12}}>
               This token will <strong>not</strong> be shown again. Copy it and store it securely.
@@ -1640,6 +1679,13 @@ function Settings({ showToast, user }) {
               fontFamily:"monospace",fontSize:13,color:"#a78bfa",wordBreak:"break-all",marginBottom:12,
               userSelect:"all",cursor:"text"}}>
               {revealedToken.token}
+            </div>
+            <div style={{fontSize:12,color:"#64748b",marginBottom:12,display:"flex",gap:16}}>
+              <span>Scope: <strong style={{color:"#c4b5fd"}}>{revealedToken.scope||"manage"}</strong></span>
+              <span>Expires: <strong style={{color:"#94a3b8"}}>{revealedToken.expires_at ? new Date(revealedToken.expires_at).toLocaleDateString() : "Never"}</strong></span>
+            </div>
+            <div style={{fontSize:12,color:"#64748b",marginBottom:12}}>
+              Use as: <code style={{color:"#7dd3fc"}}>Authorization: Bearer {revealedToken.token.slice(0,12)}…</code>
             </div>
             <div style={{display:"flex",gap:8}}>
               <button className="btn btn-primary" onClick={()=>{

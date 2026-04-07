@@ -8,6 +8,12 @@ from app.core.db import users_exist, get_api_token_by_hash, touch_api_token
 
 ROLE_LEVELS = {"viewer": 0, "admin": 1, "owner": 2}
 
+# API token scopes in ascending permission order.
+# read   — GET endpoints only (no state mutations)
+# run    — read + trigger runs / replay / cancel
+# manage — full API access (equivalent to the old token behaviour)
+TOKEN_SCOPE_LEVELS = {"read": 0, "run": 1, "manage": 2}
+
 log = logging.getLogger(__name__)
 
 
@@ -54,8 +60,42 @@ def _check_admin(request: Request):
         tok = get_api_token_by_hash(th)
         if tok:
             touch_api_token(th)
-            return {"id": 0, "username": f"api:{tok['name']}", "role": "owner"}
+            scope = tok.get("scope", "manage")
+            return {
+                "id": 0,
+                "username": f"api:{tok['name']}",
+                "role": "owner",
+                "token_scope": scope,
+            }
     raise HTTPException(401, "Authentication required")
+
+
+def _require_scope(request: Request, min_scope: str):
+    """Require at least *min_scope* when authenticated via an API token.
+
+    Session-cookie users (browser) always pass — scope only applies to tokens.
+    """
+    user = _check_admin(request)
+    scope = user.get("token_scope")
+    if scope is not None:
+        # token-based auth — enforce scope
+        if TOKEN_SCOPE_LEVELS.get(scope, 0) < TOKEN_SCOPE_LEVELS.get(min_scope, 0):
+            raise HTTPException(
+                403,
+                f"This action requires token scope '{min_scope}' "
+                f"(your token has scope '{scope}')",
+            )
+    return user
+
+
+def _require_run_scope(request: Request):
+    """Token must have at least 'run' scope (session users always pass)."""
+    return _require_scope(request, "run")
+
+
+def _require_manage_scope(request: Request):
+    """Token must have 'manage' scope (session users always pass)."""
+    return _require_scope(request, "manage")
 
 
 def _require_writer(request: Request):

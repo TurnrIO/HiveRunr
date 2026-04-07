@@ -180,19 +180,19 @@ def api_workflows(request: Request):
 
 @app.post("/api/workflows/{name}/toggle")
 def api_toggle_workflow(name: str, request: Request):
-    from app.deps import _check_admin
+    from app.deps import _require_manage_scope
     from app.core.db import toggle_workflow
-    _check_admin(request)
+    _require_manage_scope(request)
     return toggle_workflow(name) or {"name": name}
 
 
 @app.post("/api/workflows/{name}/run")
 async def api_run_workflow(name: str, request: Request):
     import uuid as _uuid
-    from app.deps import _check_admin
+    from app.deps import _require_run_scope
     from app.core.db import get_conn, list_workflows
     from app.worker import enqueue_script
-    _check_admin(request)
+    _require_run_scope(request)
     # Check the workflow exists and is enabled
     workflows = {w["name"]: w for w in list_workflows()}
     if name not in workflows:
