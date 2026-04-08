@@ -32,12 +32,13 @@ import secrets as _secrets
 
 from apscheduler.schedulers.blocking import BlockingScheduler
 from apscheduler.triggers.cron import CronTrigger
+from apscheduler.triggers.date import DateTrigger
 
 # Load secrets before DB connection (DATABASE_URL may come from provider)
 from app.core.secrets import load_secrets
 load_secrets()
 
-from app.core.db import init_db, list_schedules, purge_expired_sessions
+from app.core.db import init_db, list_schedules, delete_schedule, purge_expired_sessions
 
 log = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -94,7 +95,10 @@ def _release(r):
 
 
 # ── job factory ───────────────────────────────────────────────────────────────
-def _make_job(sched):
+def _make_job(sched, scheduler_ref=None):
+    sid = sched["id"]
+    is_one_shot = bool(sched.get("run_at"))
+
     def job():
         from app.worker import enqueue_workflow, enqueue_graph, enqueue_script
         import json
@@ -110,6 +114,13 @@ def _make_job(sched):
             enqueue_script.delay(script_name, payload)
         elif sched.get("workflow"):
             enqueue_workflow.delay(sched["workflow"], payload)
+        # Auto-delete one-shot schedules after they fire
+        if is_one_shot:
+            try:
+                delete_schedule(sid)
+                log.info("One-shot schedule %s fired and removed", sid)
+            except Exception as exc:
+                log.warning("Could not auto-delete one-shot schedule %s: %s", sid, exc)
     return job
 
 
@@ -135,14 +146,26 @@ def _sync_schedules(scheduler, known: dict):
         sid = s["id"]
         if sid not in known:
             try:
+                run_at = s.get("run_at")
+                if run_at:
+                    # One-shot: fire at the specified datetime then auto-delete
+                    import datetime as _dt
+                    if isinstance(run_at, str):
+                        run_at_dt = _dt.datetime.fromisoformat(run_at.replace("Z", "+00:00"))
+                    else:
+                        run_at_dt = run_at
+                    trigger = DateTrigger(run_date=run_at_dt)
+                    log.info("Scheduled (once): %s at %s", s["name"], run_at)
+                else:
+                    trigger = CronTrigger.from_crontab(s["cron"], timezone=s.get("timezone", "UTC"))
+                    log.info("Scheduled: %s (%s)", s["name"], s["cron"])
                 scheduler.add_job(
                     _make_job(s),
-                    CronTrigger.from_crontab(s["cron"], timezone=s.get("timezone", "UTC")),
+                    trigger,
                     id=str(sid),
                     replace_existing=True,
                 )
                 known[sid] = s
-                log.info("Scheduled: %s (%s)", s["name"], s["cron"])
             except Exception as e:
                 log.error("Failed to schedule %s: %s", s["name"], e)
 
