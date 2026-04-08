@@ -484,6 +484,22 @@ def upsert_credential(name, type_, secret, note=""):
         """, (name, type_, encrypt(secret), note))
         return dict(cur.fetchone())
 
+def update_credential(cred_id, type_, secret, note):
+    from app.crypto import encrypt
+    with get_conn() as conn:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        if secret:
+            cur.execute(
+                "UPDATE credentials SET type=%s, secret=%s, note=%s, updated_at=NOW() WHERE id=%s RETURNING id, name, type, note, created_at, updated_at",
+                (type_, encrypt(secret), note, cred_id)
+            )
+        else:
+            cur.execute(
+                "UPDATE credentials SET type=%s, note=%s, updated_at=NOW() WHERE id=%s RETURNING id, name, type, note, created_at, updated_at",
+                (type_, note, cred_id)
+            )
+        return dict(cur.fetchone())
+
 def delete_credential(cred_id):
     with get_conn() as conn:
         conn.cursor().execute("DELETE FROM credentials WHERE id=%s", (cred_id,))
@@ -493,7 +509,7 @@ def list_graph_versions(graph_id):
     with get_conn() as conn:
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         cur.execute(
-            "SELECT id, graph_id, version, name, note, saved_at FROM graph_versions WHERE graph_id=%s ORDER BY version DESC LIMIT 20",
+            "SELECT id, graph_id, version, name, note, saved_at, graph_json FROM graph_versions WHERE graph_id=%s ORDER BY version DESC LIMIT 20",
             (graph_id,)
         )
         return [dict(r) for r in cur.fetchall()]

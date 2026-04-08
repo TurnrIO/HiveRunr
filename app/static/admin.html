@@ -56,6 +56,7 @@ tr:hover td{background:#1e2235}
 .btn-ghost{background:#2a2d3e;color:#94a3b8;border:1px solid #374151}.btn-ghost:hover{color:#e2e8f0;background:#374151}
 .btn-warning{background:#d97706;color:#fff}.btn-warning:hover{background:#b45309}
 .btn:disabled{opacity:.45;cursor:not-allowed}
+.btn[aria-expanded="true"]{background:#374151;color:#e2e8f0}
 .form-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px}
 .form-group{margin-bottom:12px}
 label{display:block;font-size:11px;color:#94a3b8;font-weight:500;margin-bottom:5px}
@@ -138,6 +139,26 @@ function Toast({ msg, type, onDone }) {
   return <div className={`toast ${type==="error"?"err":"ok"}`}>{type==="error"?"✗":"✓"} {msg}</div>;
 }
 
+// ── ConfirmModal ───────────────────────────────────────────────────────────
+function ConfirmModal({ message, confirmLabel="Confirm", onConfirm, onCancel }) {
+  useEffect(()=>{
+    const h = e => { if(e.key==="Escape") onCancel(); };
+    document.addEventListener("keydown",h);
+    return ()=>document.removeEventListener("keydown",h);
+  },[]);
+  return (
+    <div className="modal-overlay" onClick={onCancel}>
+      <div className="modal" style={{maxWidth:420}} onClick={e=>e.stopPropagation()}>
+        <p style={{margin:"0 0 20px",color:"#e2e8f0",fontSize:14,lineHeight:1.6}}>{message}</p>
+        <div className="modal-btns">
+          <button className="btn btn-ghost" onClick={onCancel}>Cancel</button>
+          <button className="btn btn-danger" onClick={onConfirm}>{confirmLabel}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Viewer banner ──────────────────────────────────────────────────────────
 function ViewerBanner() {
   return (
@@ -153,13 +174,14 @@ function ViewerBanner() {
 function Dashboard({ showToast, user }) {
   const [runs, setRuns]       = useState([]);
   const [workflows, setWfs]   = useState([]);
+  const [graphs, setGraphs]   = useState([]);
   const [loading, setLoading] = useState(true);
   const [expandedRunId, setExpandedRunId] = useState(null);
 
   const load = useCallback(async () => {
     try {
-      const [r, w] = await Promise.all([api("GET","/api/runs?page_size=200"), api("GET","/api/workflows")]);
-      setRuns(r.runs ?? r); setWfs(w);
+      const [r, w, g] = await Promise.all([api("GET","/api/runs?page_size=200"), api("GET","/api/workflows"), api("GET","/api/graphs")]);
+      setRuns(r.runs ?? r); setWfs(w); setGraphs(g);
     } catch(e) { showToast(e.message,"error"); }
     setLoading(false);
   }, []);
@@ -205,34 +227,55 @@ function Dashboard({ showToast, user }) {
         <div className="stat-card"><div className="stat-val" style={{color:"#4ade80"}}>{stats.ok}</div><div className="stat-lbl">Succeeded</div></div>
         <div className="stat-card"><div className="stat-val" style={{color:"#f87171"}}>{stats.failed}</div><div className="stat-lbl">Failed</div></div>
       </div>
-      {workflows.length > 0 && (
-        <div className="card" style={{marginBottom:24}}>
-          <div className="card-title">Python Workflows</div>
-          {workflows.map(w=>(
-            <div key={w.name} className="wf-pill">
-              <div>
-                <div className="wf-name">{w.name}</div>
-                <div className={w.enabled?"wf-enabled":"wf-disabled"}>{w.enabled?"● enabled":"○ disabled"}</div>
-              </div>
-              {!ro && <div style={{display:"flex",gap:8}}>
-                <button className="btn btn-ghost" onClick={()=>toggleWf(w.name)}>Toggle</button>
-                <button className="btn btn-success" disabled={!w.enabled} onClick={()=>runWf(w.name)}>▶ Run</button>
-              </div>}
+      {(workflows.length > 0 || graphs.length > 0) && (
+        <div style={{display:"grid",gridTemplateColumns:workflows.length>0&&graphs.length>0?"1fr 1fr":"1fr",gap:16,marginBottom:24}}>
+          {workflows.length > 0 && (
+            <div className="card" style={{marginBottom:0}}>
+              <div className="card-title">Python Workflows</div>
+              {workflows.map(w=>(
+                <div key={w.name} className="wf-pill">
+                  <div>
+                    <div className="wf-name">{w.name}</div>
+                    <div className={w.enabled?"wf-enabled":"wf-disabled"}>{w.enabled?"● enabled":"○ disabled"}</div>
+                  </div>
+                  {!ro && <div style={{display:"flex",gap:8}}>
+                    <button className="btn btn-ghost" onClick={()=>toggleWf(w.name)}>Toggle</button>
+                    <button className="btn btn-success" disabled={!w.enabled} onClick={()=>runWf(w.name)}>▶ Run</button>
+                  </div>}
+                </div>
+              ))}
             </div>
-          ))}
+          )}
+          {graphs.length > 0 && (
+            <div className="card" style={{marginBottom:0}}>
+              <div className="card-title">Canvas Flows</div>
+              {graphs.map(g=>(
+                <div key={g.id} className="wf-pill">
+                  <div>
+                    <div className="wf-name">{g.name}</div>
+                    <div className={g.enabled?"wf-enabled":"wf-disabled"}>{g.enabled?"● enabled":"○ disabled"}</div>
+                  </div>
+                  {!ro && <div style={{display:"flex",gap:8}}>
+                    <a className="btn btn-ghost" href={`/canvas?token=${TOKEN}#graph-${g.id}`}>✏️ Edit</a>
+                    <button className="btn btn-success" disabled={!g.enabled} onClick={async()=>{try{await api("POST",`/api/graphs/${g.id}/run`,{payload:{}});load();showToast("Queued!");}catch(e){showToast(e.message,"error");}}}>▶ Run</button>
+                  </div>}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
       <div className="card">
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
           <div className="card-title" style={{marginBottom:0}}>Recent Runs</div>
-          {!ro && <button className="btn btn-ghost" onClick={()=>api("DELETE","/api/runs").then(load)}>Clear all</button>}
+          {!ro && runs.length > 0 && <button className="btn btn-ghost" onClick={()=>api("DELETE","/api/runs").then(load)}>Clear all</button>}
         </div>
         {loading ? <div className="empty-state">Loading…</div> : runs.length === 0 ? (
           <div className="empty-state">No runs yet. Trigger a workflow to get started.</div>
         ) : (
           <>
             <table>
-              <thead><tr><th>#</th><th>Workflow</th><th>Status</th><th>Started</th><th></th></tr></thead>
+              <thead><tr><th>#</th><th>Workflow</th><th>Status</th><th>Started</th><th>Duration</th><th></th></tr></thead>
               <tbody>
                 {runs.map(r=>(
                   <React.Fragment key={r.id}>
@@ -241,12 +284,13 @@ function Dashboard({ showToast, user }) {
                       <td>{r.flow_name || "—"}</td>
                       <td><span className={`badge badge-${r.status}`}>{r.status}</span></td>
                       <td style={{color:"#64748b"}}>{r.created_at ? new Date(r.created_at).toLocaleString() : "—"}</td>
+                      <td style={{color:"#64748b",fontVariantNumeric:"tabular-nums"}}>{r.status==="queued"||r.status==="running"?"—":r.updated_at&&r.created_at?((d=>(d<1000?d+"ms":(d/1000).toFixed(1)+"s"))(new Date(r.updated_at)-new Date(r.created_at))):"—"}</td>
                       <td>
                         <div style={{display:"flex",gap:6}}>
                           {r.graph_id && <button className="btn btn-ghost" onClick={(e)=>{e.stopPropagation();replayRun(r.id)}}>▶ Replay</button>}
                           {(r.status==="queued"||r.status==="running") &&
                             <button className="btn btn-warning" onClick={(e)=>{e.stopPropagation();cancelRun(r.id)}}>Cancel</button>}
-                          <button className="btn btn-danger" onClick={(e)=>{e.stopPropagation();deleteRun(r.id)}}>✕</button>
+                          <button className="btn btn-danger" title="Delete run" onClick={(e)=>{e.stopPropagation();deleteRun(r.id)}}>✕</button>
                         </div>
                       </td>
                     </tr>
@@ -363,7 +407,7 @@ function Metrics({ showToast }) {
   if (loading) return <div className="empty-state">Loading metrics…</div>;
   if (!metrics) return <div className="empty-state">No metrics available.</div>;
 
-  const lastDay = (metrics.run_counts || []).slice(-14);
+  const lastDay = (metrics.daily || []).slice(-14);
   const maxRuns = Math.max(...lastDay.map(d => (d.succeeded || 0) + (d.failed || 0)), 1);
 
   return (
@@ -372,20 +416,24 @@ function Metrics({ showToast }) {
 
       <div className="stat-cards">
         <div className="stat-card">
-          <div className="stat-value" style={{color:"#a78bfa"}}>{metrics.total_runs || 0}</div>
+          <div className="stat-value" style={{color:"#a78bfa"}}>{metrics.total || 0}</div>
           <div className="stat-label">Total Runs</div>
         </div>
         <div className="stat-card">
-          <div className="stat-value" style={{color:"#4ade80"}}>{metrics.succeeded_runs || 0}</div>
+          <div className="stat-value" style={{color:"#4ade80"}}>{metrics.succeeded || 0}</div>
           <div className="stat-label">Succeeded</div>
         </div>
         <div className="stat-card">
-          <div className="stat-value" style={{color:"#f87171"}}>{metrics.failed_runs || 0}</div>
+          <div className="stat-value" style={{color:"#f87171"}}>{metrics.failed || 0}</div>
           <div className="stat-label">Failed</div>
         </div>
         <div className="stat-card">
-          <div className="stat-value" style={{color:"#38bdf8"}}>{Math.round(metrics.avg_duration_ms || 0)}</div>
+          <div className="stat-value" style={{color:"#38bdf8"}}>{Math.round(metrics.avg_ms || 0)}</div>
           <div className="stat-label">Avg Duration (ms)</div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-value" style={{color:"#4ade80"}}>{metrics.success_rate ?? 0}%</div>
+          <div className="stat-label">Success Rate</div>
         </div>
       </div>
 
@@ -398,7 +446,7 @@ function Metrics({ showToast }) {
             const total = succeeded + failed;
             const sucHeight = maxRuns > 0 ? (succeeded / maxRuns) * 70 : 0;
             const failHeight = maxRuns > 0 ? (failed / maxRuns) * 70 : 0;
-            const dateStr = new Date(day.date).toLocaleDateString().slice(-2).padStart(2, '0');
+            const dateStr = new Date(day.day).getDate().toString().padStart(2, '0');
             return (
               <div key={idx} className="bar-col" title={`${dateStr}: ${succeeded}✓ ${failed}✗`}>
                 {succeeded > 0 && <div className="bar-seg" style={{height:`${sucHeight}px`,background:"#4ade80"}}/>}
@@ -461,6 +509,7 @@ function Scripts({ showToast, user }) {
   const [loadingContent, setLoadingContent] = useState(false);
   const [newName, setNewName]           = useState("");
   const [creating, setCreating]         = useState(false);
+  const [confirmState, setConfirmState] = useState(null);
   const monacoRef          = useRef(null);
   const editorContainerRef = useRef(null);
 
@@ -547,13 +596,18 @@ function Scripts({ showToast, user }) {
 
   async function deleteScript() {
     if (!selectedScript) return;
-    if (!window.confirm(`Delete "${selectedScript.name}"?`)) return;
-    try {
-      await api("DELETE", `/api/scripts/${selectedScript.name}`);
-      showToast("Deleted");
-      setSelectedScript(null);
-      await load(false);
-    } catch(e) { showToast(e.message, "error"); }
+    setConfirmState({
+      message: `Delete script "${selectedScript.name}"? This cannot be undone.`,
+      confirmLabel: "Delete",
+      fn: async () => {
+        try {
+          await api("DELETE", `/api/scripts/${selectedScript.name}`);
+          showToast("Deleted");
+          setSelectedScript(null);
+          await load(false);
+        } catch(e) { showToast(e.message, "error"); }
+      }
+    });
   }
 
   async function runScript() {
@@ -619,6 +673,7 @@ function Scripts({ showToast, user }) {
           )}
         </div>
       </div>
+      {confirmState && <ConfirmModal message={confirmState.message} confirmLabel={confirmState.confirmLabel} onConfirm={()=>{confirmState.fn();setConfirmState(null);}} onCancel={()=>setConfirmState(null)}/>}
     </div>
   );
 }
@@ -706,6 +761,9 @@ function Credentials({ showToast, user, encryptionOk }) {
   const [credentials, setCredentials] = useState([]);
   const [form, setForm] = useState({name:"", type:"generic", note:"", sub: blankSubFields("generic")});
   const [loading, setLoading] = useState(true);
+  const [confirmState, setConfirmState] = useState(null);
+  const [editingId, setEditingId] = useState(null);
+  const [editForm, setEditForm] = useState({});
 
   const load = useCallback(async () => {
     try { setCredentials(await api("GET","/api/credentials")); }
@@ -736,9 +794,28 @@ function Credentials({ showToast, user, encryptionOk }) {
   }
 
   async function del(id) {
-    if(!window.confirm("Delete this credential? This cannot be undone.")) return;
-    try { await api("DELETE",`/api/credentials/${id}`); load(); showToast("Deleted"); }
-    catch(e) { showToast(e.message,"error"); }
+    setConfirmState({
+      message: "Delete this credential? This cannot be undone.",
+      confirmLabel: "Delete",
+      fn: async () => {
+        try { await api("DELETE",`/api/credentials/${id}`); load(); showToast("Deleted"); }
+        catch(e) { showToast(e.message,"error"); }
+      }
+    });
+  }
+
+  function startEdit(c) {
+    setEditingId(c.id);
+    setEditForm({ type: c.type, secret: "", note: c.note || "" });
+  }
+
+  async function saveEdit(e) {
+    e.preventDefault();
+    try {
+      await api("PUT", `/api/credentials/${editingId}`, editForm);
+      setEditingId(null); setEditForm({});
+      load(); showToast("Credential updated");
+    } catch(ex) { showToast(ex.message, "error"); }
   }
 
   const schema = CRED_SCHEMAS[form.type] || CRED_SCHEMAS.generic;
@@ -856,19 +933,55 @@ function Credentials({ showToast, user, encryptionOk }) {
             <thead><tr><th>Name</th><th>Type</th><th>Fields</th><th>Note</th><th>Created</th><th></th></tr></thead>
             <tbody>
               {credentials.map(c=>(
-                <tr key={c.id}>
-                  <td><code className="badge-credential" style={{background:"#0f1117",color:"#a78bfa"}}>{c.name}</code></td>
-                  <td><span className={`badge-credential ${typeColors[c.type]||"generic"}`}>{c.type}</span></td>
-                  <td style={{color:"#475569",fontSize:11}}>{credFieldSummary(c.type) || <span style={{color:"#334155"}}>••••••••</span>}</td>
-                  <td style={{color:"#64748b",fontSize:12}}>{c.note||"—"}</td>
-                  <td style={{color:"#64748b",fontSize:12}}>{new Date(c.created_at).toLocaleString()}</td>
-                  {!ro && <td><button className="btn btn-danger" onClick={()=>del(c.id)}>✕</button></td>}
-                </tr>
+                <React.Fragment key={c.id}>
+                  <tr>
+                    <td><code className="badge-credential" style={{background:"#0f1117",color:"#a78bfa"}}>{c.name}</code></td>
+                    <td><span className={`badge-credential ${typeColors[c.type]||"generic"}`}>{c.type}</span></td>
+                    <td style={{color:"#475569",fontSize:11}}>{credFieldSummary(c.type) || <span style={{color:"#334155"}}>••••••••</span>}</td>
+                    <td style={{color:"#64748b",fontSize:12}}>{c.note||"—"}</td>
+                    <td style={{color:"#64748b",fontSize:12}}>{new Date(c.created_at).toLocaleString()}</td>
+                    {!ro && <td><div style={{display:"flex",gap:6}}>
+                      <button className="btn btn-ghost" onClick={()=>startEdit(c)}>✏️ Edit</button>
+                      <button className="btn btn-danger" onClick={()=>del(c.id)}>✕</button>
+                    </div></td>}
+                  </tr>
+                  {editingId === c.id && (
+                    <tr style={{background:"#0f1117"}}>
+                      <td colSpan="99" style={{padding:"12px 16px"}}>
+                        <form onSubmit={saveEdit} style={{display:"flex",gap:8,alignItems:"flex-end",flexWrap:"wrap"}}>
+                          <div style={{display:"flex",flexDirection:"column",gap:4}}>
+                            <label style={{fontSize:11,color:"#94a3b8"}}>Type</label>
+                            <select value={editForm.type} onChange={e=>setEditForm(p=>({...p,type:e.target.value}))} style={{width:130}}>
+                              <option value="generic">Generic</option>
+                              <option value="api_key">API Key</option>
+                              <option value="oauth2">OAuth2</option>
+                              <option value="basic_auth">Basic Auth</option>
+                              <option value="database">Database</option>
+                            </select>
+                          </div>
+                          <div style={{display:"flex",flexDirection:"column",gap:4,flex:1,minWidth:180}}>
+                            <label style={{fontSize:11,color:"#94a3b8"}}>New Secret (leave blank to keep existing)</label>
+                            <input type="password" value={editForm.secret} onChange={e=>setEditForm(p=>({...p,secret:e.target.value}))} placeholder="leave blank to keep existing"/>
+                          </div>
+                          <div style={{display:"flex",flexDirection:"column",gap:4,flex:1,minWidth:180}}>
+                            <label style={{fontSize:11,color:"#94a3b8"}}>Note</label>
+                            <input value={editForm.note} onChange={e=>setEditForm(p=>({...p,note:e.target.value}))}/>
+                          </div>
+                          <div style={{display:"flex",gap:6}}>
+                            <button type="submit" className="btn btn-primary">Save</button>
+                            <button type="button" className="btn btn-ghost" onClick={()=>setEditingId(null)}>Cancel</button>
+                          </div>
+                        </form>
+                      </td>
+                    </tr>
+                  )}
+                </React.Fragment>
               ))}
             </tbody>
           </table>
         )}
       </div>
+      {confirmState && <ConfirmModal message={confirmState.message} confirmLabel={confirmState.confirmLabel} onConfirm={()=>{confirmState.fn();setConfirmState(null);}} onCancel={()=>setConfirmState(null)}/>}
     </div>
   );
 }
@@ -1086,10 +1199,10 @@ function FlowPicker({ value, onChange, graphs, scripts }) {
   const filteredScripts  = (scripts ||[]).filter(s => s.name.toLowerCase().includes(q)).slice(0, 20);
   const hasResults = filteredGraphs.length > 0 || filteredScripts.length > 0;
 
-  function selectGraph(g)  { setQuery(g.name);          onChange(g.name);            setOpen(false); }
-  function selectScript(s) { setQuery("script:" + s.name); onChange("script:" + s.name); setOpen(false); }
+  function selectGraph(g)  { setQuery(g.name);               onChange({workflow: g.name,              graph_id: g.id});   setOpen(false); }
+  function selectScript(s) { setQuery("script:" + s.name);  onChange({workflow: "script:" + s.name,  graph_id: null});   setOpen(false); }
 
-  function handleInput(e) { setQuery(e.target.value); onChange(e.target.value); setOpen(true); }
+  function handleInput(e) { setQuery(e.target.value); onChange({workflow: e.target.value, graph_id: null}); setOpen(true); }
 
   const sectionLabel = {
     padding:"4px 12px 2px",fontSize:10,fontWeight:700,letterSpacing:"0.08em",
@@ -1172,7 +1285,7 @@ function Schedules({ showToast, user }) {
   const [schedules, setSchedules] = useState([]);
   const [graphs,    setGraphs]    = useState([]);
   const [scripts,   setScripts]   = useState([]);
-  const [form, setForm] = useState({name:"",workflow:"",cron:"0 9 * * *",payload:"{}",timezone:"UTC"});
+  const [form, setForm] = useState({name:"",workflow:"",graph_id:null,cron:"0 9 * * *",payload:"{}",timezone:"UTC"});
 
   const load = async () => { try { setSchedules(await api("GET","/api/schedules")); } catch(e){} };
   useEffect(()=>{
@@ -1183,9 +1296,10 @@ function Schedules({ showToast, user }) {
 
   async function create(e) {
     e.preventDefault();
+    if (!form.workflow?.trim()) { showToast("Select a flow or script", "error"); return; }
     try {
       await api("POST","/api/schedules",{...form,payload:JSON.parse(form.payload||"{}")});
-      setForm({name:"",workflow:"",cron:"0 9 * * *",payload:"{}",timezone:"UTC"});
+      setForm({name:"",workflow:"",graph_id:null,cron:"0 9 * * *",payload:"{}",timezone:"UTC"});
       load(); showToast("Schedule created");
     } catch(err) { showToast(err.message,"error"); }
   }
@@ -1204,7 +1318,7 @@ function Schedules({ showToast, user }) {
             <div className="form-group"><label>Name</label><input required value={form.name} onChange={e=>setForm({...form,name:e.target.value})} placeholder="Daily digest"/></div>
             <div className="form-group">
               <label>Flow / Script</label>
-              <FlowPicker value={form.workflow} graphs={graphs} scripts={scripts} onChange={v=>setForm({...form,workflow:v})}/>
+              <FlowPicker value={form.workflow} graphs={graphs} scripts={scripts} onChange={({workflow,graph_id})=>setForm({...form,workflow,graph_id})}/>
             </div>
           </div>
           <div className="form-row" style={{alignItems:"flex-start"}}>
@@ -1356,7 +1470,7 @@ function Logs({ showToast }) {
                   </span>
                 </div>
                 <div style={{fontSize:11,color:"#64748b"}}>
-                  #{r.id} · {fmtTs(r.started_at)}
+                  #{r.id} · {fmtTs(r.created_at)}
                   {(r.traces||[]).length > 0 &&
                     <span style={{marginLeft:6}}>{r.traces.length} node{r.traces.length!==1?"s":""}</span>}
                 </div>
@@ -1389,8 +1503,8 @@ function Logs({ showToast }) {
                         {selRun.flow_name || `Run #${selRun.id}`}
                       </div>
                       <div style={{fontSize:12,color:"#64748b"}}>
-                        Started: {fmtTs(selRun.started_at)}
-                        {selRun.finished_at && <> · Finished: {fmtTs(selRun.finished_at)}</>}
+                        Started: {fmtTs(selRun.created_at)}
+                        {selRun.updated_at && selRun.status !== "running" && selRun.status !== "queued" && <> · Finished: {fmtTs(selRun.updated_at)}</>}
                       </div>
                     </div>
                     <span style={{fontSize:12,fontWeight:700,padding:"4px 10px",borderRadius:20,
@@ -1501,6 +1615,7 @@ function Settings({ showToast, user }) {
   const [newTokenExpiry, setNewTokenExpiry] = useState("");  // days, or "" = never
   const [creatingToken, setCreatingToken] = useState(false);
   const [revealedToken, setRevealedToken] = useState(null); // shown once after creation
+  const [confirmState, setConfirmState] = useState(null);
   const webhookBase = `${window.location.origin}/webhook/`;
   const isOwner = user?.role === "owner";
 
@@ -1531,9 +1646,14 @@ function Settings({ showToast, user }) {
   }
 
   async function revokeToken(id, name) {
-    if(!window.confirm(`Revoke token "${name}"? Any services using it will lose access immediately.`)) return;
-    try { await api("DELETE",`/api/tokens/${id}`); loadTokens(); showToast("Token revoked"); }
-    catch(err) { showToast(err.message,"error"); }
+    setConfirmState({
+      message: `Revoke token "${name}"? Any services using it will lose access immediately.`,
+      confirmLabel: "Revoke",
+      fn: async () => {
+        try { await api("DELETE",`/api/tokens/${id}`); loadTokens(); showToast("Token revoked"); }
+        catch(err) { showToast(err.message,"error"); }
+      }
+    });
   }
 
   async function loadStatus() {
@@ -1559,31 +1679,46 @@ function Settings({ showToast, user }) {
   }
 
   async function clearRuns() {
-    if(!window.confirm("Delete ALL run history? This cannot be undone.")) return;
-    setClearing(true);
-    try { await api("DELETE","/api/runs"); showToast("Run history cleared"); loadStatus(); }
-    catch(e) { showToast(e.message,"error"); }
-    setClearing(false);
+    setConfirmState({
+      message: "Delete ALL run history? This cannot be undone.",
+      confirmLabel: "Delete",
+      fn: async () => {
+        setClearing(true);
+        try { await api("DELETE","/api/runs"); showToast("Run history cleared"); loadStatus(); }
+        catch(e) { showToast(e.message,"error"); }
+        setClearing(false);
+      }
+    });
   }
 
   async function trimRuns() {
     const keep = parseInt(keepVal)||100;
-    if(!window.confirm(`Keep only the ${keep} most recent runs and delete the rest?`)) return;
-    setTrimming(true);
-    try {
-      const r = await api("POST","/api/runs/trim",{keep});
-      showToast(`Trimmed ${r.deleted} old run${r.deleted!==1?"s":""}`);
-      loadStatus();
-    } catch(e) { showToast(e.message,"error"); }
-    setTrimming(false);
+    setConfirmState({
+      message: `Keep only the ${keep} most recent runs and delete the rest?`,
+      confirmLabel: "Delete",
+      fn: async () => {
+        setTrimming(true);
+        try {
+          const r = await api("POST","/api/runs/trim",{keep});
+          showToast(`Trimmed ${r.deleted} old run${r.deleted!==1?"s":""}`);
+          loadStatus();
+        } catch(e) { showToast(e.message,"error"); }
+        setTrimming(false);
+      }
+    });
   }
 
   async function resetSeqs() {
-    if(!window.confirm("Reset ID sequences? Only safe when all tables are empty.")) return;
-    setResetting(true);
-    try { await api("POST","/api/maintenance/reset_sequences"); showToast("Sequences reset"); }
-    catch(e) { showToast(e.message,"error"); }
-    setResetting(false);
+    setConfirmState({
+      message: "Reset ID sequences? Only safe when all tables are empty.",
+      confirmLabel: "Reset",
+      fn: async () => {
+        setResetting(true);
+        try { await api("POST","/api/maintenance/reset_sequences"); showToast("Sequences reset"); }
+        catch(e) { showToast(e.message,"error"); }
+        setResetting(false);
+      }
+    });
   }
 
   function copyWebhook() {
@@ -1809,6 +1944,7 @@ function Settings({ showToast, user }) {
         <p style={{fontSize:13,color:"#94a3b8",marginBottom:12}}>Reset PostgreSQL ID sequences back to 1. <strong style={{color:"#f87171"}}>Only run this when all tables are completely empty</strong>, otherwise it will cause duplicate key errors.</p>
         <button className="btn btn-danger btn-sm" disabled={resetting} onClick={resetSeqs}>{resetting?"Resetting…":"Reset ID sequences"}</button>
       </div>
+      {confirmState && <ConfirmModal message={confirmState.message} confirmLabel={confirmState.confirmLabel} onConfirm={()=>{confirmState.fn();setConfirmState(null);}} onCancel={()=>setConfirmState(null)}/>}
     </div>
   );
 }
@@ -1820,6 +1956,7 @@ function Graphs({ showToast, user }) {
   const [running, setRunning]   = useState(null);
   const [search, setSearch]     = useState("");
   const [reseeding, setReseeding] = useState(false);
+  const [confirmState, setConfirmState] = useState(null);
 
   const load = useCallback(async () => {
     try { setGraphs(await api("GET","/api/graphs")); }
@@ -1829,11 +1966,16 @@ function Graphs({ showToast, user }) {
   useEffect(()=>{ load(); },[]);
 
   async function reseedExamples() {
-    if(!window.confirm("Re-seed all example flows? Missing examples will be restored; existing ones are left unchanged.")) return;
-    setReseeding(true);
-    try { await api("POST","/api/graphs/reseed"); showToast("Examples re-seeded"); load(); }
-    catch(e) { showToast(e.message,"error"); }
-    setReseeding(false);
+    setConfirmState({
+      message: "Re-seed all example flows? Missing examples will be restored; existing ones are left unchanged.",
+      confirmLabel: "Re-seed",
+      fn: async () => {
+        setReseeding(true);
+        try { await api("POST","/api/graphs/reseed"); showToast("Examples re-seeded"); load(); }
+        catch(e) { showToast(e.message,"error"); }
+        setReseeding(false);
+      }
+    });
   }
 
   async function renameGraph(g) {
@@ -1863,9 +2005,14 @@ function Graphs({ showToast, user }) {
   }
 
   async function deleteGraph(id, name) {
-    if(!window.confirm(`Delete "${name}"? This cannot be undone.`)) return;
-    try { await api("DELETE",`/api/graphs/${id}`); showToast("Deleted"); load(); }
-    catch(e) { showToast(e.message,"error"); }
+    setConfirmState({
+      message: `Delete "${name}"? This cannot be undone.`,
+      confirmLabel: "Delete",
+      fn: async () => {
+        try { await api("DELETE",`/api/graphs/${id}`); showToast("Deleted"); load(); }
+        catch(e) { showToast(e.message,"error"); }
+      }
+    });
   }
 
   const EXAMPLE_RE = /^[📧🤖🔄⚠⚡🔍🧪📊🐍⏰💻📁]/u;
@@ -1932,6 +2079,7 @@ function Graphs({ showToast, user }) {
           )}
         </div>
       )}
+      {confirmState && <ConfirmModal message={confirmState.message} confirmLabel={confirmState.confirmLabel} onConfirm={()=>{confirmState.fn();setConfirmState(null);}} onCancel={()=>setConfirmState(null)}/>}
     </div>
   );
 }
@@ -1943,7 +2091,15 @@ function GraphRow({ g, running, onRun, onToggle, onDuplicate, onDelete, onRename
   const [loadingVersions, setLoadingVersions] = useState(false);
   const [previewVersion, setPreviewVersion] = useState(null);  // {version, graph_data, note, saved_at}
   const [loadingPreview, setLoadingPreview] = useState(false);
+  const [confirmState, setConfirmState] = useState(null);
   const nodeCount = ((g.graph_data?.nodes)||[]).filter(n=>n.type!=="note").length;
+
+  useEffect(()=>{
+    if (!showVersions) return;
+    const h = e => { if(e.key==="Escape") setShowVersions(false); };
+    document.addEventListener("keydown",h);
+    return ()=>document.removeEventListener("keydown",h);
+  }, [showVersions]);
 
   async function openVersionHistory() {
     setLoadingVersions(true);
@@ -1965,14 +2121,19 @@ function GraphRow({ g, running, onRun, onToggle, onDuplicate, onDelete, onRename
   }
 
   async function restoreVersion(vid) {
-    if(!window.confirm("Restore this version? Current changes will be lost.")) return;
-    try {
-      await api("POST",`/api/graphs/${g.id}/versions/${vid}/restore`);
-      showToast("Version restored");
-      load();
-      setShowVersions(false);
-      setPreviewVersion(null);
-    } catch(e) { showToast(e.message,"error"); }
+    setConfirmState({
+      message: "Restore this version? Current changes will be lost.",
+      confirmLabel: "Restore",
+      fn: async () => {
+        try {
+          await api("POST",`/api/graphs/${g.id}/versions/${vid}/restore`);
+          showToast("Version restored");
+          load();
+          setShowVersions(false);
+          setPreviewVersion(null);
+        } catch(e) { showToast(e.message,"error"); }
+      }
+    });
   }
 
   return (
@@ -1988,11 +2149,10 @@ function GraphRow({ g, running, onRun, onToggle, onDuplicate, onDelete, onRename
             {g.description && <div style={{fontSize:12,color:"#64748b"}}>{g.description}</div>}
           </div>
           <div style={{display:"flex",gap:6,flex:"none"}}>
-            <a href={`/canvas`} className="btn btn-ghost"
-               onClick={()=>sessionStorage.setItem("canvas_open_graph",g.id)}>{ro?"👁 View":"✏️ Edit"}</a>
+            <a className="btn btn-ghost" href={`/canvas?token=${TOKEN}#graph-${g.id}`}>{ro?"👁 View":"✏️ Edit"}</a>
             {!ro && <button className="btn btn-success" disabled={running===g.id||!g.enabled}
                     onClick={()=>onRun(g.id,g.name)}>{running===g.id?"…":"▶"}</button>}
-            {!ro && <button className="btn btn-ghost" onClick={()=>setOpen(o=>!o)}>⋯</button>}
+            {!ro && <button className="btn btn-ghost" onClick={()=>setOpen(o=>!o)} aria-expanded={open}>⋯</button>}
           </div>
         </div>
         {open && (
@@ -2002,8 +2162,9 @@ function GraphRow({ g, running, onRun, onToggle, onDuplicate, onDelete, onRename
             <button className="btn btn-ghost" onClick={openVersionHistory} disabled={loadingVersions}>📜 History</button>
             <button className="btn btn-ghost" onClick={()=>onToggle(g.id,g.enabled)}>{g.enabled?"⏸ Disable":"▶ Enable"}</button>
             <div style={{flex:1}}/>
-            <div style={{fontSize:11,color:"#4b5563",alignSelf:"center"}}>
-              Webhook: <code style={{color:"#6b7280"}}>{g.webhook_token?.slice(0,12)}…</code>
+            <div style={{fontSize:11,color:"#4b5563",alignSelf:"center",display:"flex",gap:8,alignItems:"center"}}>
+              Webhook: <span style={{fontFamily:"monospace",fontSize:12,color:"#94a3b8"}}>{"••••••••"}</span>
+              <button className="btn btn-ghost" style={{marginLeft:8,padding:"3px 8px",fontSize:11}} onClick={()=>navigator.clipboard.writeText(g.webhook_token).then(()=>showToast("Copied")).catch(()=>showToast("Copy failed","error"))}>Copy</button>
             </div>
             <button className="btn btn-danger" onClick={()=>onDelete(g.id,g.name)}
               title={isExample ? "⚠ This is an example flow — use ↺ Restore examples to get it back" : undefined}>
@@ -2021,7 +2182,7 @@ function GraphRow({ g, running, onRun, onToggle, onDuplicate, onDelete, onRename
               {/* Version list */}
               <div>
                 {versions.length === 0 ? (
-                  <div className="empty-state" style={{padding:"20px 0"}}>No versions yet.</div>
+                  <div className="empty-state" style={{padding:"20px 0"}}>No versions yet — versions are saved automatically each time you save the flow.</div>
                 ) : versions.map((v,idx)=>(
                   <div key={idx} className="version-row"
                     style={{background: previewVersion?.id===v.id ? "#252840" : "transparent",
@@ -2088,6 +2249,7 @@ function GraphRow({ g, running, onRun, onToggle, onDuplicate, onDelete, onRename
           </div>
         </div>
       )}
+      {confirmState && <ConfirmModal message={confirmState.message} confirmLabel={confirmState.confirmLabel} onConfirm={()=>{confirmState.fn();setConfirmState(null);}} onCancel={()=>setConfirmState(null)}/>}
     </>
   );
 }
@@ -2211,6 +2373,7 @@ function Users({ showToast, user }) {
   const [creating, setCreating] = useState(false);
   const [resetModal, setResetModal] = useState(null); // {id, username}
   const [newPw, setNewPw]   = useState("");
+  const [confirmState, setConfirmState] = useState(null);
   const isOwner = user?.role === "owner";
   const isAdmin = user?.role === "admin" || isOwner;
 
@@ -2234,9 +2397,14 @@ function Users({ showToast, user }) {
   }
 
   async function deleteUser(id, username) {
-    if(!window.confirm(`Delete user "${username}"? This cannot be undone.`)) return;
-    try { await api("DELETE",`/api/users/${id}`); load(); showToast("User deleted"); }
-    catch(err) { showToast(err.message,"error"); }
+    setConfirmState({
+      message: `Delete user "${username}"? This cannot be undone.`,
+      confirmLabel: "Delete",
+      fn: async () => {
+        try { await api("DELETE",`/api/users/${id}`); load(); showToast("User deleted"); }
+        catch(err) { showToast(err.message,"error"); }
+      }
+    });
   }
 
   async function resetPassword(e) {
@@ -2381,6 +2549,7 @@ function Users({ showToast, user }) {
           </div>
         </div>
       )}
+      {confirmState && <ConfirmModal message={confirmState.message} confirmLabel={confirmState.confirmLabel} onConfirm={()=>{confirmState.fn();setConfirmState(null);}} onCancel={()=>setConfirmState(null)}/>}
     </div>
   );
 }
@@ -2403,7 +2572,9 @@ function App() {
   const validIds = PAGES.map(p=>p.id);
   const hashPage = () => {
     const h = window.location.hash.slice(1);
-    return validIds.includes(h) ? h : "dashboard";
+    const HASH_ALIAS = { flows:"graphs", canvas:"graphs" };
+    const page = HASH_ALIAS[h] || h;
+    return validIds.includes(page) ? page : "dashboard";
   };
   const [page, setPageState]               = useState(hashPage);
   const [toast, setToast]                  = useState(null);
