@@ -1101,6 +1101,26 @@ function Palette({ search, onSearch }){
   );
 }
 
+// ── ConfirmModal ──────────────────────────────────────────────────────────────
+function ConfirmModal({ message, confirmLabel="Confirm", onConfirm, onCancel }) {
+  useEffect(()=>{
+    const h = e => { if(e.key==="Escape") onCancel(); };
+    document.addEventListener("keydown",h);
+    return ()=>document.removeEventListener("keydown",h);
+  },[]);
+  return (
+    <div className="modal-overlay" onClick={onCancel}>
+      <div className="modal" style={{maxWidth:400}} onClick={e=>e.stopPropagation()}>
+        <p style={{margin:"0 0 20px",color:"#e2e8f0",fontSize:14,lineHeight:1.6,whiteSpace:"pre-line"}}>{message}</p>
+        <div className="modal-btns">
+          <button className="btn btn-ghost" onClick={onCancel}>Cancel</button>
+          <button className="btn btn-danger" onClick={onConfirm}>{confirmLabel}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Open/New modal ────────────────────────────────────────────────────────────
 const TEMPLATE_EMOJIS = /^[📧🤖🔄⚠🔍📊⚡🧪🐍⏰💻📁]/u;
 function isTemplate(name){ return TEMPLATE_EMOJIS.test(name) }
@@ -1109,6 +1129,7 @@ function OpenModal({ graphs, onClose, onSelect, onNew, onDuplicate, onDelete, on
   const [name, setName]         = useState("");
   const [search, setSearch]     = useState("");
   const [busyId, setBusyId]     = useState(null);
+  const [confirmState, setConfirmState] = useState(null);
   const q = search.toLowerCase();
   const allFiltered = q ? graphs.filter(g=>g.name.toLowerCase().includes(q)||(g.description||"").toLowerCase().includes(q)) : graphs;
   const templates  = allFiltered.filter(g => isTemplate(g.name));
@@ -1125,10 +1146,11 @@ function OpenModal({ graphs, onClose, onSelect, onNew, onDuplicate, onDelete, on
     const msg = isTemplate(g.name)
       ? `Delete example "${g.name}"?\nYou can restore it via ↺ Restore examples.\nThis cannot be undone.`
       : `Delete "${g.name}"?\nThis cannot be undone.`;
-    if(!window.confirm(msg)) return;
-    setBusyId(g.id);
-    await onDelete(g.id, g.name);
-    setBusyId(null);
+    setConfirmState({ message: msg, confirmLabel: "Delete", fn: async () => {
+      setBusyId(g.id);
+      await onDelete(g.id, g.name);
+      setBusyId(null);
+    }});
   }
 
   async function handleRename(e, g){
@@ -1208,6 +1230,7 @@ function OpenModal({ graphs, onClose, onSelect, onNew, onDuplicate, onDelete, on
         </div>
       </div>
     </div>
+    {confirmState && <ConfirmModal message={confirmState.message} confirmLabel={confirmState.confirmLabel} onConfirm={()=>{confirmState.fn();setConfirmState(null);}} onCancel={()=>setConfirmState(null)}/>}
   );
 }
 
@@ -1235,6 +1258,7 @@ function TestPayloadModal({ isOpen, onClose, onRun, testPayload, onPayloadChange
 function HistoryModal({ isOpen, onClose, graphId, showToast }) {
   const [versions, setVersions] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [confirmState, setConfirmState] = useState(null);
 
   useEffect(() => {
     if (!isOpen || !graphId) return;
@@ -1252,14 +1276,15 @@ function HistoryModal({ isOpen, onClose, graphId, showToast }) {
   }, [isOpen, graphId]);
 
   async function restore(vid) {
-    if (!window.confirm("Restore this version? Current changes will be lost.")) return;
-    try {
-      await api("POST", `/api/graphs/${graphId}/versions/${vid}/restore`);
-      showToast("Version restored. Reloading…");
-      setTimeout(() => window.location.reload(), 500);
-    } catch (e) {
-      showToast(e.message, "error");
-    }
+    setConfirmState({ message: "Restore this version? Current changes will be lost.", confirmLabel: "Restore", fn: async () => {
+      try {
+        await api("POST", `/api/graphs/${graphId}/versions/${vid}/restore`);
+        showToast("Version restored. Reloading…");
+        setTimeout(() => window.location.reload(), 500);
+      } catch (e) {
+        showToast(e.message, "error");
+      }
+    }});
   }
 
   if (!isOpen) return null;
@@ -1290,6 +1315,7 @@ function HistoryModal({ isOpen, onClose, graphId, showToast }) {
         </div>
       </div>
     </div>
+    {confirmState && <ConfirmModal message={confirmState.message} confirmLabel={confirmState.confirmLabel} onConfirm={()=>{confirmState.fn();setConfirmState(null);}} onCancel={()=>setConfirmState(null)}/>}
   );
 }
 
@@ -2128,6 +2154,7 @@ function App(){
   const [contextMenu, setContextMenu]    = useState(null); // {x,y,node}
   const [toast, setToast]                = useState(null);
   const [saving, setSaving]              = useState(false);
+  const [isDirty, setIsDirty]            = useState(false);
   const [running, setRunning]            = useState(false);
   const [runError, setRunError]          = useState(null);  // {msg, nodeName}
   const [showMap, setShowMap]            = useState(true);
@@ -2172,6 +2199,13 @@ function App(){
     return ()=>window.removeEventListener("keydown", onKey);
   },[]);
 
+  useEffect(()=>{
+    if (!isDirty) return;
+    const h = e => { e.preventDefault(); e.returnValue = ""; };
+    window.addEventListener("beforeunload", h);
+    return ()=>window.removeEventListener("beforeunload", h);
+  }, [isDirty]);
+
   function saveSnap(ns, es){
     if(restoring.current) return;
     histRef.current = histRef.current.slice(0, histIdx.current + 1);
@@ -2182,6 +2216,7 @@ function App(){
     if(histRef.current.length > 60) histRef.current.shift();
     histIdx.current = histRef.current.length - 1;
     syncHistState();
+    setIsDirty(true);
   }
 
   function doUndo(){
@@ -2244,6 +2279,7 @@ function App(){
         setSelectedNode(null); setRunError(null);
         histRef.current=[]; histIdx.current=-1; syncHistState();
         saveSnap(newNodes, newEdges);
+        setIsDirty(false);
         window.location.hash = "flow-" + full.slug;
         showToast(`Opened: ${full.name}`);
       })
@@ -2384,11 +2420,13 @@ function App(){
       const gd = buildGraphData();
       if(currentGraph){
         await api("PUT",`/api/graphs/${currentGraph.id}`,{ name:graphName, graph_data:gd });
+        setIsDirty(false);
         showToast("Graph saved!");
         await loadGraphList();
       } else {
         const g = await api("POST","/api/graphs",{ name:graphName, description:"", graph_data:gd });
         setCurrentGraph(g);
+        setIsDirty(false);
         showToast("Graph created!");
         await loadGraphList();
       }
@@ -2623,6 +2661,7 @@ function App(){
       histIdx.current = -1;
       syncHistState();
       saveSnap(newNodes, newEdges);
+      setIsDirty(false);
       window.location.hash = "flow-" + full.slug;
       showToast(`Loaded: ${full.name}`);
       // Auto-load most recent run traces so the I/O panel shows data immediately
@@ -2757,7 +2796,7 @@ function App(){
         <a href="/admin" className="btn btn-ghost btn-sm">← Admin</a>
         <button className="btn btn-ghost btn-sm" onClick={()=>setShowTestModal(true)} disabled={!currentGraph}>🧪 Test</button>
         <button className="btn btn-ghost btn-sm" onClick={saveGraph} disabled={saving} title="Save (Ctrl+S)">
-          {saving ? <><span style={{animation:"spin .8s linear infinite",display:"inline-block"}}>⟳</span> Saving…</> : "💾 Save"}
+          {saving ? <><span style={{animation:"spin .8s linear infinite",display:"inline-block"}}>⟳</span> Saving…</> : isDirty ? "💾 Save ●" : "💾 Save"}
         </button>
         <button className="btn btn-success btn-sm" onClick={()=>runGraph()} disabled={running||!currentGraph}>
           {running ? <><span style={{animation:"spin .8s linear infinite",display:"inline-block"}}>⟳</span> Running…</> : "▶ Run"}
