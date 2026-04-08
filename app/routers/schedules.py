@@ -5,7 +5,7 @@ from pydantic import BaseModel
 from typing import Optional
 
 from app.deps import _check_admin
-from app.core.db import list_schedules, create_schedule, toggle_schedule, delete_schedule
+from app.core.db import list_schedules, create_schedule, update_schedule, toggle_schedule, delete_schedule
 
 log = logging.getLogger(__name__)
 router = APIRouter()
@@ -17,14 +17,44 @@ def api_schedules(request: Request):
 
 
 class ScheduleCreate(BaseModel):
-    name: str; graph_id: Optional[int] = None; workflow: Optional[str] = None
-    cron: str = "0 9 * * *"; payload: dict = {}; timezone: str = "UTC"
+    name: str
+    graph_id: Optional[int] = None
+    workflow: Optional[str] = None
+    cron: Optional[str] = None
+    payload: dict = {}
+    timezone: str = "UTC"
+    run_at: Optional[str] = None   # ISO datetime string for one-shot schedules
+
+
+class ScheduleUpdate(BaseModel):
+    name: str
+    graph_id: Optional[int] = None
+    workflow: Optional[str] = None
+    cron: Optional[str] = None
+    payload: dict = {}
+    timezone: str = "UTC"
+    run_at: Optional[str] = None
 
 
 @router.post("/api/schedules")
 def api_create_schedule(body: ScheduleCreate, request: Request):
     _check_admin(request)
-    return create_schedule(body.name, body.workflow, body.graph_id, body.cron, body.payload, body.timezone)
+    return create_schedule(
+        body.name, body.workflow, body.graph_id,
+        body.cron, body.payload, body.timezone, body.run_at
+    )
+
+
+@router.put("/api/schedules/{sid}")
+def api_update_schedule(sid: int, body: ScheduleUpdate, request: Request):
+    _check_admin(request)
+    row = update_schedule(
+        sid, body.name, body.workflow, body.graph_id,
+        body.cron, body.payload, body.timezone, body.run_at
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="Schedule not found")
+    return row
 
 
 @router.post("/api/schedules/{sid}/toggle")
@@ -50,7 +80,6 @@ def api_cron_next_run(
     """
     try:
         from apscheduler.triggers.cron import CronTrigger
-        from apscheduler.schedulers.base import BaseScheduler
         import datetime as _dt
         import pytz
 

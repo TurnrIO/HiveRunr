@@ -105,12 +105,15 @@ def _init_db_legacy():
                 name     TEXT NOT NULL,
                 workflow TEXT,
                 graph_id INTEGER,
-                cron     TEXT NOT NULL,
+                cron     TEXT,
                 payload  JSONB DEFAULT '{}',
                 timezone TEXT DEFAULT 'UTC',
-                enabled  BOOLEAN DEFAULT TRUE
+                enabled  BOOLEAN DEFAULT TRUE,
+                run_at   TIMESTAMPTZ DEFAULT NULL
             )
         """)
+        cur.execute("ALTER TABLE schedules ALTER COLUMN cron DROP NOT NULL")
+        cur.execute("ALTER TABLE schedules ADD COLUMN IF NOT EXISTS run_at TIMESTAMPTZ DEFAULT NULL")
         cur.execute("""
             CREATE TABLE IF NOT EXISTS graph_workflows (
                 id            SERIAL PRIMARY KEY,
@@ -323,14 +326,24 @@ def list_schedules():
         cur.execute("SELECT * FROM schedules ORDER BY id")
         return [dict(r) for r in cur.fetchall()]
 
-def create_schedule(name, workflow=None, graph_id=None, cron="0 * * * *", payload=None, timezone="UTC"):
+def create_schedule(name, workflow=None, graph_id=None, cron=None, payload=None, timezone="UTC", run_at=None):
     with get_conn() as conn:
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         cur.execute(
-            "INSERT INTO schedules(name,workflow,graph_id,cron,payload,timezone) VALUES(%s,%s,%s,%s,%s,%s) RETURNING *",
-            (name, workflow, graph_id, cron, json.dumps(payload or {}), timezone)
+            "INSERT INTO schedules(name,workflow,graph_id,cron,payload,timezone,run_at) VALUES(%s,%s,%s,%s,%s,%s,%s) RETURNING *",
+            (name, workflow, graph_id, cron, json.dumps(payload or {}), timezone, run_at)
         )
         return dict(cur.fetchone())
+
+def update_schedule(sid, name, workflow, graph_id, cron, payload, timezone, run_at=None):
+    with get_conn() as conn:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur.execute(
+            "UPDATE schedules SET name=%s,workflow=%s,graph_id=%s,cron=%s,payload=%s,timezone=%s,run_at=%s WHERE id=%s RETURNING *",
+            (name, workflow, graph_id, cron, json.dumps(payload or {}), timezone, run_at, sid)
+        )
+        row = cur.fetchone()
+        return dict(row) if row else None
 
 def toggle_schedule(sid):
     with get_conn() as conn:
