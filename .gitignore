@@ -26,3 +26,6 @@ runlogs/
 *.swp
 *.swo
 .DS_Store
+
+# pip typo artefacts (e.g. `pip install pkg =1.0.0` → creates a file named "=1.0.0")
+=[0-9]*
