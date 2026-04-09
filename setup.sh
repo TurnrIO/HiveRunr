@@ -131,10 +131,33 @@ info "Select which services you want to configure now."
 info "You can always edit .env manually later and restart the stack."
 echo ""
 
-# ── Failure notifications e-mail ──────────────────────────────────────────────
-if ask_yn "Send run-failure alerts to an email address?" n; then
-  addr=$(ask_val "NOTIFY_EMAIL" "$(grep '^NOTIFY_EMAIL=' .env | cut -d'=' -f2-)")
-  [ -n "$addr" ] && set_env "NOTIFY_EMAIL" "$addr" && ok "Failure email saved"
+# ── AgentMail.to (email alerts + password reset) ──────────────────────────────
+if ask_yn "Configure email alerts via AgentMail.to?" n; then
+  info "Sign up at https://agentmail.to and create an inbox to get your API key."
+  echo ""
+
+  current_key=$(grep '^AGENTMAIL_API_KEY=' .env | cut -d'=' -f2-)
+  new_key=$(ask_val "AGENTMAIL_API_KEY" "$current_key")
+  [ -n "$new_key" ] && set_env "AGENTMAIL_API_KEY" "$new_key"
+
+  current_from=$(grep '^AGENTMAIL_FROM=' .env | cut -d'=' -f2-)
+  new_from=$(ask_val "AGENTMAIL_FROM (e.g. alerts@agentmail.to)" "$current_from")
+  [ -n "$new_from" ] && set_env "AGENTMAIL_FROM" "$new_from"
+
+  current_owner=$(grep '^OWNER_EMAIL=' .env | cut -d'=' -f2-)
+  new_owner=$(ask_val "OWNER_EMAIL (your email — gets all failure alerts + forgot-password)" "$current_owner")
+  [ -n "$new_owner" ] && set_env "OWNER_EMAIL" "$new_owner"
+
+  ok "AgentMail.to configured"
+  info "Per-flow alert recipients can be set inside the app via ⋯ → 🔔 Alerts on each flow."
+fi
+
+# ── App URL ───────────────────────────────────────────────────────────────────
+echo ""
+current_url=$(grep '^APP_URL=' .env | cut -d'=' -f2-)
+if [ "$current_url" = "http://localhost" ]; then
+  new_url=$(ask_val "APP_URL (public URL used in email links — press Enter to keep localhost)" "http://localhost")
+  [ "$new_url" != "http://localhost" ] && [ -n "$new_url" ] && set_env "APP_URL" "$new_url" && ok "APP_URL saved"
 fi
 
 # ── Run Script node ───────────────────────────────────────────────────────────
@@ -151,34 +174,61 @@ fi
 # ── Summary ───────────────────────────────────────────────────────────────────
 banner "Step 4 — Review"
 echo ""
-echo -e "  ${BOLD}Your .env is ready.${RESET} Here are the values that matter most:"
+echo -e "  ${BOLD}Your .env is ready.${RESET} Key values:"
 echo ""
-printf "  %-20s %s\n" "API_KEY:"      "$(grep '^API_KEY=' .env | cut -d'=' -f2-)"
-printf "  %-20s %s\n" "NOTIFY_EMAIL:" "$(grep '^NOTIFY_EMAIL=' .env | cut -d'=' -f2-)"
-printf "  %-20s %s\n" "RUN_SCRIPT:"   "$(grep '^ENABLE_RUN_SCRIPT=' .env | cut -d'=' -f2-)"
+printf "  %-22s %s\n" "API_KEY:"           "$(grep '^API_KEY=' .env | cut -d'=' -f2-)"
+printf "  %-22s %s\n" "AGENTMAIL_FROM:"    "$(grep '^AGENTMAIL_FROM=' .env | cut -d'=' -f2-)"
+printf "  %-22s %s\n" "OWNER_EMAIL:"       "$(grep '^OWNER_EMAIL=' .env | cut -d'=' -f2-)"
+printf "  %-22s %s\n" "APP_URL:"           "$(grep '^APP_URL=' .env | cut -d'=' -f2-)"
+printf "  %-22s %s\n" "RUN_SCRIPT:"        "$(grep '^ENABLE_RUN_SCRIPT=' .env | cut -d'=' -f2-)"
 echo ""
-info "Add integration keys (SMTP, OpenAI, Slack, Telegram…) to .env at any time and restart."
+info "Edit .env at any time to add OpenAI, Slack, Telegram, and other integration keys."
 
 # ── Docker ────────────────────────────────────────────────────────────────────
 banner "Step 5 — Start the stack"
 echo ""
-if ask_yn "Start HiveRunr now with docker compose up -d --build?" y; then
+
+# Prefer the COMPOSE env var set by install.sh, fall back to detecting it
+COMPOSE_CMD="${COMPOSE:-}"
+if [ -z "$COMPOSE_CMD" ]; then
+  if docker compose version &>/dev/null 2>&1; then
+    COMPOSE_CMD="docker compose"
+  elif command -v docker-compose &>/dev/null; then
+    COMPOSE_CMD="docker-compose"
+  else
+    COMPOSE_CMD="docker compose"   # let it fail with a clear error
+  fi
+fi
+
+if ask_yn "Start HiveRunr now? ($COMPOSE_CMD up -d --build)" y; then
   echo ""
-  info "Running: docker compose up -d --build"
+  info "Running: $COMPOSE_CMD up -d --build"
   echo ""
-  docker compose up -d --build
+  $COMPOSE_CMD up -d --build
   echo ""
+
+  # Wait for the API to be ready (up to 60 s)
+  info "Waiting for HiveRunr to be ready…"
+  for i in $(seq 1 30); do
+    if $COMPOSE_CMD exec -T api python3 -c \
+        "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=2)" \
+        &>/dev/null 2>&1; then
+      break
+    fi
+    sleep 2
+  done
+
   ok "Stack started."
   echo ""
   echo -e "  ${BOLD}Open HiveRunr:${RESET}  http://localhost"
-  echo -e "  ${BOLD}View logs:${RESET}       docker compose logs -f api"
-  echo -e "  ${BOLD}Stop:${RESET}            docker compose down"
+  echo -e "  ${BOLD}View logs:${RESET}       ${COMPOSE_CMD} logs -f api"
+  echo -e "  ${BOLD}Stop:${RESET}            ${COMPOSE_CMD} down"
   echo ""
-  ok "First-time setup complete. Create your owner account at http://localhost/setup"
+  ok "Create your owner account at ${BOLD}http://localhost/setup${RESET}"
 else
   echo ""
   info "When you're ready, start the stack with:"
-  echo -e "  ${BOLD}docker compose up -d --build${RESET}"
+  echo -e "  ${BOLD}${COMPOSE_CMD} up -d --build${RESET}"
   echo ""
   ok "Setup complete. Open http://localhost after starting the stack."
 fi
