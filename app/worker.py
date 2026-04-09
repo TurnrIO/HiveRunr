@@ -1,9 +1,8 @@
 import os, json, logging, io, sys, runpy
 from pathlib import Path
-from email.mime.text import MIMEText
 from celery import Celery
 
-# Load secrets before any env-var reads (Celery broker URL, SMTP creds, etc.)
+# Load secrets before any env-var reads (Celery broker URL, AgentMail creds, etc.)
 from app.core.secrets import load_secrets
 load_secrets()
 from app.core.db import (
@@ -21,44 +20,105 @@ app.conf.result_serializer = "json"
 app.conf.accept_content    = ["json"]
 
 
-# ── failure notifications ─────────────────────────────────────────────────
-def _notify_failure(name: str, error: str, task_id: str):
-    """Send failure alerts via NOTIFY_SLACK_WEBHOOK and/or NOTIFY_EMAIL env vars."""
-    slack_url    = os.environ.get("NOTIFY_SLACK_WEBHOOK", "")
-    notify_email = os.environ.get("NOTIFY_EMAIL", "")
-    short_id     = task_id[:8] if task_id else "?"
-    short_err    = str(error)[:300]
+# ── Alert helpers ─────────────────────────────────────────────────────────────
+def _fire_webhook(webhook_url: str, payload: dict) -> None:
+    """POST alert payload to a webhook URL. Never raises."""
+    try:
+        import httpx
+        httpx.post(webhook_url, json=payload, timeout=10)
+    except Exception as exc:
+        log.warning("webhook alert failed (%s): %s", webhook_url[:60], exc)
 
-    if slack_url:
-        try:
-            import httpx
-            httpx.post(slack_url, json={
-                "text": f":x: *{name}* failed (task `{short_id}`)\n```{short_err}```"
-            }, timeout=10)
-        except Exception as ex:
-            log.warning(f"Slack notify failed: {ex}")
 
-    if notify_email:
+def _send_run_alert(
+    *,
+    graph_id: int | None,
+    flow_name: str,
+    status: str,
+    task_id: str,
+    error: str = "",
+) -> None:
+    """Dispatch email + webhook alerts for a completed graph run.
+
+    Reads per-flow alert config from the DB; also honours the global
+    OWNER_EMAIL env var for system-level failure notifications.
+    """
+    from app.email import send_run_alert, _is_configured
+
+    alert_emails:   str  = ""
+    alert_webhook:  str  = ""
+    alert_on_success: bool = False
+
+    # Per-flow config
+    if graph_id:
         try:
-            smtp_host = os.environ.get("SMTP_HOST", "")
-            smtp_user = os.environ.get("SMTP_USER", "")
-            smtp_pass = os.environ.get("SMTP_PASS", "")
-            smtp_port = int(os.environ.get("SMTP_PORT", 587))
-            if not smtp_host:
-                log.warning("NOTIFY_EMAIL set but SMTP_HOST not configured")
-                return
-            from_addr = os.environ.get("SMTP_FROM", "") or smtp_user or "hiverunr@noreply.local"
-            msg = MIMEText(
-                f"Task ID:  {task_id}\nWorkflow: {name}\n\nError:\n{error}"
+            from app.core.db import get_graph_alerts
+            cfg = get_graph_alerts(graph_id)
+            if cfg:
+                alert_emails    = cfg.get("alert_emails") or ""
+                alert_webhook   = cfg.get("alert_webhook") or ""
+                alert_on_success = bool(cfg.get("alert_on_success", False))
+        except Exception as exc:
+            log.warning("Could not load alert config for graph %s: %s", graph_id, exc)
+
+    # Decide whether to fire
+    is_failure = status == "failed"
+    should_alert = is_failure or alert_on_success
+
+    if not should_alert:
+        return
+
+    webhook_payload = {
+        "event":     "run.failed" if is_failure else "run.succeeded",
+        "flow":      flow_name,
+        "graph_id":  graph_id,
+        "task_id":   task_id,
+        "status":    status,
+        "error":     error or None,
+    }
+
+    # Webhook
+    if alert_webhook:
+        _fire_webhook(alert_webhook, webhook_payload)
+
+    # Email — per-flow recipients
+    if alert_emails and _is_configured():
+        send_run_alert(
+            to=alert_emails,
+            flow_name=flow_name,
+            status=status,
+            task_id=task_id,
+            error=error,
+            graph_id=graph_id,
+        )
+
+    # Email — global owner alert on failure only
+    owner_email = os.environ.get("OWNER_EMAIL", "")
+    if is_failure and owner_email and _is_configured():
+        # Only send to owner if not already included in per-flow list
+        existing = {e.strip().lower() for e in alert_emails.split(",") if e.strip()}
+        if owner_email.lower() not in existing:
+            send_run_alert(
+                to=owner_email,
+                flow_name=flow_name,
+                status=status,
+                task_id=task_id,
+                error=error,
+                graph_id=graph_id,
             )
-            msg["Subject"] = f"[HiveRunr] {name} failed"
-            msg["From"]    = from_addr
-            msg["To"]      = notify_email
-            from app.core.smtp import send_message
-            send_message(smtp_host, smtp_port, smtp_user, smtp_pass,
-                         from_addr, notify_email, msg.as_string())
-        except Exception as ex:
-            log.warning(f"Email notify failed: {ex}")
+
+
+def _notify_failure(name: str, error: str, task_id: str, graph_id: int = None):
+    """Legacy wrapper — kept for backward compatibility with enqueue_script."""
+    _send_run_alert(
+        graph_id=graph_id,
+        flow_name=name,
+        status="failed",
+        task_id=task_id,
+        error=error,
+    )
+
+
 
 @app.task(bind=True, name="app.worker.enqueue_workflow")
 def enqueue_workflow(self, workflow_name: str, payload: dict):
@@ -164,7 +224,19 @@ def enqueue_graph(self, graph_id: int, payload: dict):
         result = run_graph(graph_data, payload, logger=msgs.append)
         traces = result.get('traces', [])
         update_run(task_id, "succeeded", result=result, traces=traces)
+        _send_run_alert(
+            graph_id=graph_id,
+            flow_name=g.get("name", f"graph#{graph_id}"),
+            status="succeeded",
+            task_id=task_id,
+        )
     except Exception as e:
         log.exception(f"Graph {graph_id} failed")
         update_run(task_id, "failed", result={"error": str(e)}, traces=traces)
-        _notify_failure(f"graph#{graph_id}", str(e), task_id)
+        _send_run_alert(
+            graph_id=graph_id,
+            flow_name=(g or {}).get("name", f"graph#{graph_id}") if "g" in dir() else f"graph#{graph_id}",
+            status="failed",
+            task_id=task_id,
+            error=str(e),
+        )

@@ -771,3 +771,70 @@ def touch_api_token(token_hash: str):
 def delete_api_token(token_id: int):
     with get_conn() as conn:
         conn.cursor().execute("DELETE FROM api_tokens WHERE id=%s", (token_id,))
+
+# ── Graph alert config ─────────────────────────────────────────────────────────
+def get_graph_alerts(graph_id: int):
+    with get_conn() as conn:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur.execute(
+            "SELECT alert_emails, alert_webhook, alert_on_success "
+            "FROM graph_workflows WHERE id=%s",
+            (graph_id,)
+        )
+        row = cur.fetchone()
+        return dict(row) if row else None
+
+def update_graph_alerts(graph_id: int, alert_emails: str, alert_webhook: str, alert_on_success: bool):
+    with get_conn() as conn:
+        conn.cursor().execute(
+            "UPDATE graph_workflows "
+            "SET alert_emails=%s, alert_webhook=%s, alert_on_success=%s "
+            "WHERE id=%s",
+            (alert_emails or None, alert_webhook or None, bool(alert_on_success), graph_id)
+        )
+
+# ── Password reset tokens ──────────────────────────────────────────────────────
+def get_user_by_email(email: str):
+    with get_conn() as conn:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur.execute("SELECT * FROM users WHERE email=%s", (email.strip().lower(),))
+        row = cur.fetchone()
+        return dict(row) if row else None
+
+def get_owner_user():
+    with get_conn() as conn:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur.execute("SELECT * FROM users WHERE role='owner' ORDER BY id LIMIT 1")
+        row = cur.fetchone()
+        return dict(row) if row else None
+
+def create_password_reset_token(user_id: int, token_hash: str, expires_at):
+    with get_conn() as conn:
+        conn.cursor().execute(
+            "DELETE FROM password_resets WHERE user_id=%s",
+            (user_id,)
+        )
+        conn.cursor().execute(
+            "INSERT INTO password_resets(user_id, token_hash, expires_at) "
+            "VALUES(%s, %s, %s)",
+            (user_id, token_hash, expires_at)
+        )
+
+def get_password_reset_by_token(token_hash: str):
+    with get_conn() as conn:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur.execute(
+            "SELECT pr.*, u.username, u.email "
+            "FROM password_resets pr JOIN users u ON pr.user_id=u.id "
+            "WHERE pr.token_hash=%s AND pr.used=FALSE AND pr.expires_at > NOW()",
+            (token_hash,)
+        )
+        row = cur.fetchone()
+        return dict(row) if row else None
+
+def consume_password_reset_token(token_hash: str):
+    with get_conn() as conn:
+        conn.cursor().execute(
+            "UPDATE password_resets SET used=TRUE WHERE token_hash=%s",
+            (token_hash,)
+        )

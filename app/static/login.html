@@ -28,8 +28,13 @@
     transition:opacity .15s;margin-top:8px}
   .btn:hover{opacity:.88}
   .btn:disabled{opacity:.5;cursor:not-allowed}
-  .error{background:#f871711a;border:1px solid #f8717140;border-radius:8px;padding:10px 13px;
-    font-size:13px;color:#fca5a5;margin-bottom:18px;display:none}
+  .msg{border-radius:8px;padding:10px 13px;font-size:13px;margin-bottom:18px;display:none}
+  .msg.error{background:#f871711a;border:1px solid #f8717140;color:#fca5a5}
+  .msg.success{background:#22c55e1a;border:1px solid #22c55e40;color:#86efac}
+  .forgot-link{display:block;text-align:right;font-size:12px;color:#64748b;text-decoration:none;margin-top:-10px;margin-bottom:14px}
+  .forgot-link:hover{color:#7c3aed}
+  .back-link{display:block;text-align:center;font-size:13px;color:#64748b;text-decoration:none;margin-top:16px;cursor:pointer}
+  .back-link:hover{color:#7c3aed}
   .spinner{display:inline-block;width:14px;height:14px;border:2px solid rgba(255,255,255,.3);
     border-top-color:#fff;border-radius:50%;animation:spin .6s linear infinite;vertical-align:middle;margin-right:6px}
   @keyframes spin{to{transform:rotate(360deg)}}
@@ -44,9 +49,11 @@
   <h1>Welcome back</h1>
   <p class="subtitle">Sign in to your account</p>
 
-  <div class="error" id="err"></div>
+  <div class="msg error" id="err"></div>
+  <div class="msg success" id="ok"></div>
 
-  <form id="form" onsubmit="login(event)">
+  <!-- Login form -->
+  <form id="login-form" onsubmit="login(event)">
     <div class="field">
       <label>Username</label>
       <input id="username" type="text" autocomplete="username" autofocus required placeholder="your-username"/>
@@ -55,11 +62,40 @@
       <label>Password</label>
       <input id="password" type="password" autocomplete="current-password" required placeholder="••••••••"/>
     </div>
+    <a class="forgot-link" href="#" onclick="showForgot(event)">Forgot password?</a>
     <button class="btn" id="btn" type="submit">Sign in</button>
+  </form>
+
+  <!-- Forgot password form (hidden by default) -->
+  <form id="forgot-form" style="display:none" onsubmit="forgotPassword(event)">
+    <p style="font-size:13px;color:#64748b;margin-bottom:18px;">
+      Enter the owner account email address and we'll send a reset link.
+    </p>
+    <div class="field">
+      <label>Owner email</label>
+      <input id="forgot-email" type="email" autocomplete="email" required placeholder="owner@example.com"/>
+    </div>
+    <button class="btn" id="forgot-btn" type="submit">Send reset link</button>
+    <a class="back-link" onclick="showLogin()">← Back to login</a>
   </form>
 </div>
 
 <script>
+function showForgot(e) {
+  e && e.preventDefault();
+  document.getElementById('login-form').style.display = 'none';
+  document.getElementById('forgot-form').style.display = '';
+  document.getElementById('err').style.display = 'none';
+  document.getElementById('ok').style.display = 'none';
+  document.getElementById('forgot-email').focus();
+}
+function showLogin() {
+  document.getElementById('forgot-form').style.display = 'none';
+  document.getElementById('login-form').style.display = '';
+  document.getElementById('err').style.display = 'none';
+  document.getElementById('ok').style.display = 'none';
+}
+
 async function login(e) {
   e.preventDefault();
   const btn = document.getElementById('btn');
@@ -92,6 +128,37 @@ async function login(e) {
     btn.disabled = false;
     btn.textContent = 'Sign in';
   }
+}
+
+async function forgotPassword(e) {
+  e.preventDefault();
+  const btn = document.getElementById('forgot-btn');
+  const err = document.getElementById('err');
+  const ok  = document.getElementById('ok');
+  err.style.display = 'none';
+  ok.style.display  = 'none';
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span>Sending…';
+  try {
+    const res = await fetch('/api/auth/forgot-password', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({email: document.getElementById('forgot-email').value.trim()}),
+    });
+    const data = await res.json().catch(()=>({}));
+    if (res.ok) {
+      ok.textContent = data.message || 'If that email matches the owner account, a reset link has been sent.';
+      ok.style.display = 'block';
+    } else {
+      err.textContent = data.detail || 'Something went wrong. Please try again.';
+      err.style.display = 'block';
+    }
+  } catch(ex) {
+    err.textContent = 'Network error — please try again';
+    err.style.display = 'block';
+  }
+  btn.disabled = false;
+  btn.textContent = 'Send reset link';
 }
 </script>
 </body>

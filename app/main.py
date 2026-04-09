@@ -115,6 +115,11 @@ def admin_page(request: Request, rest: str = ""):
     return FileResponse(str(STATIC_DIR / "admin.html"), media_type="text/html")
 
 
+@app.get("/reset-password")
+def reset_password_page():
+    return FileResponse(str(STATIC_DIR / "reset.html"), media_type="text/html")
+
+
 @app.get("/canvas")
 @app.get("/admin/canvas")
 def canvas_page(request: Request):
