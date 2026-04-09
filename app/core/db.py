@@ -327,20 +327,28 @@ def list_schedules():
         cur.execute("""
             SELECT
                 s.*,
-                g.name  AS graph_name,
-                lr.id   AS last_run_id,
-                lr.status       AS last_run_status,
-                lr.created_at   AS last_run_at,
-                lr.duration_ms  AS last_run_duration_ms
+                g.name AS graph_name,
+                lr.id              AS last_run_id,
+                lr.status          AS last_run_status,
+                lr.created_at      AS last_run_at,
+                lr.duration_ms     AS last_run_duration_ms
             FROM schedules s
             LEFT JOIN graph_workflows g ON g.id = s.graph_id
             LEFT JOIN LATERAL (
-                SELECT id, status, created_at, duration_ms
+                SELECT
+                    id,
+                    status,
+                    created_at,
+                    GREATEST(
+                        ROUND(EXTRACT(EPOCH FROM (updated_at - created_at)) * 1000),
+                        0
+                    )::int AS duration_ms
                 FROM   runs
                 WHERE  graph_id = s.graph_id
+                  AND  s.graph_id IS NOT NULL
                 ORDER  BY created_at DESC
                 LIMIT  1
-            ) lr ON s.graph_id IS NOT NULL
+            ) lr ON TRUE
             ORDER BY s.id
         """)
         return [dict(r) for r in cur.fetchall()]
