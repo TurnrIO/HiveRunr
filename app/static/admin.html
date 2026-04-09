@@ -1376,6 +1376,7 @@ function Schedules({ showToast, user }) {
   const [graphs,    setGraphs]    = useState([]);
   const [scripts,   setScripts]   = useState([]);
   const [confirmState, setConfirmState] = useState(null);
+  const [runningNow, setRunningNow] = useState({});  // {scheduleId: true} while triggering
 
   // Create form
   const [schedMode, setSchedMode] = useState("recurring"); // "recurring" | "once"
@@ -1416,6 +1417,15 @@ function Schedules({ showToast, user }) {
   async function toggle(id) {
     try { await api("POST",`/api/schedules/${id}/toggle`); load(); }
     catch(e){ showToast(e.message,"error"); }
+  }
+
+  async function runNow(id, name) {
+    setRunningNow(r=>({...r,[id]:true}));
+    try {
+      const res = await api("POST",`/api/schedules/${id}/run-now`);
+      showToast(`▶ "${name}" queued (task ${res.task_id?.slice(0,8)}…)`);
+    } catch(e){ showToast(e.message,"error"); }
+    setRunningNow(r=>({...r,[id]:false}));
   }
 
   function confirmDel(id, name) {
@@ -1541,14 +1551,27 @@ function Schedules({ showToast, user }) {
         {schedules.length===0 ? <div className="empty-state">No schedules yet.</div> : (
           <table>
             <thead>
-              <tr><th>Name</th><th>Workflow</th><th>Schedule</th><th>Next run</th><th>Status</th>{!ro && <th></th>}</tr>
+              <tr><th>Name</th><th>Flow</th><th>Schedule</th><th>Next run</th><th>Last run</th><th>Status</th>{!ro && <th></th>}</tr>
             </thead>
             <tbody>
-              {schedules.map(s=>(
+              {schedules.map(s=>{
+                const lastRunBadge = s.last_run_status ? (
+                  <span style={{display:"flex",flexDirection:"column",gap:2}}>
+                    <span className={`badge badge-${s.last_run_status}`} style={{fontSize:10}}>{s.last_run_status}</span>
+                    <span style={{fontSize:10,color:"#475569"}}>{new Date(s.last_run_at).toLocaleString()}</span>
+                    {s.last_run_duration_ms && <span style={{fontSize:10,color:"#475569"}}>{(s.last_run_duration_ms/1000).toFixed(1)}s</span>}
+                  </span>
+                ) : <span style={{fontSize:11,color:"#475569"}}>never</span>;
+
+                return (
                 <React.Fragment key={s.id}>
                   <tr>
-                    <td>{s.name}</td>
-                    <td style={{fontFamily:"monospace",fontSize:12}}>{s.workflow || "—"}</td>
+                    <td style={{fontWeight:500}}>{s.name}</td>
+                    <td style={{fontSize:12}}>
+                      {s.graph_name
+                        ? <span style={{color:"#a78bfa"}}>{s.graph_name}</span>
+                        : <span style={{color:"#475569",fontFamily:"monospace"}}>{s.workflow || "—"}</span>}
+                    </td>
                     <td style={{fontFamily:"monospace",fontSize:12}}>
                       {s.run_at
                         ? <span><span style={{fontSize:10,background:"#1e3a5f",color:"#60a5fa",borderRadius:4,padding:"1px 6px",fontWeight:600,marginRight:6}}>ONCE</span>{new Date(s.run_at).toLocaleString()}</span>
@@ -1557,15 +1580,24 @@ function Schedules({ showToast, user }) {
                     <td>
                       <CronNextRun cron={s.cron} timezone={s.timezone} enabled={s.enabled} runAt={s.run_at}/>
                     </td>
+                    <td>{lastRunBadge}</td>
                     <td><span className={`badge ${s.enabled?"badge-succeeded":"badge-cancelled"}`}>{s.enabled?"active":"paused"}</span></td>
                     {!ro && (
                       <td>
                         <div style={{display:"flex",gap:6}}>
+                          {s.graph_id && (
+                            <button className="btn btn-primary btn-sm"
+                              onClick={()=>runNow(s.id, s.name)}
+                              disabled={runningNow[s.id]}
+                              title="Run now">
+                              {runningNow[s.id] ? "…" : "▶"}
+                            </button>
+                          )}
                           <button className="btn btn-ghost" onClick={()=>startEdit(s)} title="Edit schedule">✏️</button>
                           {!s.run_at && (
                             <button className="btn btn-ghost" onClick={()=>toggle(s.id)}>{s.enabled?"Pause":"Resume"}</button>
                           )}
-                          <button className="btn btn-danger" onClick={()=>confirmDel(s.id,s.name)} title="Delete schedule">✕</button>
+                          <button className="btn btn-danger btn-sm" onClick={()=>confirmDel(s.id,s.name)} title="Delete schedule">✕</button>
                         </div>
                       </td>
                     )}
@@ -1625,7 +1657,7 @@ function Schedules({ showToast, user }) {
                     </tr>
                   )}
                 </React.Fragment>
-              ))}
+              );})}
             </tbody>
           </table>
         )}

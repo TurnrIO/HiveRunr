@@ -321,10 +321,36 @@ def toggle_workflow(name):
 
 # ── schedules ─────────────────────────────────────────────────────────────
 def list_schedules():
+    """Return all schedules enriched with the graph name and last-run info."""
     with get_conn() as conn:
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-        cur.execute("SELECT * FROM schedules ORDER BY id")
+        cur.execute("""
+            SELECT
+                s.*,
+                g.name  AS graph_name,
+                lr.id   AS last_run_id,
+                lr.status       AS last_run_status,
+                lr.created_at   AS last_run_at,
+                lr.duration_ms  AS last_run_duration_ms
+            FROM schedules s
+            LEFT JOIN graph_workflows g ON g.id = s.graph_id
+            LEFT JOIN LATERAL (
+                SELECT id, status, created_at, duration_ms
+                FROM   runs
+                WHERE  graph_id = s.graph_id
+                ORDER  BY created_at DESC
+                LIMIT  1
+            ) lr ON s.graph_id IS NOT NULL
+            ORDER BY s.id
+        """)
         return [dict(r) for r in cur.fetchall()]
+
+def get_schedule(sid):
+    with get_conn() as conn:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur.execute("SELECT * FROM schedules WHERE id=%s", (sid,))
+        row = cur.fetchone()
+        return dict(row) if row else None
 
 def create_schedule(name, workflow=None, graph_id=None, cron=None, payload=None, timezone="UTC", run_at=None):
     with get_conn() as conn:
