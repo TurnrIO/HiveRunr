@@ -1188,6 +1188,7 @@ function OpenModal({ graphs, onClose, onSelect, onNew, onDuplicate, onDelete, on
   }
 
   return (
+    <>
     <div className="modal-overlay" onClick={e=>{ if(e.target.className==="modal-overlay") onClose() }}>
       <div className="modal">
         <h2>📂 Flows</h2>
@@ -1231,6 +1232,7 @@ function OpenModal({ graphs, onClose, onSelect, onNew, onDuplicate, onDelete, on
       </div>
     </div>
     {confirmState && <ConfirmModal message={confirmState.message} confirmLabel={confirmState.confirmLabel} onConfirm={()=>{confirmState.fn();setConfirmState(null);}} onCancel={()=>setConfirmState(null)}/>}
+    </>
   );
 }
 
@@ -1289,6 +1291,7 @@ function HistoryModal({ isOpen, onClose, graphId, showToast }) {
 
   if (!isOpen) return null;
   return (
+    <>
     <div className="modal-overlay" onClick={e=>{ if(e.target.className==="modal-overlay") onClose() }}>
       <div className="modal">
         <h2>📜 Version History</h2>
