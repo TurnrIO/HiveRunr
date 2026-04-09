@@ -1881,7 +1881,8 @@ function Settings({ showToast, user }) {
   const [resetting,  setResetting]  = useState(false);
   const [clearing,   setClearing]   = useState(false);
   const [trimming,   setTrimming]   = useState(false);
-  const [keepVal,    setKeepVal]    = useState("100");
+  const [savingRetention, setSavingRetention] = useState(false);
+  const [retention,  setRetention]  = useState({enabled:false, mode:"count", count:500, days:30});
   const [tokens,     setTokens]     = useState([]);
   const [newTokenName, setNewTokenName] = useState("");
   const [newTokenScope, setNewTokenScope] = useState("manage");
@@ -1895,6 +1896,7 @@ function Settings({ showToast, user }) {
   useEffect(()=>{
     loadStatus();
     loadNodes();
+    loadRetention();
     if(isOwner) loadTokens();
   },[isOwner]);
 
@@ -1964,15 +1966,35 @@ function Settings({ showToast, user }) {
     });
   }
 
-  async function trimRuns() {
-    const keep = parseInt(keepVal)||100;
+  async function loadRetention() {
+    try { setRetention(await api("GET","/api/runs/retention")); }
+    catch(e) {}
+  }
+
+  async function saveRetention() {
+    setSavingRetention(true);
+    try {
+      const saved = await api("PUT","/api/runs/retention", retention);
+      setRetention(saved);
+      showToast("Retention policy saved");
+    } catch(e) { showToast(e.message,"error"); }
+    setSavingRetention(false);
+  }
+
+  async function trimNow() {
+    const body = retention.mode === "age"
+      ? { days: retention.days }
+      : { keep: retention.count };
+    const modeLabel = retention.mode === "age"
+      ? `runs older than ${retention.days} day${retention.days!==1?"s":""}`
+      : `all but the ${retention.count} most recent run${retention.count!==1?"s":""}`;
     setConfirmState({
-      message: `Keep only the ${keep} most recent runs and delete the rest?`,
+      message: `Delete ${modeLabel}? This cannot be undone.`,
       confirmLabel: "Delete",
       fn: async () => {
         setTrimming(true);
         try {
-          const r = await api("POST","/api/runs/trim",{keep});
+          const r = await api("POST","/api/runs/trim", body);
           showToast(`Trimmed ${r.deleted} old run${r.deleted!==1?"s":""}`);
           loadStatus();
         } catch(e) { showToast(e.message,"error"); }
@@ -2190,22 +2212,69 @@ function Settings({ showToast, user }) {
         </div>
       </div>
 
-      {/* ── Run History Management ── */}
+      {/* ── Run Retention Policy ── */}
       <div className="card">
-        <div className="card-title">Run History</div>
-        {db.run_count!=null && <p style={{fontSize:13,color:"#94a3b8",marginBottom:14}}>{db.run_count} run{db.run_count!==1?"s":""} stored in the database.</p>}
-        <div style={{display:"flex",gap:10,alignItems:"center",flexWrap:"wrap",marginBottom:12}}>
-          <span style={{fontSize:13,color:"#94a3b8"}}>Keep last</span>
-          <input type="number" value={keepVal} onChange={e=>setKeepVal(e.target.value)}
-            style={{width:70,background:"#0f1117",border:"1px solid #2a2d3e",borderRadius:6,padding:"5px 8px",color:"#e2e8f0",fontSize:13}}/>
-          <span style={{fontSize:13,color:"#94a3b8"}}>runs</span>
-          <button className="btn btn-ghost btn-sm" onClick={trimRuns} disabled={trimming}>
-            {trimming?"Trimming…":"Trim old runs"}
-          </button>
+        <div className="card-title">Run History &amp; Retention</div>
+        {db.run_count != null && (
+          <p style={{fontSize:13,color:"#94a3b8",marginBottom:16}}>
+            {db.run_count} run{db.run_count!==1?"s":""} stored in the database.
+          </p>
+        )}
+
+        {/* Auto-trim toggle */}
+        <label style={{display:"flex",alignItems:"center",gap:10,cursor:"pointer",marginBottom:14,userSelect:"none"}}>
+          <div style={{
+            position:"relative",width:36,height:20,borderRadius:10,flexShrink:0,
+            background:retention.enabled?"#7c3aed":"#2a2d3e",
+            transition:"background .2s",cursor:"pointer"
+          }} onClick={()=>setRetention(r=>({...r,enabled:!r.enabled}))}>
+            <div style={{
+              position:"absolute",top:2,left:retention.enabled?18:2,width:16,height:16,
+              borderRadius:"50%",background:"#fff",transition:"left .2s"
+            }}/>
+          </div>
+          <span style={{fontSize:13,color:"#e2e8f0",fontWeight:500}}>Auto-trim runs nightly</span>
+          {retention.enabled && <span style={{fontSize:11,color:"#4ade80",fontWeight:600}}>ON</span>}
+        </label>
+
+        {/* Mode + value selector */}
+        <div style={{display:"flex",gap:10,alignItems:"center",flexWrap:"wrap",marginBottom:16,
+          opacity: retention.enabled ? 1 : 0.45, pointerEvents: retention.enabled ? "auto" : "none"}}>
+          <select value={retention.mode}
+            onChange={e=>setRetention(r=>({...r,mode:e.target.value}))}
+            style={{background:"#0f1117",border:"1px solid #2a2d3e",borderRadius:6,
+              padding:"5px 10px",color:"#e2e8f0",fontSize:13}}>
+            <option value="count">Keep last N runs</option>
+            <option value="age">Delete runs older than N days</option>
+          </select>
+          <input type="number" min="1"
+            value={retention.mode==="age" ? retention.days : retention.count}
+            onChange={e=>{
+              const v = Math.max(1, parseInt(e.target.value)||1);
+              setRetention(r=>retention.mode==="age" ? {...r,days:v} : {...r,count:v});
+            }}
+            style={{width:80,background:"#0f1117",border:"1px solid #2a2d3e",borderRadius:6,
+              padding:"5px 8px",color:"#e2e8f0",fontSize:13}}/>
+          <span style={{fontSize:13,color:"#94a3b8"}}>
+            {retention.mode==="age" ? "days" : "runs"}
+          </span>
         </div>
+
+        <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center",marginBottom:16}}>
+          <button className="btn btn-primary btn-sm" onClick={saveRetention} disabled={savingRetention}>
+            {savingRetention ? "Saving…" : "Save policy"}
+          </button>
+          <button className="btn btn-ghost btn-sm" onClick={trimNow} disabled={trimming}>
+            {trimming ? "Trimming…" : "✂ Trim now"}
+          </button>
+          <span style={{fontSize:11,color:"#475569"}}>
+            Trim now applies the current mode and value immediately.
+          </span>
+        </div>
+
         <div style={{borderTop:"1px solid #1e2130",paddingTop:12}}>
           <button className="btn btn-danger btn-sm" onClick={clearRuns} disabled={clearing}>
-            {clearing?"Clearing…":"🗑 Clear all run history"}
+            {clearing ? "Clearing…" : "🗑 Clear all run history"}
           </button>
           <span style={{fontSize:11,color:"#475569",marginLeft:10}}>Permanently deletes all run records and traces.</span>
         </div>

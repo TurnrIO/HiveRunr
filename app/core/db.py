@@ -838,3 +838,56 @@ def consume_password_reset_token(token_hash: str):
             "UPDATE password_resets SET used=TRUE WHERE token_hash=%s",
             (token_hash,)
         )
+
+# ── App settings (KV store) ────────────────────────────────────────────────────
+def get_setting(key: str, default: str = "") -> str:
+    with get_conn() as conn:
+        cur = conn.cursor()
+        cur.execute("SELECT value FROM app_settings WHERE key=%s", (key,))
+        row = cur.fetchone()
+        return row[0] if row else default
+
+def set_setting(key: str, value: str) -> None:
+    with get_conn() as conn:
+        conn.cursor().execute("""
+            INSERT INTO app_settings(key, value, updated_at)
+            VALUES(%s, %s, NOW())
+            ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value, updated_at=NOW()
+        """, (key, value))
+
+def get_retention_policy() -> dict:
+    """Return the run retention policy as a dict with typed values."""
+    return {
+        "enabled": get_setting("retention_enabled", "false") == "true",
+        "mode":    get_setting("retention_mode",    "count"),   # "count" | "age"
+        "count":   int(get_setting("retention_count", "500")),
+        "days":    int(get_setting("retention_days",  "30")),
+    }
+
+def set_retention_policy(enabled: bool, mode: str, count: int, days: int) -> None:
+    set_setting("retention_enabled", "true" if enabled else "false")
+    set_setting("retention_mode",    mode)
+    set_setting("retention_count",   str(max(1, int(count))))
+    set_setting("retention_days",    str(max(1, int(days))))
+
+def trim_runs_by_count(keep: int) -> int:
+    """Delete all but the `keep` most recent runs. Returns deleted count."""
+    with get_conn() as conn:
+        cur = conn.cursor()
+        cur.execute("""
+            DELETE FROM runs
+            WHERE id NOT IN (
+                SELECT id FROM runs ORDER BY id DESC LIMIT %s
+            )
+        """, (max(1, keep),))
+        return cur.rowcount
+
+def trim_runs_by_age(days: int) -> int:
+    """Delete runs older than `days` days. Returns deleted count."""
+    with get_conn() as conn:
+        cur = conn.cursor()
+        cur.execute(
+            "DELETE FROM runs WHERE created_at < NOW() - (%s || ' days')::INTERVAL",
+            (str(max(1, days)),)
+        )
+        return cur.rowcount
