@@ -19,11 +19,20 @@ A self-hosted workflow automation platform with a visual node-canvas editor, mod
 
 ## Quick Start
 
+**One-line install** (requires git + Docker):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/TurnrIO/HiveRunr/main/install.sh | bash
+```
+
+This clones the repo, runs the interactive setup wizard, and optionally starts the stack.
+
+**Or manually:**
+
 ```bash
 git clone https://github.com/TurnrIO/HiveRunr
 cd HiveRunr
-bash setup.sh          # creates .env with a unique SECRET_KEY
-# edit .env — set API_KEY and any integration keys you need
+bash setup.sh          # interactive: generates SECRET_KEY, configures AgentMail.to, etc.
 docker compose up -d --build
 ```
 
