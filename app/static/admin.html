@@ -1308,44 +1308,67 @@ function CronNextRun({ cron, timezone, enabled, runAt }) {
 }
 
 // ── DateTimePicker ────────────────────────────────────────────────────────
-// A styled datetime-local input with quick-pick shortcuts for one-off schedules.
+// Separate date + time inputs (each opens its own native picker) with
+// quick-pick shortcuts to pre-fill common times.
 function DateTimePicker({ value, onChange, required }) {
-  // Quick-pick helpers — return a local datetime-local string (YYYY-MM-DDTHH:mm)
-  function localStr(d) {
-    const pad = n => String(n).padStart(2,"0");
-    return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  const pad = n => String(n).padStart(2,"0");
+
+  // Split the combined "YYYY-MM-DDTHH:mm" string into parts
+  const datePart = value ? value.split("T")[0] : "";
+  const timePart = value ? (value.split("T")[1] || "09:00") : "09:00";
+
+  function combine(d, t) {
+    if (!d) { onChange(""); return; }
+    onChange(`${d}T${t || "09:00"}`);
+  }
+
+  function localStr(dt) {
+    return `${dt.getFullYear()}-${pad(dt.getMonth()+1)}-${pad(dt.getDate())}T${pad(dt.getHours())}:${pad(dt.getMinutes())}`;
   }
 
   const picks = [
-    { label:"In 1 hour",    fn:()=>{ const d=new Date(); d.setHours(d.getHours()+1,0,0,0);   return d; }},
-    { label:"In 4 hours",   fn:()=>{ const d=new Date(); d.setHours(d.getHours()+4,0,0,0);   return d; }},
-    { label:"Tonight 8pm",  fn:()=>{ const d=new Date(); d.setHours(20,0,0,0);               return d; }},
+    { label:"In 1 hour",    fn:()=>{ const d=new Date(); d.setHours(d.getHours()+1,0,0,0); return d; }},
+    { label:"In 4 hours",   fn:()=>{ const d=new Date(); d.setHours(d.getHours()+4,0,0,0); return d; }},
+    { label:"Tonight 8pm",  fn:()=>{ const d=new Date(); d.setHours(20,0,0,0);             return d; }},
     { label:"Tomorrow 9am", fn:()=>{ const d=new Date(); d.setDate(d.getDate()+1); d.setHours(9,0,0,0); return d; }},
     { label:"Mon 9am",      fn:()=>{
         const d=new Date();
-        const day=d.getDay(); // 0=Sun
-        d.setDate(d.getDate() + ((8-day)%7||7));
+        d.setDate(d.getDate() + ((8-d.getDay())%7||7));
         d.setHours(9,0,0,0);
         return d;
     }},
   ];
 
+  const inputStyle = {
+    background:"#0f1117", border:"1px solid #2a2d3e", borderRadius:6,
+    padding:"6px 10px", color:"#e2e8f0", fontSize:13,
+    colorScheme:"dark",   // tells Chrome/Safari to render the picker dark
+  };
+
   return (
     <div>
-      <input
-        type="datetime-local"
-        value={value}
-        onChange={e=>onChange(e.target.value)}
-        required={required}
-        style={{width:"100%",marginBottom:6}}
-      />
+      <div style={{display:"flex",gap:8,marginBottom:6}}>
+        <input
+          type="date"
+          value={datePart}
+          onChange={e=>combine(e.target.value, timePart)}
+          required={required}
+          style={{...inputStyle, flex:1}}
+        />
+        <input
+          type="time"
+          value={timePart}
+          onChange={e=>combine(datePart, e.target.value)}
+          style={{...inputStyle, width:110, flex:"none"}}
+        />
+      </div>
       <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
         {picks.map(p=>(
           <button key={p.label} type="button"
             onClick={()=>onChange(localStr(p.fn()))}
             style={{
-              padding:"3px 9px",fontSize:11,borderRadius:6,cursor:"pointer",border:"1px solid #2a2d3e",
-              background:"#1a1d2e",color:"#94a3b8",fontWeight:500,
+              padding:"3px 9px", fontSize:11, borderRadius:6, cursor:"pointer",
+              border:"1px solid #2a2d3e", background:"#1a1d2e", color:"#94a3b8", fontWeight:500,
             }}
             onMouseEnter={e=>e.currentTarget.style.borderColor="#7c3aed"}
             onMouseLeave={e=>e.currentTarget.style.borderColor="#2a2d3e"}>
@@ -1428,11 +1451,15 @@ function Schedules({ showToast, user }) {
   const [confirmState, setConfirmState] = useState(null);
   const [runningNow, setRunningNow] = useState({});  // {scheduleId: true} while triggering
 
+  // Detect default timezone: prefer server APP_TIMEZONE, fall back to browser tz, then UTC
+  const browserTz = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+  const [defaultTz, setDefaultTz] = useState(browserTz);
+
   // Create form
   const [schedMode, setSchedMode] = useState("recurring"); // "recurring" | "once"
   const [form, setForm] = useState({
     name:"", workflow:"", graph_id:null,
-    cron:"0 9 * * *", payload:"{}", timezone:"UTC", run_at:""
+    cron:"0 9 * * *", payload:"{}", timezone:browserTz, run_at:""
   });
 
   // Inline edit
@@ -1444,6 +1471,14 @@ function Schedules({ showToast, user }) {
     load();
     api("GET","/api/graphs").then(setGraphs).catch(()=>{});
     api("GET","/api/scripts").then(data => setScripts(Array.isArray(data) ? data : (data.scripts || []))).catch(()=>{});
+    // Fetch server-configured timezone and apply to the form if not yet edited
+    api("GET","/api/system/status").then(st => {
+      const tz = st?.system?.app_timezone;
+      if (tz) {
+        setDefaultTz(tz);
+        setForm(f => ({...f, timezone: tz}));
+      }
+    }).catch(()=>{});
   },[]);
 
   async function create(e) {
@@ -1458,7 +1493,7 @@ function Schedules({ showToast, user }) {
         run_at: schedMode === "once" ? new Date(form.run_at).toISOString() : null,
       };
       await api("POST", "/api/schedules", body);
-      setForm({name:"",workflow:"",graph_id:null,cron:"0 9 * * *",payload:"{}",timezone:"UTC",run_at:""});
+      setForm({name:"",workflow:"",graph_id:null,cron:"0 9 * * *",payload:"{}",timezone:defaultTz,run_at:""});
       setSchedMode("recurring");
       load(); showToast("Schedule created");
     } catch(err) { showToast(err.message, "error"); }
@@ -1497,7 +1532,7 @@ function Schedules({ showToast, user }) {
       graph_id: s.graph_id || null,
       cron: s.cron || "0 9 * * *",
       payload: typeof s.payload === "object" ? JSON.stringify(s.payload) : (s.payload || "{}"),
-      timezone: s.timezone || "UTC",
+      timezone: s.timezone || defaultTz,
       run_at: s.run_at ? new Date(s.run_at).toISOString().slice(0,16) : "",
       mode: s.run_at ? "once" : "recurring",
     });

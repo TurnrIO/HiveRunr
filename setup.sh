@@ -160,6 +160,15 @@ if [ "$current_url" = "http://localhost" ]; then
   [ "$new_url" != "http://localhost" ] && [ -n "$new_url" ] && set_env "APP_URL" "$new_url" && ok "APP_URL saved"
 fi
 
+# ── Default timezone ──────────────────────────────────────────────────────────
+echo ""
+# Auto-detect system timezone as a sensible default
+detected_tz=$(cat /etc/timezone 2>/dev/null || timedatectl show --property=Timezone --value 2>/dev/null || echo "UTC")
+current_tz=$(grep '^APP_TIMEZONE=' .env 2>/dev/null | cut -d'=' -f2-)
+current_tz="${current_tz:-$detected_tz}"
+new_tz=$(ask_val "APP_TIMEZONE (IANA timezone for the scheduler UI, e.g. Europe/London)" "$current_tz")
+[ -n "$new_tz" ] && set_env "APP_TIMEZONE" "$new_tz" && ok "APP_TIMEZONE set to $new_tz"
+
 # ── Run Script node ───────────────────────────────────────────────────────────
 echo ""
 if ask_yn "Enable the 'Run Python Script' node? ${RED}(security risk — read the warning below)${RESET}" n; then
@@ -180,6 +189,7 @@ printf "  %-22s %s\n" "API_KEY:"           "$(grep '^API_KEY=' .env | cut -d'=' 
 printf "  %-22s %s\n" "AGENTMAIL_FROM:"    "$(grep '^AGENTMAIL_FROM=' .env | cut -d'=' -f2-)"
 printf "  %-22s %s\n" "OWNER_EMAIL:"       "$(grep '^OWNER_EMAIL=' .env | cut -d'=' -f2-)"
 printf "  %-22s %s\n" "APP_URL:"           "$(grep '^APP_URL=' .env | cut -d'=' -f2-)"
+printf "  %-22s %s\n" "APP_TIMEZONE:"      "$(grep '^APP_TIMEZONE=' .env | cut -d'=' -f2-);"
 printf "  %-22s %s\n" "RUN_SCRIPT:"        "$(grep '^ENABLE_RUN_SCRIPT=' .env | cut -d'=' -f2-)"
 echo ""
 info "Edit .env at any time to add OpenAI, Slack, Telegram, and other integration keys."

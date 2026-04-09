@@ -60,11 +60,12 @@ def api_system_status(request: Request):
     except Exception as e:
         results["worker"] = {"status": "error", "error": str(e)}
     results["system"] = {
-        "app_version": "8",
-        "python":      sys.version.split()[0],
-        "platform":    platform.system() + " " + platform.release(),
-        "hostname":    socket.gethostname(),
-        "pid":         os.getpid(),
+        "app_version":  "8",
+        "python":       sys.version.split()[0],
+        "platform":     platform.system() + " " + platform.release(),
+        "hostname":     socket.gethostname(),
+        "pid":          os.getpid(),
+        "app_timezone": os.environ.get("APP_TIMEZONE", "UTC"),
     }
     return results
 
