@@ -5,7 +5,7 @@ from pydantic import BaseModel
 from typing import Optional
 
 from app.deps import _check_admin
-from app.core.db import list_schedules, create_schedule, update_schedule, toggle_schedule, delete_schedule
+from app.core.db import list_schedules, create_schedule, update_schedule, toggle_schedule, delete_schedule, get_schedule
 
 log = logging.getLogger(__name__)
 router = APIRouter()
@@ -65,6 +65,30 @@ def api_toggle_schedule(sid: int, request: Request):
 @router.delete("/api/schedules/{sid}")
 def api_delete_schedule(sid: int, request: Request):
     _check_admin(request); delete_schedule(sid); return {"deleted": True}
+
+
+@router.post("/api/schedules/{sid}/run-now")
+def api_run_schedule_now(sid: int, request: Request):
+    """Manually trigger a schedule immediately, using its stored payload."""
+    _check_admin(request)
+    s = get_schedule(sid)
+    if not s:
+        raise HTTPException(status_code=404, detail="Schedule not found")
+    if not s.get("graph_id"):
+        raise HTTPException(status_code=400, detail="Schedule has no graph_id — cannot trigger manually")
+
+    import json as _json
+    from app.worker import enqueue_graph
+    payload = s.get("payload") or {}
+    if isinstance(payload, str):
+        try:
+            payload = _json.loads(payload)
+        except Exception:
+            payload = {}
+
+    task = enqueue_graph.delay(s["graph_id"], payload)
+    log.info("Manual trigger: schedule %s → graph %s (task %s)", sid, s["graph_id"], task.id)
+    return {"queued": True, "task_id": task.id, "graph_id": s["graph_id"]}
 
 
 @router.get("/api/schedules/next-run")

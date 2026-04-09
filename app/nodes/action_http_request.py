@@ -13,7 +13,6 @@ def run(config, inp, context, logger, creds=None, **kwargs):
     url     = _render(config.get("url", ""),    context, creds)
     method  = config.get("method", "GET").upper()
     headers = {}
-    body    = None
 
     # ── Credential shortcut (Bearer token / API key) ──────────────────────
     cred_name = _render(config.get("credential", ""), context, creds)
