@@ -11,6 +11,7 @@ from app.core.db import (
     get_graph_by_slug, get_graph_by_name, duplicate_graph,
     list_graph_versions, save_graph_version, get_graph_version,
     sync_graph_schedules,
+    get_graph_alerts, update_graph_alerts,
 )
 from app.worker import enqueue_graph
 
@@ -249,3 +250,35 @@ def api_restore_version(graph_id: int, version_id: int, request: Request):
     _sync_cron_triggers(graph_id, gd)
     save_graph_version(graph_id, g['name'], v['graph_json'], note=f"Restored from v{v['version']}")
     return _graph_with_data(get_graph(graph_id))
+
+
+# ── Per-flow alert configuration ──────────────────────────────────────────────
+class AlertConfig(BaseModel):
+    alert_emails:     Optional[str]  = None   # comma-separated
+    alert_webhook:    Optional[str]  = None
+    alert_on_success: bool           = False
+
+
+@router.get("/api/graphs/{graph_id}/alerts")
+def api_get_alerts(graph_id: int, request: Request):
+    _check_admin(request)
+    if not get_graph(graph_id):
+        raise HTTPException(404, "Graph not found")
+    cfg = get_graph_alerts(graph_id)
+    if cfg is None:
+        raise HTTPException(404, "Graph not found")
+    return cfg
+
+
+@router.put("/api/graphs/{graph_id}/alerts")
+def api_update_alerts(graph_id: int, body: AlertConfig, request: Request):
+    _check_admin(request)
+    if not get_graph(graph_id):
+        raise HTTPException(404, "Graph not found")
+    update_graph_alerts(
+        graph_id,
+        alert_emails=body.alert_emails,
+        alert_webhook=body.alert_webhook,
+        alert_on_success=body.alert_on_success,
+    )
+    return get_graph_alerts(graph_id)

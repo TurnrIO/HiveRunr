@@ -2365,6 +2365,9 @@ function GraphRow({ g, running, onRun, onToggle, onDuplicate, onDelete, onRename
   const [previewVersion, setPreviewVersion] = useState(null);  // {version, graph_data, note, saved_at}
   const [loadingPreview, setLoadingPreview] = useState(false);
   const [confirmState, setConfirmState] = useState(null);
+  const [showAlerts, setShowAlerts] = useState(false);
+  const [alertCfg, setAlertCfg] = useState({alert_emails:"",alert_webhook:"",alert_on_success:false});
+  const [savingAlerts, setSavingAlerts] = useState(false);
   const nodeCount = ((g.graph_data?.nodes)||[]).filter(n=>n.type!=="note").length;
 
   useEffect(()=>{
@@ -2391,6 +2394,32 @@ function GraphRow({ g, running, onRun, onToggle, onDuplicate, onDelete, onRename
       setPreviewVersion(full);
     } catch(e) { showToast(e.message,"error"); }
     setLoadingPreview(false);
+  }
+
+  async function openAlerts() {
+    try {
+      const cfg = await api("GET",`/api/graphs/${g.id}/alerts`);
+      setAlertCfg({
+        alert_emails:    cfg.alert_emails    || "",
+        alert_webhook:   cfg.alert_webhook   || "",
+        alert_on_success: cfg.alert_on_success || false,
+      });
+      setShowAlerts(true);
+    } catch(e) { showToast(e.message,"error"); }
+  }
+
+  async function saveAlerts() {
+    setSavingAlerts(true);
+    try {
+      await api("PUT",`/api/graphs/${g.id}/alerts`, {
+        alert_emails:    alertCfg.alert_emails.trim()   || null,
+        alert_webhook:   alertCfg.alert_webhook.trim()  || null,
+        alert_on_success: alertCfg.alert_on_success,
+      });
+      showToast("Alert settings saved");
+      setShowAlerts(false);
+    } catch(e) { showToast(e.message,"error"); }
+    setSavingAlerts(false);
   }
 
   async function restoreVersion(vid) {
@@ -2433,6 +2462,7 @@ function GraphRow({ g, running, onRun, onToggle, onDuplicate, onDelete, onRename
             <button className="btn btn-ghost" onClick={()=>onRename(g)}>✏ Rename</button>
             <button className="btn btn-ghost" onClick={()=>onDuplicate(g)}>📋 Duplicate</button>
             <button className="btn btn-ghost" onClick={openVersionHistory} disabled={loadingVersions}>📜 History</button>
+            <button className="btn btn-ghost" onClick={openAlerts}>🔔 Alerts</button>
             <button className="btn btn-ghost" onClick={()=>onToggle(g.id,g.enabled)}>{g.enabled?"⏸ Disable":"▶ Enable"}</button>
             <div style={{flex:1}}/>
             <div style={{fontSize:11,color:"#4b5563",alignSelf:"center",display:"flex",gap:8,alignItems:"center"}}>
@@ -2523,6 +2553,49 @@ function GraphRow({ g, running, onRun, onToggle, onDuplicate, onDelete, onRename
         </div>
       )}
       {confirmState && <ConfirmModal message={confirmState.message} confirmLabel={confirmState.confirmLabel} onConfirm={()=>{confirmState.fn();setConfirmState(null);}} onCancel={()=>setConfirmState(null)}/>}
+
+      {showAlerts && (
+        <div className="modal-overlay" onClick={e=>{ if(e.target.className==="modal-overlay") setShowAlerts(false); }}>
+          <div className="modal" style={{maxWidth:480}}>
+            <h2>🔔 Alert Settings — {g.name}</h2>
+            <p style={{fontSize:13,color:"#64748b",marginBottom:20}}>
+              Notifications are sent when this flow fails. Enable "also on success" to alert on every run.
+            </p>
+
+            <div className="field-group">
+              <label className="field-label">Email recipients</label>
+              <input className="field-input" type="text" placeholder="alice@example.com, bob@example.com"
+                value={alertCfg.alert_emails}
+                onChange={e=>setAlertCfg(c=>({...c,alert_emails:e.target.value}))}/>
+              <div style={{fontSize:11,color:"#475569",marginTop:4}}>Comma-separated. Requires AGENTMAIL_API_KEY in .env.</div>
+            </div>
+
+            <div className="field-group">
+              <label className="field-label">Webhook URL</label>
+              <input className="field-input" type="url" placeholder="https://hooks.example.com/…"
+                value={alertCfg.alert_webhook}
+                onChange={e=>setAlertCfg(c=>({...c,alert_webhook:e.target.value}))}/>
+              <div style={{fontSize:11,color:"#475569",marginTop:4}}>POST JSON with event, flow, task_id, status, error.</div>
+            </div>
+
+            <div className="field-group" style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}>
+              <input type="checkbox" id={`alert-success-${g.id}`} checked={alertCfg.alert_on_success}
+                onChange={e=>setAlertCfg(c=>({...c,alert_on_success:e.target.checked}))}
+                style={{width:16,height:16,accentColor:"#7c3aed",cursor:"pointer"}}/>
+              <label htmlFor={`alert-success-${g.id}`} style={{fontSize:13,color:"#94a3b8",cursor:"pointer",margin:0}}>
+                Also alert on successful runs
+              </label>
+            </div>
+
+            <div className="modal-btns">
+              <button className="btn btn-ghost" onClick={()=>setShowAlerts(false)}>Cancel</button>
+              <button className="btn btn-primary" disabled={savingAlerts} onClick={saveAlerts}>
+                {savingAlerts ? "Saving…" : "Save alerts"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }

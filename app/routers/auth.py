@@ -70,6 +70,8 @@ from app.core.db import (
     update_user_password, update_user_role, delete_user,
     create_session, delete_session_by_token_hash,
     create_api_token, list_api_tokens, get_api_token_by_hash, touch_api_token, delete_api_token,
+    get_owner_user, create_password_reset_token, get_password_reset_by_token,
+    consume_password_reset_token,
 )
 
 router = APIRouter()
@@ -333,3 +335,68 @@ def api_delete_token(token_id: int, request: Request):
     _require_owner(request)
     delete_api_token(token_id)
     return {"ok": True}
+
+
+# ── Forgot / reset password (owner only) ─────────────────────────────────────
+class ForgotPasswordBody(BaseModel):
+    email: str
+
+
+@router.post("/api/auth/forgot-password")
+def auth_forgot_password(body: ForgotPasswordBody):
+    """Generate a one-time reset link and email it to the owner.
+
+    Always returns 200 regardless of whether the email matched, to avoid
+    leaking account existence information.
+    """
+    import datetime as _dt
+    from app.email import send_password_reset, _is_configured
+    from app.auth import hash_token
+    import os
+
+    owner = get_owner_user()
+    # Only proceed if email matches the owner and email is configured
+    if (
+        owner
+        and owner["email"].lower() == body.email.strip().lower()
+        and _is_configured()
+    ):
+        raw_token  = _sec.token_urlsafe(32)
+        token_hash = hash_token(raw_token)
+        expires_at = _dt.datetime.utcnow() + _dt.timedelta(hours=1)
+        try:
+            create_password_reset_token(owner["id"], token_hash, expires_at)
+            app_url   = os.environ.get("APP_URL", "http://localhost").rstrip("/")
+            reset_url = f"{app_url}/reset-password?token={raw_token}"
+            send_password_reset(
+                to=owner["email"],
+                reset_url=reset_url,
+                username=owner["username"],
+            )
+        except Exception as exc:
+            log.error("forgot-password: %s", exc)
+
+    return {"ok": True, "message": "If that email matches the owner account, a reset link has been sent."}
+
+
+class ResetPasswordBody(BaseModel):
+    token: str
+    new_password: str
+
+
+@router.post("/api/auth/reset-password")
+def auth_reset_password(body: ResetPasswordBody):
+    """Validate a reset token and set a new password."""
+    from app.auth import hash_token, hash_password
+
+    if len(body.new_password) < 8:
+        raise HTTPException(422, "Password must be at least 8 characters")
+
+    token_hash = hash_token(body.token)
+    record     = get_password_reset_by_token(token_hash)
+    if not record:
+        raise HTTPException(400, "Invalid or expired reset token")
+
+    update_user_password(record["user_id"], hash_password(body.new_password))
+    consume_password_reset_token(token_hash)
+    return {"ok": True, "message": "Password updated. You can now log in."}
