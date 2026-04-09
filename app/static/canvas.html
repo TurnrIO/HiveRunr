@@ -1319,6 +1319,7 @@ function HistoryModal({ isOpen, onClose, graphId, showToast }) {
       </div>
     </div>
     {confirmState && <ConfirmModal message={confirmState.message} confirmLabel={confirmState.confirmLabel} onConfirm={()=>{confirmState.fn();setConfirmState(null);}} onCancel={()=>setConfirmState(null)}/>}
+  </>
   );
 }
 
