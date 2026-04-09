@@ -29,3 +29,6 @@ runlogs/
 
 # pip typo artefacts (e.g. `pip install pkg =1.0.0` → creates a file named "=1.0.0")
 =[0-9]*
+
+# Claude project context — local working file, not for version control
+CLAUDE.md
