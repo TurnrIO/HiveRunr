@@ -1307,6 +1307,56 @@ function CronNextRun({ cron, timezone, enabled, runAt }) {
   );
 }
 
+// ── DateTimePicker ────────────────────────────────────────────────────────
+// A styled datetime-local input with quick-pick shortcuts for one-off schedules.
+function DateTimePicker({ value, onChange, required }) {
+  // Quick-pick helpers — return a local datetime-local string (YYYY-MM-DDTHH:mm)
+  function localStr(d) {
+    const pad = n => String(n).padStart(2,"0");
+    return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  }
+
+  const picks = [
+    { label:"In 1 hour",    fn:()=>{ const d=new Date(); d.setHours(d.getHours()+1,0,0,0);   return d; }},
+    { label:"In 4 hours",   fn:()=>{ const d=new Date(); d.setHours(d.getHours()+4,0,0,0);   return d; }},
+    { label:"Tonight 8pm",  fn:()=>{ const d=new Date(); d.setHours(20,0,0,0);               return d; }},
+    { label:"Tomorrow 9am", fn:()=>{ const d=new Date(); d.setDate(d.getDate()+1); d.setHours(9,0,0,0); return d; }},
+    { label:"Mon 9am",      fn:()=>{
+        const d=new Date();
+        const day=d.getDay(); // 0=Sun
+        d.setDate(d.getDate() + ((8-day)%7||7));
+        d.setHours(9,0,0,0);
+        return d;
+    }},
+  ];
+
+  return (
+    <div>
+      <input
+        type="datetime-local"
+        value={value}
+        onChange={e=>onChange(e.target.value)}
+        required={required}
+        style={{width:"100%",marginBottom:6}}
+      />
+      <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
+        {picks.map(p=>(
+          <button key={p.label} type="button"
+            onClick={()=>onChange(localStr(p.fn()))}
+            style={{
+              padding:"3px 9px",fontSize:11,borderRadius:6,cursor:"pointer",border:"1px solid #2a2d3e",
+              background:"#1a1d2e",color:"#94a3b8",fontWeight:500,
+            }}
+            onMouseEnter={e=>e.currentTarget.style.borderColor="#7c3aed"}
+            onMouseLeave={e=>e.currentTarget.style.borderColor="#2a2d3e"}>
+            {p.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 const COMMON_TZ = [
   "UTC",
   "Europe/London","Europe/Paris","Europe/Berlin","Europe/Amsterdam",
@@ -1528,7 +1578,7 @@ function Schedules({ showToast, user }) {
               <div className="form-row">
                 <div className="form-group">
                   <label>Run at (local time)</label>
-                  <input type="datetime-local" value={form.run_at} onChange={e=>setForm({...form,run_at:e.target.value})} required={schedMode==="once"}/>
+                  <DateTimePicker value={form.run_at} onChange={v=>setForm({...form,run_at:v})} required={schedMode==="once"}/>
                 </div>
                 <div className="form-group">
                   <label>Timezone</label>
@@ -1636,7 +1686,7 @@ function Schedules({ showToast, user }) {
                             <div style={{display:"grid",gridTemplateColumns:"2fr 1fr",gap:12,marginBottom:10}}>
                               <div style={{display:"flex",flexDirection:"column",gap:4}}>
                                 <label style={{fontSize:11,color:"#94a3b8"}}>Run at</label>
-                                <input type="datetime-local" value={editForm.run_at} onChange={e=>setEditForm(p=>({...p,run_at:e.target.value}))}/>
+                                <DateTimePicker value={editForm.run_at} onChange={v=>setEditForm(p=>({...p,run_at:v}))}/>
                               </div>
                               <div style={{display:"flex",flexDirection:"column",gap:4}}>
                                 <label style={{fontSize:11,color:"#94a3b8"}}>Timezone</label>
