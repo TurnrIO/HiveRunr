@@ -256,7 +256,7 @@ function Dashboard({ showToast, user }) {
                     <div className={g.enabled?"wf-enabled":"wf-disabled"}>{g.enabled?"● enabled":"○ disabled"}</div>
                   </div>
                   {!ro && <div style={{display:"flex",gap:8}}>
-                    <a className="btn btn-ghost" href={`/canvas?token=${TOKEN}#graph-${g.id}`}>✏️ Edit</a>
+                    <a className="btn btn-ghost" href={`/canvas#graph-${g.id}`}>✏️ Edit</a>
                     <button className="btn btn-success" disabled={!g.enabled} onClick={async()=>{try{await api("POST",`/api/graphs/${g.id}/run`,{payload:{}});load();showToast("Queued!");}catch(e){showToast(e.message,"error");}}}>▶ Run</button>
                   </div>}
                 </div>
@@ -2422,7 +2422,7 @@ function GraphRow({ g, running, onRun, onToggle, onDuplicate, onDelete, onRename
             {g.description && <div style={{fontSize:12,color:"#64748b"}}>{g.description}</div>}
           </div>
           <div style={{display:"flex",gap:6,flex:"none"}}>
-            <a className="btn btn-ghost" href={`/canvas?token=${TOKEN}#graph-${g.id}`}>{ro?"👁 View":"✏️ Edit"}</a>
+            <a className="btn btn-ghost" href={`/canvas#graph-${g.id}`}>{ro?"👁 View":"✏️ Edit"}</a>
             {!ro && <button className="btn btn-success" disabled={running===g.id||!g.enabled}
                     onClick={()=>onRun(g.id,g.name)}>{running===g.id?"…":"▶"}</button>}
             {!ro && <button className="btn btn-ghost" onClick={()=>setOpen(o=>!o)} aria-expanded={open}>⋯</button>}
