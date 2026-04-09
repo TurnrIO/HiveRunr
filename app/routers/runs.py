@@ -6,7 +6,11 @@ from pydantic import BaseModel
 from typing import Optional
 
 from app.deps import _check_admin, _require_run_scope, _require_manage_scope
-from app.core.db import list_runs, delete_run, clear_runs, get_run_by_task, update_run, get_graph
+from app.core.db import (
+    list_runs, delete_run, clear_runs, get_run_by_task, update_run, get_graph,
+    trim_runs_by_count, trim_runs_by_age,
+    get_retention_policy, set_retention_policy,
+)
 
 log = logging.getLogger(__name__)
 router = APIRouter()
@@ -92,23 +96,50 @@ def api_clear_runs(request: Request):
 
 class TrimRunsBody(BaseModel):
     keep: int = 100
+    days: Optional[int] = None   # if set, trim by age instead of count
 
 
 @router.post("/api/runs/trim")
 def api_trim_runs(body: TrimRunsBody, request: Request):
-    """Keep only the most recent `keep` runs; delete the rest."""
+    """Trim run history.
+
+    - `keep` (default 100): keep the N most recent runs, delete the rest.
+    - `days`: delete runs older than N days (takes precedence over `keep` when set).
+    """
     _require_manage_scope(request)
-    from app.core.db import get_conn
-    with get_conn() as conn:
-        cur = conn.cursor()
-        cur.execute("""
-            DELETE FROM runs
-            WHERE id NOT IN (
-                SELECT id FROM runs ORDER BY id DESC LIMIT %s
-            )
-        """, (body.keep,))
-        deleted = cur.rowcount
-    return {"deleted": deleted, "kept": body.keep}
+    if body.days is not None:
+        deleted = trim_runs_by_age(body.days)
+        return {"deleted": deleted, "mode": "age", "older_than_days": body.days}
+    else:
+        deleted = trim_runs_by_count(body.keep)
+        return {"deleted": deleted, "mode": "count", "kept": body.keep}
+
+
+# ── Retention policy settings ─────────────────────────────────────────────────
+@router.get("/api/runs/retention")
+def api_get_retention(request: Request):
+    _require_manage_scope(request)
+    return get_retention_policy()
+
+
+class RetentionBody(BaseModel):
+    enabled: bool = False
+    mode:    str  = "count"   # "count" | "age"
+    count:   int  = 500
+    days:    int  = 30
+
+
+@router.put("/api/runs/retention")
+def api_set_retention(body: RetentionBody, request: Request):
+    _require_manage_scope(request)
+    if body.mode not in ("count", "age"):
+        raise HTTPException(422, "mode must be 'count' or 'age'")
+    if body.count < 1:
+        raise HTTPException(422, "count must be ≥ 1")
+    if body.days < 1:
+        raise HTTPException(422, "days must be ≥ 1")
+    set_retention_policy(body.enabled, body.mode, body.count, body.days)
+    return get_retention_policy()
 
 
 @router.post("/api/runs/{run_id}/cancel")

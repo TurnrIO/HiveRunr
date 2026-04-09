@@ -180,6 +180,23 @@ def _purge_sessions():
         log.warning("Session purge failed: %s", exc)
 
 
+def _auto_trim_runs():
+    """Nightly job — apply the configured run retention policy."""
+    try:
+        from app.core.db import get_retention_policy, trim_runs_by_count, trim_runs_by_age
+        policy = get_retention_policy()
+        if not policy["enabled"]:
+            return
+        if policy["mode"] == "age":
+            deleted = trim_runs_by_age(policy["days"])
+            log.info("Auto-trim: deleted %d runs older than %d days", deleted, policy["days"])
+        else:
+            deleted = trim_runs_by_count(policy["count"])
+            log.info("Auto-trim: deleted %d runs, kept %d most recent", deleted, policy["count"])
+    except Exception as exc:
+        log.warning("Auto-trim failed: %s", exc)
+
+
 def _run_as_leader(r):
     """Run APScheduler for as long as we hold the lock.
 
@@ -209,6 +226,10 @@ def _run_as_leader(r):
     scheduler.add_job(
         _purge_sessions, CronTrigger(hour=2, minute=0), id="__session_purge__"
     )
+    # Nightly maintenance: auto-trim run history per retention policy
+    scheduler.add_job(
+        _auto_trim_runs, CronTrigger(hour=3, minute=0), id="__auto_trim__"
+    )
 
     try:
         scheduler.start()
@@ -233,6 +254,9 @@ def _run_standalone():
     scheduler.add_job(refresh, "interval", seconds=30, id="__refresh__")
     scheduler.add_job(
         _purge_sessions, CronTrigger(hour=2, minute=0), id="__session_purge__"
+    )
+    scheduler.add_job(
+        _auto_trim_runs, CronTrigger(hour=3, minute=0), id="__auto_trim__"
     )
     try:
         scheduler.start()
