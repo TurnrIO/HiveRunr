@@ -255,8 +255,8 @@ def list_runs(page: int = 1, page_size: int = 50,
     with get_conn() as conn:
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
 
-        cur.execute(f"SELECT COUNT(*) {base_query}", params)
-        total = cur.fetchone()[0]
+        cur.execute(f"SELECT COUNT(*) AS n {base_query}", params)
+        total = cur.fetchone()["n"]
 
         cur.execute(
             f"""SELECT r.*, COALESCE(g.name, r.workflow) AS flow_name
