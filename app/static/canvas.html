@@ -287,7 +287,7 @@ const NODE_DEFS = {
   "trigger.manual":      { label:"Manual Trigger",    icon:"▶",  color:"#059669", group:"trigger",   fields:[] },
   "trigger.webhook":     { label:"Webhook Trigger",   icon:"🔗", color:"#0284c7", group:"trigger",   fields:[{k:"description",l:"Description",ph:"What this webhook receives…"}] },
   "trigger.cron":        { label:"Cron Schedule",     icon:"⏰", color:"#7c3aed", group:"trigger",   fields:[{k:"cron",l:"Cron expression",ph:"0 9 * * 1-5"},{k:"timezone",l:"Timezone",ph:"UTC"},{k:"description",l:"Description (optional)",ph:"Weekdays at 9am"}] },
-  "action.http_request": { label:"HTTP Request",      icon:"🌐", color:"#0891b2", group:"action",    fields:[{k:"url",l:"URL",ph:"https://api.example.com/data"},{k:"method",l:"Method",ph:"GET"},{k:"headers_json",l:"Headers (JSON)",ph:'{"Authorization":"Bearer {{token}}"}',mono:true},{k:"body_json",l:"Body (JSON)",ph:'{"key":"{{value}}"}',mono:true,textarea:true}] },
+  "action.http_request": { label:"HTTP Request",      icon:"🌐", color:"#0891b2", group:"action",    fields:[{k:"url",l:"URL",ph:"https://api.example.com/data"},{k:"method",l:"Method",ph:"GET",type:"select",options:["GET","POST","PUT","PATCH","DELETE","HEAD"]},{k:"credential",l:"Bearer Credential (name)",ph:"my-api-credential"},{k:"headers_json",l:"Headers (JSON)",ph:'{"Authorization":"Bearer {{token}}"}',mono:true},{k:"body_json",l:"Body (JSON)",ph:'{"key":"{{value}}"}',mono:true,textarea:true},{k:"form_json",l:"Form data (JSON)",ph:'{"field":"value"}',mono:true},{k:"timeout",l:"Timeout (seconds)",ph:"30"},{k:"ignore_errors",l:"Ignore HTTP errors",ph:"false",type:"select",options:["false","true"]}] },
   "action.transform":    { label:"Transform",         icon:"⚙",  color:"#7c3aed", group:"action",    fields:[{k:"expression",l:"Python expression",ph:"{'out': input['value'] * 2}",mono:true,textarea:true}] },
   "action.condition":    { label:"Condition",         icon:"◈",  color:"#d97706", group:"action",    fields:[{k:"expression",l:"Condition (Python bool)",ph:"input.get('status') == 'ok'",mono:true}] },
   "action.filter":       { label:"Filter / Where",    icon:"🔽", color:"#0d9488", group:"action",    fields:[{k:"field",l:"Array field (blank = whole input)",ph:"items"},{k:"expression",l:"Keep condition (use 'item')",ph:"item.get('active') == True",mono:true,textarea:true}] },
@@ -339,6 +339,36 @@ const NODE_DEFS = {
   ]},
   "action.merge":        { label:"Merge / Join",       icon:"⇒",  color:"#0f766e", group:"action", fields:[
     {k:"mode",l:"Mode",ph:"dict",type:"select",options:["dict","all","first"]},
+  ]},
+  "action.switch":       { label:"Switch / Router",    icon:"⑂",  color:"#b45309", group:"action", fields:[
+    {k:"value",l:"Value expression",ph:"input.get('status')",mono:true},
+    {k:"cases",l:'Cases (JSON array)',ph:'[{"match":"ok","label":"success"},{"match":"error","label":"failure"}]',mono:true,textarea:true},
+  ]},
+  "action.aggregate":    { label:"Aggregate",          icon:"⊞",  color:"#0f766e", group:"action", fields:[
+    {k:"mode",l:"Mode",ph:"list",type:"select",options:["list","dict","concat"]},
+    {k:"field",l:"Extract field from each item (optional)",ph:"result"},
+    {k:"separator",l:"Separator (concat mode)",ph:"\\n"},
+  ]},
+  "action.date":         { label:"Date / Time",        icon:"📅", color:"#0369a1", group:"action", fields:[
+    {k:"operation",l:"Operation",ph:"now",type:"select",options:["now","format","parse","add","subtract","diff"]},
+    {k:"date",l:"Date / timestamp (blank = now)",ph:"{{upstream.created_at}}"},
+    {k:"date2",l:"Second date (diff only)",ph:"{{upstream.updated_at}}"},
+    {k:"format",l:"Output format (strftime)",ph:"%Y-%m-%d %H:%M:%S"},
+    {k:"amount",l:"Amount (add / subtract)",ph:"1"},
+    {k:"unit",l:"Unit (add / subtract)",ph:"days",type:"select",options:["seconds","minutes","hours","days","weeks"]},
+  ]},
+  "action.discord":      { label:"Discord",            icon:"🎮", color:"#5865f2", group:"action", fields:[
+    {k:"credential",l:"Discord Credential (name)",ph:"my-discord"},
+    {k:"webhook_url",l:"Webhook URL (overrides credential)",ph:"https://discord.com/api/webhooks/…",secret:true},
+    {k:"message",l:"Message",ph:"Flow done: {{upstream.result}}",textarea:true},
+    {k:"username",l:"Bot display name (optional)",ph:"HiveRunr"},
+    {k:"avatar_url",l:"Avatar URL (optional)",ph:"https://…/icon.png"},
+  ]},
+  "action.csv":          { label:"CSV",                icon:"📄", color:"#16a34a", group:"action", fields:[
+    {k:"operation",l:"Operation",ph:"parse",type:"select",options:["parse","generate"]},
+    {k:"content",l:"CSV content (parse — blank = use input)",ph:"{{upstream.body}}",textarea:true,mono:true},
+    {k:"field",l:"Field containing items (generate)",ph:"rows"},
+    {k:"delimiter",l:"Delimiter",ph:","},
   ]},
   "note":                { label:"Sticky Note",        icon:"📝", color:"#ca8a04", group:"utility",   fields:[{k:"text",l:"Note text",ph:"Document what this part of the flow does…",textarea:true}] },
 };
@@ -1004,6 +1034,56 @@ function ConfigPanel({ node, onChange, onDelete, edges }){
               <code style={{color:"#60a5fa"}}>all</code><span>→ {"{ merged: [...], count: N }"}</span>
               <code style={{color:"#94a3b8"}}>first</code><span>→ pass through the first upstream value</span>
             </div>
+          </div>
+        )}
+        {node.data.type === "action.switch" && (
+          <div style={{background:"#0f1117",border:"1px solid #2a2d3e",borderRadius:6,padding:"8px 10px",fontSize:10,color:"#94a3b8",marginTop:6,lineHeight:1.8}}>
+            Value expression evaluates to a string/number, then matched against cases in order — first match wins.<br/>
+            <div style={{marginTop:4}}>Cases JSON: <code style={{color:"#a78bfa"}}>{'[{"match":"ok","label":"success"},{"match":"error","label":"failure"}]'}</code></div>
+            <div style={{marginTop:4}}>Output: <code style={{color:"#a78bfa"}}>{"{ value, matched_case, matched_index, no_match }"}</code></div>
+            <div style={{color:"#64748b",marginTop:4}}>Use <code>matched_case</code> in downstream nodes to route behaviour. <code>no_match: true</code> if nothing matched.</div>
+          </div>
+        )}
+        {node.data.type === "action.aggregate" && (
+          <div style={{background:"#0f1117",border:"1px solid #2a2d3e",borderRadius:6,padding:"8px 10px",fontSize:10,color:"#94a3b8",marginTop:6,lineHeight:1.8}}>
+            Place after a Loop body to collect per-item results.<br/>
+            <div style={{display:"grid",gridTemplateColumns:"auto 1fr",gap:"0 10px",marginTop:4}}>
+              <code style={{color:"#4ade80"}}>list</code><span>→ <code>{"{ items:[...], count }"}</code></span>
+              <code style={{color:"#60a5fa"}}>dict</code><span>→ merge item dicts into one object</span>
+              <code style={{color:"#94a3b8"}}>concat</code><span>→ join items as strings with separator</span>
+            </div>
+          </div>
+        )}
+        {node.data.type === "action.date" && (
+          <div style={{background:"#0f1117",border:"1px solid #2a2d3e",borderRadius:6,padding:"8px 10px",fontSize:10,color:"#94a3b8",marginTop:6,lineHeight:1.8}}>
+            Output always includes: <code style={{color:"#a78bfa"}}>{"{ iso, unix, formatted, year, month, day, hour, minute, second, weekday }"}</code><br/>
+            <code>diff</code> returns: <code style={{color:"#a78bfa"}}>{"{ seconds, minutes, hours, days, human, past }"}</code><br/>
+            <div style={{marginTop:4,color:"#64748b"}}>Date input accepts ISO 8601 strings or Unix timestamps. Leave blank to use current UTC time.</div>
+          </div>
+        )}
+        {node.data.type === "action.discord" && (
+          <div style={{background:"#0f1117",border:"1px solid #2a2d3e",borderRadius:6,padding:"8px 10px",fontSize:10,color:"#94a3b8",marginTop:6,lineHeight:1.9}}>
+            <div style={{color:"#a78bfa",fontWeight:600,marginBottom:4}}>💡 Credential shortcut</div>
+            Create a <strong>Discord Webhook</strong> credential, then set <strong>Discord Credential</strong> to its name.<br/>
+            The Webhook URL field overrides the credential if both are set.<br/>
+            <div style={{marginTop:4}}>Output: <code style={{color:"#a78bfa"}}>{"{ sent: true, message }"}</code></div>
+          </div>
+        )}
+        {node.data.type === "action.csv" && (
+          <div style={{background:"#0f1117",border:"1px solid #2a2d3e",borderRadius:6,padding:"8px 10px",fontSize:10,color:"#94a3b8",marginTop:6,lineHeight:1.8}}>
+            <div style={{display:"grid",gridTemplateColumns:"auto 1fr",gap:"0 10px"}}>
+              <code style={{color:"#4ade80"}}>parse</code><span>→ CSV string to list of dicts; output: <code>{"{ rows, count, headers }"}</code></span>
+              <code style={{color:"#60a5fa"}}>generate</code><span>→ list of dicts to CSV string; output: <code>{"{ csv, count }"}</code></span>
+            </div>
+            <div style={{marginTop:4,color:"#64748b"}}>Parse: leave content blank to use upstream input directly.</div>
+          </div>
+        )}
+        {node.data.type === "action.http_request" && (
+          <div style={{background:"#0f1117",border:"1px solid #2a2d3e",borderRadius:6,padding:"8px 10px",fontSize:10,color:"#94a3b8",marginTop:6,lineHeight:1.9}}>
+            <div style={{color:"#a78bfa",fontWeight:600,marginBottom:4}}>💡 Credential shortcut</div>
+            Create a credential with a <code>token</code> or <code>api_key</code> field; set <strong>Bearer Credential</strong> to its name — the Authorization header is set automatically.<br/>
+            <div style={{marginTop:4}}>Output: <code style={{color:"#a78bfa"}}>{"{ status, ok, body, headers }"}</code></div>
+            <div style={{marginTop:4,color:"#64748b"}}><code>ignore_errors: true</code> prevents raising on 4xx/5xx — check <code>ok</code> in downstream nodes.</div>
           </div>
         )}
 
@@ -1998,6 +2078,45 @@ function NodeEditorModal({ node, onChange, onDelete, onClose, edges, allNodes, c
                   <code style={{color:"#60a5fa"}}>all</code><span>→ {"{ merged: [...], count }"}</span>
                   <code style={{color:"#94a3b8"}}>first</code><span>→ pass first upstream value</span>
                 </div>
+              </div>
+            )}
+            {node.data.type==="action.switch"&&(
+              <div style={{background:"#0f1117",border:"1px solid #2a2d3e",borderRadius:6,padding:"8px 10px",fontSize:10,color:"#94a3b8",marginTop:6,lineHeight:1.8}}>
+                Output: <code style={{color:"#a78bfa"}}>{"{ value, matched_case, matched_index, no_match }"}</code><br/>
+                <div style={{color:"#64748b",marginTop:3}}>Cases matched in order — first match wins. <code>no_match: true</code> if nothing matched.</div>
+              </div>
+            )}
+            {node.data.type==="action.aggregate"&&(
+              <div style={{background:"#0f1117",border:"1px solid #2a2d3e",borderRadius:6,padding:"8px 10px",fontSize:10,color:"#94a3b8",marginTop:6,lineHeight:1.8}}>
+                <div style={{display:"grid",gridTemplateColumns:"auto 1fr",gap:"0 10px"}}>
+                  <code style={{color:"#4ade80"}}>list</code><span>→ {"{ items:[...], count }"}</span>
+                  <code style={{color:"#60a5fa"}}>dict</code><span>→ merged object</span>
+                  <code style={{color:"#94a3b8"}}>concat</code><span>→ {"{ result: '...', count }"}</span>
+                </div>
+              </div>
+            )}
+            {node.data.type==="action.date"&&(
+              <div style={{background:"#0f1117",border:"1px solid #2a2d3e",borderRadius:6,padding:"8px 10px",fontSize:10,color:"#94a3b8",marginTop:6,lineHeight:1.8}}>
+                Output: <code style={{color:"#a78bfa"}}>{"{ iso, unix, formatted, year, month, day, hour, minute, second, weekday }"}</code><br/>
+                <code>diff</code>: <code style={{color:"#a78bfa"}}>{"{ seconds, minutes, hours, days, human, past }"}</code>
+              </div>
+            )}
+            {node.data.type==="action.discord"&&(
+              <div style={{background:"#0f1117",border:"1px solid #2a2d3e",borderRadius:6,padding:"8px 10px",fontSize:10,color:"#94a3b8",marginTop:6}}>
+                Output: <code style={{color:"#a78bfa"}}>{"{ sent: true, message }"}</code>
+              </div>
+            )}
+            {node.data.type==="action.csv"&&(
+              <div style={{background:"#0f1117",border:"1px solid #2a2d3e",borderRadius:6,padding:"8px 10px",fontSize:10,color:"#94a3b8",marginTop:6,lineHeight:1.8}}>
+                <div style={{display:"grid",gridTemplateColumns:"auto 1fr",gap:"0 10px"}}>
+                  <code style={{color:"#4ade80"}}>parse</code><span>→ {"{ rows, count, headers }"}</span>
+                  <code style={{color:"#60a5fa"}}>generate</code><span>→ {"{ csv, count }"}</span>
+                </div>
+              </div>
+            )}
+            {node.data.type==="action.http_request"&&(
+              <div style={{background:"#0f1117",border:"1px solid #2a2d3e",borderRadius:6,padding:"8px 10px",fontSize:10,color:"#94a3b8",marginTop:6}}>
+                Output: <code style={{color:"#a78bfa"}}>{"{ status, ok, body, headers }"}</code>
               </div>
             )}
 
