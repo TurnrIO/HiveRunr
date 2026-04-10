@@ -3,9 +3,11 @@ import json
 import re as _re
 import uuid
 from pathlib import Path
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Query, Request
+from typing import Optional
 
 from app.deps import _check_admin, _require_owner
+from app.core.db import log_audit, get_audit_log
 
 SCRIPTS_DIR   = Path(__file__).parent.parent / 'workflows'
 TEMPLATES_DIR = Path(__file__).parent.parent / 'templates'
@@ -102,19 +104,21 @@ def api_runlog_file(filename: str, request: Request):
 # ── Admin reset + maintenance ─────────────────────────────────────────────────
 @router.post("/api/admin/reset")
 def api_reset(request: Request):
-    _check_admin(request)
+    user = _check_admin(request)
     from app.core.db import get_conn
     with get_conn() as conn:
         cur = conn.cursor()
         for t in ["runs", "schedules", "graph_versions", "graph_workflows", "workflows"]:
             cur.execute(f"DELETE FROM {t}")
+    log_audit(user["username"], "admin.reset", None, None, {"tables": "runs,schedules,graph_versions,graph_workflows,workflows"},
+              request.client.host if request.client else None)
     return {"reset": True}
 
 
 @router.post("/api/maintenance/reset_sequences")
 def api_reset_sequences(request: Request):
     """Reset all PostgreSQL SERIAL sequences back to 1."""
-    _require_owner(request)
+    user = _require_owner(request)
     from app.core.db import get_conn
     tables = [
         "runs", "workflows", "schedules", "graph_workflows",
@@ -124,6 +128,8 @@ def api_reset_sequences(request: Request):
         cur = conn.cursor()
         for t in tables:
             cur.execute("SELECT setval(pg_get_serial_sequence(%s, 'id'), 1, false)", (t,))
+    log_audit(user["username"], "admin.reset_sequences", None, None, None,
+              request.client.host if request.client else None)
     return {"reset": True, "tables": tables}
 
 
@@ -268,3 +274,22 @@ def api_use_template(template_id: str, request: Request):
     from app.core.db import create_graph
     g = create_graph(name, data.get("description", ""), graph_data)
     return g
+
+
+# ── Audit log ─────────────────────────────────────────────────────────────────
+@router.get("/api/audit-log")
+def api_get_audit_log(
+    request: Request,
+    limit:  int           = Query(100, ge=1, le=500),
+    offset: int           = Query(0,   ge=0),
+    actor:  Optional[str] = Query(None),
+    action: Optional[str] = Query(None),
+):
+    """Return audit log entries (owner only).  Newest first."""
+    _require_owner(request)
+    rows = get_audit_log(limit=limit, offset=offset, actor=actor, action=action)
+    # Serialize datetime objects to ISO strings for JSON
+    for r in rows:
+        if r.get("created_at"):
+            r["created_at"] = r["created_at"].isoformat()
+    return rows

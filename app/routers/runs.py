@@ -10,6 +10,7 @@ from app.core.db import (
     list_runs, delete_run, clear_runs, get_run_by_task, update_run, get_graph,
     trim_runs_by_count, trim_runs_by_age,
     get_retention_policy, set_retention_policy,
+    log_audit,
 )
 
 log = logging.getLogger(__name__)
@@ -86,12 +87,20 @@ def api_run_by_task(task_id: str, request: Request):
 
 @router.delete("/api/runs/{run_id}")
 def api_delete_run(run_id: int, request: Request):
-    _require_manage_scope(request); delete_run(run_id); return {"deleted": True}
+    user = _require_manage_scope(request)
+    delete_run(run_id)
+    log_audit(user["username"], "run.delete", "run", run_id, None,
+              request.client.host if request.client else None)
+    return {"deleted": True}
 
 
 @router.delete("/api/runs")
 def api_clear_runs(request: Request):
-    _require_manage_scope(request); clear_runs(); return {"cleared": True}
+    user = _require_manage_scope(request)
+    clear_runs()
+    log_audit(user["username"], "run.clear_all", None, None, None,
+              request.client.host if request.client else None)
+    return {"cleared": True}
 
 
 class TrimRunsBody(BaseModel):
@@ -106,12 +115,18 @@ def api_trim_runs(body: TrimRunsBody, request: Request):
     - `keep` (default 100): keep the N most recent runs, delete the rest.
     - `days`: delete runs older than N days (takes precedence over `keep` when set).
     """
-    _require_manage_scope(request)
+    user = _require_manage_scope(request)
     if body.days is not None:
         deleted = trim_runs_by_age(body.days)
+        log_audit(user["username"], "run.trim", None, None,
+                  {"mode": "age", "older_than_days": body.days, "deleted": deleted},
+                  request.client.host if request.client else None)
         return {"deleted": deleted, "mode": "age", "older_than_days": body.days}
     else:
         deleted = trim_runs_by_count(body.keep)
+        log_audit(user["username"], "run.trim", None, None,
+                  {"mode": "count", "kept": body.keep, "deleted": deleted},
+                  request.client.host if request.client else None)
         return {"deleted": deleted, "mode": "count", "kept": body.keep}
 
 
@@ -131,7 +146,7 @@ class RetentionBody(BaseModel):
 
 @router.put("/api/runs/retention")
 def api_set_retention(body: RetentionBody, request: Request):
-    _require_manage_scope(request)
+    user = _require_manage_scope(request)
     if body.mode not in ("count", "age"):
         raise HTTPException(422, "mode must be 'count' or 'age'")
     if body.count < 1:
@@ -139,6 +154,10 @@ def api_set_retention(body: RetentionBody, request: Request):
     if body.days < 1:
         raise HTTPException(422, "days must be ≥ 1")
     set_retention_policy(body.enabled, body.mode, body.count, body.days)
+    log_audit(user["username"], "settings.retention", None, None,
+              {"enabled": body.enabled, "mode": body.mode,
+               "count": body.count, "days": body.days},
+              request.client.host if request.client else None)
     return get_retention_policy()
 
 
@@ -151,7 +170,7 @@ def api_cancel_run(run_id: int, request: Request):
     Celery silently ignores the revoke in that case, and we only update the
     DB row if the run is still in a cancellable state.
     """
-    _require_run_scope(request)
+    user = _require_run_scope(request)
     from app.core.db import get_conn
     import psycopg2.extras
     with get_conn() as conn:
@@ -170,13 +189,16 @@ def api_cancel_run(run_id: int, request: Request):
     except Exception as exc:
         log.warning("Could not revoke Celery task %s: %s", task_id, exc)
     update_run(task_id, "cancelled", result={"cancelled_by": "user"})
+    log_audit(user["username"], "run.cancel", "run", run_id,
+              {"task_id": task_id},
+              request.client.host if request.client else None)
     return {"cancelled": True, "run_id": run_id, "task_id": task_id}
 
 
 @router.post("/api/runs/{run_id}/replay")
 def api_replay_run(run_id: int, request: Request):
     """Re-enqueue a past run using its stored initial_payload."""
-    _require_run_scope(request)
+    user = _require_run_scope(request)
     from app.core.db import get_conn
     from app.worker import enqueue_graph
     with get_conn() as conn:
@@ -201,4 +223,7 @@ def api_replay_run(run_id: int, request: Request):
             "INSERT INTO runs(task_id, graph_id, status, initial_payload) VALUES(%s,%s,'queued',%s)",
             (task.id, graph_id, json.dumps(payload))
         )
+    log_audit(user["username"], "run.replay", "graph", graph_id,
+              {"replayed_run_id": run_id, "task_id": task.id, "graph": g["name"]},
+              request.client.host if request.client else None)
     return {"queued": True, "task_id": task.id, "graph": g["name"], "replayed_run_id": run_id}

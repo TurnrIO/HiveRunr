@@ -12,6 +12,7 @@ from app.core.db import (
     list_graph_versions, save_graph_version, get_graph_version,
     sync_graph_schedules,
     get_graph_alerts, update_graph_alerts,
+    log_audit,
 )
 from app.worker import enqueue_graph
 
@@ -56,10 +57,13 @@ def api_graphs(request: Request):
 
 @router.post("/api/graphs")
 def api_graph_create(body: GraphCreate, request: Request):
-    _check_admin(request)
+    user = _check_admin(request)
     g = create_graph(body.name, body.description, json.dumps(body.graph_data))
     _sync_cron_triggers(g['id'], body.graph_data)
     save_graph_version(g['id'], body.name, json.dumps(body.graph_data), note="Initial version")
+    log_audit(user["username"], "graph.create", "graph", g["id"],
+              {"name": body.name, "description": body.description},
+              request.client.host if request.client else None)
     return _graph_with_data(g)
 
 
@@ -83,7 +87,7 @@ def api_graph_get(graph_id: int, request: Request):
 
 @router.put("/api/graphs/{graph_id}")
 def api_graph_update(graph_id: int, body: GraphUpdate, request: Request):
-    _check_admin(request)
+    user = _check_admin(request)
     g = get_graph(graph_id)
     if not g:
         raise HTTPException(404, "Graph not found")
@@ -94,15 +98,22 @@ def api_graph_update(graph_id: int, body: GraphUpdate, request: Request):
         _sync_cron_triggers(graph_id, body.graph_data)
         gname = body.name or g['name']
         save_graph_version(graph_id, gname, json.dumps(body.graph_data))
+    log_audit(user["username"], "graph.update", "graph", graph_id,
+              {"name": body.name or g["name"]},
+              request.client.host if request.client else None)
     return _graph_with_data(get_graph(graph_id))
 
 
 @router.delete("/api/graphs/{graph_id}")
 def api_graph_delete(graph_id: int, request: Request):
-    _check_admin(request)
-    if not get_graph(graph_id):
+    user = _check_admin(request)
+    g = get_graph(graph_id)
+    if not g:
         raise HTTPException(404, "Graph not found")
     delete_graph(graph_id)
+    log_audit(user["username"], "graph.delete", "graph", graph_id,
+              {"name": g["name"]},
+              request.client.host if request.client else None)
     return {"deleted": True, "id": graph_id}
 
 
@@ -175,7 +186,7 @@ def api_test_node(graph_id: int, node_id: str, body: NodeTestBody, request: Requ
 # ── Graph run ─────────────────────────────────────────────────────────────────
 @router.post("/api/graphs/{graph_id}/run")
 async def api_graph_run(graph_id: int, request: Request):
-    _check_admin(request)
+    user = _check_admin(request)
     g = get_graph(graph_id)
     if not g:
         raise HTTPException(404, "Graph not found")
@@ -194,6 +205,9 @@ async def api_graph_run(graph_id: int, request: Request):
             )
     except Exception as e:
         log.warning(f"Could not pre-create run record: {e}")
+    log_audit(user["username"], "graph.run", "graph", graph_id,
+              {"name": g["name"], "task_id": task.id},
+              request.client.host if request.client else None)
     return {"queued": True, "task_id": task.id, "graph": g["name"]}
 
 
@@ -209,11 +223,14 @@ def api_graph_versions(graph_id: int, request: Request):
 @router.post("/api/graphs/{graph_id}/duplicate")
 def api_duplicate_graph(graph_id: int, request: Request):
     """Clone a graph with a unique '(copy)' name suffix."""
-    _check_admin(request)
+    user = _check_admin(request)
     try:
         new_g = duplicate_graph(graph_id)
     except ValueError as exc:
         raise HTTPException(404, str(exc))
+    log_audit(user["username"], "graph.duplicate", "graph", graph_id,
+              {"new_id": new_g["id"], "new_name": new_g["name"]},
+              request.client.host if request.client else None)
     return _graph_with_data(new_g)
 
 
@@ -235,7 +252,7 @@ def api_get_graph_version(graph_id: int, version_id: int, request: Request):
 
 @router.post("/api/graphs/{graph_id}/versions/{version_id}/restore")
 def api_restore_version(graph_id: int, version_id: int, request: Request):
-    _check_admin(request)
+    user = _check_admin(request)
     g = get_graph(graph_id)
     if not g:
         raise HTTPException(404, "Graph not found")
@@ -249,6 +266,9 @@ def api_restore_version(graph_id: int, version_id: int, request: Request):
         gd = {}
     _sync_cron_triggers(graph_id, gd)
     save_graph_version(graph_id, g['name'], v['graph_json'], note=f"Restored from v{v['version']}")
+    log_audit(user["username"], "graph.restore_version", "graph", graph_id,
+              {"name": g["name"], "version_id": version_id, "version": v.get("version")},
+              request.client.host if request.client else None)
     return _graph_with_data(get_graph(graph_id))
 
 
