@@ -72,6 +72,7 @@ from app.core.db import (
     create_api_token, list_api_tokens, get_api_token_by_hash, touch_api_token, delete_api_token,
     get_owner_user, create_password_reset_token, get_password_reset_by_token,
     consume_password_reset_token,
+    log_audit,
 )
 
 router = APIRouter()
@@ -232,6 +233,9 @@ def api_create_user(body: CreateUserBody, request: Request):
                            hash_password(body.password), body.role)
     except Exception as e:
         raise HTTPException(400, str(e))
+    log_audit(actor["username"], "user.create", "user", user["id"],
+              {"username": user["username"], "role": user["role"]},
+              request.client.host if request.client else None)
     return {"id": user["id"], "username": user["username"],
             "email": user["email"], "role": user["role"]}
 
@@ -242,7 +246,7 @@ class UpdateRoleBody(BaseModel):
 
 @router.patch("/api/users/{user_id}/role")
 def api_update_user_role(user_id: int, body: UpdateRoleBody, request: Request):
-    _require_owner(request)
+    actor = _require_owner(request)
     target = get_user_by_id(user_id)
     if not target:
         raise HTTPException(404, "User not found")
@@ -253,6 +257,9 @@ def api_update_user_role(user_id: int, body: UpdateRoleBody, request: Request):
     if body.role not in ("viewer", "admin"):
         raise HTTPException(422, f"Invalid role '{body.role}'")
     update_user_role(user_id, body.role)
+    log_audit(actor["username"], "user.update_role", "user", user_id,
+              {"username": target["username"], "old_role": target["role"], "new_role": body.role},
+              request.client.host if request.client else None)
     return {"ok": True}
 
 
@@ -272,6 +279,9 @@ def api_reset_user_password(user_id: int, body: ResetPasswordBody, request: Requ
     if len(body.new_password) < 8:
         raise HTTPException(422, "Password must be at least 8 characters")
     update_user_password(user_id, hash_password(body.new_password))
+    log_audit(actor["username"], "user.reset_password", "user", user_id,
+              {"username": target["username"]},
+              request.client.host if request.client else None)
     return {"ok": True}
 
 
@@ -286,6 +296,9 @@ def api_delete_user(user_id: int, request: Request):
     if actor.get("id") == user_id:
         raise HTTPException(400, "Cannot delete your own account")
     delete_user(user_id)
+    log_audit(actor["username"], "user.delete", "user", user_id,
+              {"username": target["username"], "role": target["role"]},
+              request.client.host if request.client else None)
     return {"ok": True}
 
 
@@ -321,6 +334,9 @@ def api_create_token(body: CreateTokenBody, request: Request):
     th  = hash_token(raw)
     tok = create_api_token(body.name.strip(), th, actor.get("id") or None,
                            scope=body.scope, expires_at=expires_at)
+    log_audit(actor["username"], "token.create", "token", tok["id"],
+              {"name": tok["name"], "scope": tok["scope"]},
+              request.client.host if request.client else None)
     return {
         "id": tok["id"], "name": tok["name"],
         "created_at": tok["created_at"],
@@ -332,8 +348,13 @@ def api_create_token(body: CreateTokenBody, request: Request):
 
 @router.delete("/api/tokens/{token_id}")
 def api_delete_token(token_id: int, request: Request):
-    _require_owner(request)
+    actor = _require_owner(request)
+    # grab name before deletion for audit detail
+    existing = next((t for t in list_api_tokens() if t["id"] == token_id), None)
     delete_api_token(token_id)
+    log_audit(actor["username"], "token.delete", "token", token_id,
+              {"name": existing["name"] if existing else None},
+              request.client.host if request.client else None)
     return {"ok": True}
 
 

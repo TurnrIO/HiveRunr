@@ -925,3 +925,68 @@ def trim_runs_by_age(days: int) -> int:
             (str(max(1, days)),)
         )
         return cur.rowcount
+
+
+# ── Audit log ─────────────────────────────────────────────────────────────────
+def log_audit(
+    actor: str,
+    action: str,
+    target_type: str | None = None,
+    target_id: str | None = None,
+    detail: dict | None = None,
+    ip: str | None = None,
+) -> None:
+    """Append a single audit event.  Fire-and-forget — never raises."""
+    try:
+        with get_conn() as conn:
+            conn.cursor().execute(
+                """
+                INSERT INTO audit_log (actor, action, target_type, target_id, detail, ip)
+                VALUES (%s, %s, %s, %s, %s, %s)
+                """,
+                (
+                    actor,
+                    action,
+                    target_type,
+                    str(target_id) if target_id is not None else None,
+                    json.dumps(detail) if detail else None,
+                    ip,
+                ),
+            )
+    except Exception:
+        log.exception("audit_log write failed (non-fatal)")
+
+
+def get_audit_log(
+    limit: int = 200,
+    offset: int = 0,
+    actor: str | None = None,
+    action: str | None = None,
+) -> list[dict]:
+    """Return audit log rows newest-first, optionally filtered."""
+    clauses = []
+    params: list = []
+    if actor:
+        clauses.append("actor = %s")
+        params.append(actor)
+    if action:
+        clauses.append("action LIKE %s")
+        params.append(action + "%")
+
+    where = ("WHERE " + " AND ".join(clauses)) if clauses else ""
+    params += [max(1, min(limit, 500)), max(0, offset)]
+
+    with get_conn() as conn:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur.execute(
+            f"""
+            SELECT id, actor, action, target_type, target_id, detail, ip,
+                   created_at
+            FROM audit_log
+            {where}
+            ORDER BY created_at DESC
+            LIMIT %s OFFSET %s
+            """,
+            params,
+        )
+        return [dict(r) for r in cur.fetchall()]
