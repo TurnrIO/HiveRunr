@@ -1337,65 +1337,174 @@ function TestPayloadModal({ isOpen, onClose, onRun, testPayload, onPayloadChange
 }
 
 // ── History Modal ──────────────────────────────────────────────────────────────
-function HistoryModal({ isOpen, onClose, graphId, showToast }) {
-  const [versions, setVersions] = useState([]);
-  const [loading, setLoading] = useState(false);
+function HistoryModal({ isOpen, onClose, graphId, showToast, onRestored }) {
+  const [versions, setVersions]     = useState([]);
+  const [loading, setLoading]       = useState(false);
+  const [selected, setSelected]     = useState(null);   // version object
+  const [preview, setPreview]       = useState(null);   // {nodes, edges} from version detail
+  const [restoring, setRestoring]   = useState(false);
   const [confirmState, setConfirmState] = useState(null);
 
   useEffect(() => {
     if (!isOpen || !graphId) return;
+    setSelected(null); setPreview(null);
     async function load() {
       setLoading(true);
       try {
         const v = await api("GET", `/api/graphs/${graphId}/versions`);
-        setVersions(v);
-      } catch (e) {
-        showToast(e.message, "error");
-      }
+        setVersions(v || []);
+      } catch (e) { showToast(e.message, "error"); }
       setLoading(false);
     }
     load();
   }, [isOpen, graphId]);
 
-  async function restore(vid) {
-    setConfirmState({ message: "Restore this version? Current changes will be lost.", confirmLabel: "Restore", fn: async () => {
-      try {
-        await api("POST", `/api/graphs/${graphId}/versions/${vid}/restore`);
-        showToast("Version restored. Reloading…");
-        setTimeout(() => window.location.reload(), 500);
-      } catch (e) {
-        showToast(e.message, "error");
-      }
-    }});
+  async function selectVersion(v) {
+    setSelected(v);
+    setPreview(null);
+    try {
+      const detail = await api("GET", `/api/graphs/${graphId}/versions/${v.version}`);
+      const gd = detail.graph_data || {};
+      setPreview({ nodes: gd.nodes || [], edges: gd.edges || [] });
+    } catch(e) { /* preview optional */ }
   }
+
+  async function restore() {
+    if (!selected) return;
+    setConfirmState({
+      message: `Restore to Version ${selected.version}? Unsaved changes will be lost.`,
+      confirmLabel: "Restore",
+      fn: async () => {
+        setRestoring(true);
+        try {
+          const restored = await api("POST", `/api/graphs/${graphId}/versions/${selected.version}/restore`);
+          showToast(`Restored to v${selected.version} ✓`);
+          if (onRestored) onRestored(restored);
+          onClose();
+        } catch(e) { showToast(e.message, "error"); }
+        setRestoring(false);
+      }
+    });
+  }
+
+  function fmtDate(iso) {
+    try { return new Date(iso).toLocaleString(undefined, {month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"}); }
+    catch { return iso; }
+  }
+
+  const nonNoteNodes = (preview?.nodes || []).filter(n => n.type !== "note");
 
   if (!isOpen) return null;
   return (
     <>
     <div className="modal-overlay" onClick={e=>{ if(e.target.className==="modal-overlay") onClose() }}>
-      <div className="modal">
-        <h2>📜 Version History</h2>
-        {loading ? (
-          <div style={{textAlign:"center",color:"#64748b",padding:"20px"}}>Loading…</div>
-        ) : versions.length === 0 ? (
-          <div style={{textAlign:"center",color:"#64748b",padding:"20px"}}>No versions yet.</div>
-        ) : (
-          <div style={{marginTop:12}}>
-            {versions.map((v,idx)=>(
-              <div key={idx} className="version-row">
-                <div className="version-info">
-                  <div className="version-num">Version {v.version}</div>
-                  <div className="version-date">{new Date(v.saved_at).toLocaleString()}</div>
-                  {v.note && <div className="version-note">{v.note}</div>}
-                </div>
-                <button className="btn btn-ghost btn-sm" onClick={()=>restore(v.version)}>Restore</button>
+      <div className="modal" style={{maxWidth:700,width:"95vw",padding:0,overflow:"hidden"}}>
+        <div style={{display:"flex",height:480}}>
+
+          {/* ── Left: version list ── */}
+          <div style={{width:230,flexShrink:0,borderRight:"1px solid #1e2130",overflowY:"auto",display:"flex",flexDirection:"column"}}>
+            <div style={{padding:"16px 16px 10px",borderBottom:"1px solid #1e2130"}}>
+              <h2 style={{margin:0,fontSize:15,fontWeight:700}}>📜 Version History</h2>
+            </div>
+            {loading ? (
+              <div style={{padding:20,textAlign:"center",color:"#64748b",fontSize:13}}>Loading…</div>
+            ) : versions.length === 0 ? (
+              <div style={{padding:20,textAlign:"center",color:"#64748b",fontSize:13}}>No versions yet.</div>
+            ) : (
+              <div style={{flex:1,overflowY:"auto"}}>
+                {versions.map((v, idx) => {
+                  const isCurrent = idx === 0;
+                  const isSel = selected?.version === v.version;
+                  return (
+                    <div key={v.version}
+                      onClick={() => selectVersion(v)}
+                      style={{
+                        padding:"10px 14px", cursor:"pointer", borderBottom:"1px solid #1e2130",
+                        background: isSel ? "#1e1b4b" : "transparent",
+                        borderLeft: isSel ? "3px solid #7c3aed" : "3px solid transparent",
+                      }}>
+                      <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:2}}>
+                        <span style={{fontSize:12,fontWeight:600,color: isSel?"#a78bfa":"#e2e8f0"}}>
+                          v{v.version}
+                        </span>
+                        {isCurrent && (
+                          <span style={{fontSize:10,background:"#14532d",color:"#4ade80",padding:"1px 5px",borderRadius:3,fontWeight:600}}>
+                            CURRENT
+                          </span>
+                        )}
+                      </div>
+                      <div style={{fontSize:11,color:"#64748b"}}>{fmtDate(v.saved_at)}</div>
+                      {v.note && <div style={{fontSize:11,color:"#94a3b8",marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{v.note}</div>}
+                    </div>
+                  );
+                })}
               </div>
-            ))}
+            )}
+          </div>
+
+          {/* ── Right: preview pane ── */}
+          <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden"}}>
+            {!selected ? (
+              <div style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",color:"#475569",fontSize:13}}>
+                ← Select a version to preview
+              </div>
+            ) : (
+              <>
+                <div style={{padding:"16px 18px 10px",borderBottom:"1px solid #1e2130"}}>
+                  <div style={{fontSize:14,fontWeight:600,color:"#e2e8f0",marginBottom:2}}>Version {selected.version}</div>
+                  <div style={{fontSize:12,color:"#64748b"}}>{fmtDate(selected.saved_at)}</div>
+                  {selected.note && <div style={{fontSize:12,color:"#94a3b8",marginTop:4}}>{selected.note}</div>}
+                </div>
+
+                <div style={{flex:1,overflowY:"auto",padding:"12px 18px"}}>
+                  {!preview ? (
+                    <div style={{color:"#64748b",fontSize:12}}>Loading preview…</div>
+                  ) : (
+                    <>
+                      <div style={{display:"flex",gap:16,marginBottom:12}}>
+                        <div style={{background:"#0f1117",borderRadius:6,padding:"8px 14px",fontSize:12}}>
+                          <span style={{color:"#64748b"}}>Nodes </span>
+                          <span style={{color:"#e2e8f0",fontWeight:600}}>{nonNoteNodes.length}</span>
+                        </div>
+                        <div style={{background:"#0f1117",borderRadius:6,padding:"8px 14px",fontSize:12}}>
+                          <span style={{color:"#64748b"}}>Edges </span>
+                          <span style={{color:"#e2e8f0",fontWeight:600}}>{preview.edges.length}</span>
+                        </div>
+                      </div>
+                      <div style={{fontSize:11,color:"#64748b",marginBottom:6,textTransform:"uppercase",letterSpacing:"0.5px"}}>Nodes in this version</div>
+                      <div style={{display:"flex",flexDirection:"column",gap:4}}>
+                        {nonNoteNodes.map(n => (
+                          <div key={n.id} style={{display:"flex",alignItems:"center",gap:8,padding:"5px 8px",background:"#0f1117",borderRadius:5}}>
+                            <span style={{fontSize:11,color:"#7c3aed",fontFamily:"monospace",minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                              {n.data?.label || n.type}
+                            </span>
+                            <span style={{fontSize:10,color:"#475569",marginLeft:"auto",whiteSpace:"nowrap"}}>
+                              {n.type}
+                            </span>
+                          </div>
+                        ))}
+                        {nonNoteNodes.length === 0 && <div style={{color:"#475569",fontSize:12}}>No nodes</div>}
+                      </div>
+                    </>
+                  )}
+                </div>
+
+                <div style={{padding:"12px 18px",borderTop:"1px solid #1e2130",display:"flex",gap:8,justifyContent:"flex-end"}}>
+                  <button className="btn btn-ghost btn-sm" onClick={onClose}>Cancel</button>
+                  <button className="btn btn-primary btn-sm" onClick={restore} disabled={restoring || versions[0]?.version === selected?.version}>
+                    {restoring ? "Restoring…" : `↩ Restore v${selected.version}`}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+
+        </div>
+        {!selected && (
+          <div style={{padding:"10px 16px",borderTop:"1px solid #1e2130",textAlign:"right"}}>
+            <button className="btn btn-ghost btn-sm" onClick={onClose}>Close</button>
           </div>
         )}
-        <div className="modal-btns">
-          <button className="btn btn-ghost" onClick={onClose}>Close</button>
-        </div>
       </div>
     </div>
     {confirmState && <ConfirmModal message={confirmState.message} confirmLabel={confirmState.confirmLabel} onConfirm={()=>{confirmState.fn();setConfirmState(null);}} onCancel={()=>setConfirmState(null)}/>}
@@ -3050,7 +3159,27 @@ function App(){
 
       <TestPayloadModal isOpen={showTestModal} onClose={()=>setShowTestModal(false)} onRun={runGraph} testPayload={testPayload} onPayloadChange={setTestPayload} />
 
-      <HistoryModal isOpen={showHistoryModal} onClose={()=>setShowHistoryModal(false)} graphId={currentGraph?.id} showToast={showToast} />
+      <HistoryModal isOpen={showHistoryModal} onClose={()=>setShowHistoryModal(false)} graphId={currentGraph?.id} showToast={showToast}
+        onRestored={(restoredGraph) => {
+          // Reload the canvas in-place from the restored graph data
+          const gd = restoredGraph.graph_data || { nodes:[], edges:[] };
+          const newNodes = (gd.nodes||[]).map(n=>({
+            id:n.id, type:"custom", position:n.position||{x:100,y:100},
+            data:{ type:n.type, label:n.data?.label||"", config:n.data?.config||{},
+                   disabled:!!n.data?.disabled, retry_max:n.data?.retry_max||0, retry_delay:n.data?.retry_delay||5 }
+          }));
+          const newEdges = (gd.edges||[]).map(e=>({
+            ...e, type:"smoothstep", animated:true,
+            style:{stroke:"#7c3aed",strokeWidth:2},
+            markerEnd:{type:MarkerType.ArrowClosed,color:"#7c3aed"}
+          }));
+          setNodes(newNodes); setEdges(newEdges);
+          setCurrentGraph(restoredGraph); setGraphName(restoredGraph.name);
+          setSelectedNode(null); setRunError(null); setIsDirty(false);
+          histRef.current=[]; histIdx.current=-1; syncHistState();
+          saveSnap(newNodes, newEdges);
+        }}
+      />
 
       {selectedEdge && (
         <EdgeLabelModal edge={selectedEdge} value={edgeLabelInput} onChange={setEdgeLabelInput}
