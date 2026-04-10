@@ -314,7 +314,14 @@ def _expand_loop(nid, loop_result, nodes_map, edges, context, creds, logger, suc
 
 
 # ── main graph runner ─────────────────────────────────────────────────────
-def run_graph(graph_data: dict, initial_payload: dict = None, logger=None, _depth: int = 0) -> dict:
+def run_graph(graph_data: dict, initial_payload: dict = None, logger=None, _depth: int = 0,
+              node_callback=None) -> dict:
+    """Execute a graph and return {context, results, traces}.
+
+    node_callback(event: dict) — optional callable fired after each node
+    completes with a trace-compatible dict plus a 'type' key
+    ('node_start' | 'node_done').  Safe to be None.
+    """
     if logger is None:
         logger = lambda msg: log.info(msg)
     if _depth > 5:
@@ -349,17 +356,19 @@ def run_graph(graph_data: dict, initial_payload: dict = None, logger=None, _dept
     if parallel and max_workers > 1:
         levels = _compute_levels(nodes, succ)
         _run_parallel(levels, nodes_map, edges, context, results, traces,
-                      creds, logger, succ, skip_nodes, _depth, max_workers)
+                      creds, logger, succ, skip_nodes, _depth, max_workers,
+                      node_callback=node_callback)
     else:
         _run_sequential(order, nodes_map, edges, context, results, traces,
-                        creds, logger, succ, skip_nodes, _depth)
+                        creds, logger, succ, skip_nodes, _depth,
+                        node_callback=node_callback)
 
     return {'context': context, 'results': results, 'traces': traces}
 
 
 # ── sequential execution path ─────────────────────────────────────────────
 def _run_sequential(order, nodes_map, edges, context, results, traces,
-                    creds, logger, succ, skip_nodes, _depth):
+                    creds, logger, succ, skip_nodes, _depth, node_callback=None):
     for nid in order:
         node  = nodes_map.get(nid)
         if not node:
@@ -403,6 +412,14 @@ def _run_sequential(order, nodes_map, edges, context, results, traces,
 
         context[nid] = inp  # pre-seed so downstream can read even if node errors
 
+        # Fire node_start before execution
+        if node_callback:
+            try:
+                node_callback({'type': 'node_start', 'node_id': nid,
+                               'label': ndata.get('label', ''), 'node_type': ntype})
+            except Exception:
+                pass
+
         result, trace, skip_delta, abort_or_loop = _exec_node(
             nid, nodes_map, edges, context, creds, logger, succ, _depth
         )
@@ -414,6 +431,11 @@ def _run_sequential(order, nodes_map, edges, context, results, traces,
             context[nid] = {'__error': str(exc)}
             results[nid] = {'__error': str(exc)}
             traces.append(trace)
+            if node_callback:
+                try:
+                    node_callback({'type': 'node_done', **trace})
+                except Exception:
+                    pass
             raise RuntimeError(
                 f"Node [{a_nid}] ({a_ntype}) failed after {attempts} attempt(s): {exc}"
             ) from exc
@@ -421,6 +443,11 @@ def _run_sequential(order, nodes_map, edges, context, results, traces,
         context[nid] = result
         results[nid] = result
         traces.append(trace)
+        if node_callback:
+            try:
+                node_callback({'type': 'node_done', **trace})
+            except Exception:
+                pass
 
         # Loop body expansion
         if abort_or_loop is not None and isinstance(abort_or_loop, dict) \
@@ -433,7 +460,8 @@ def _run_sequential(order, nodes_map, edges, context, results, traces,
 
 # ── parallel execution path ───────────────────────────────────────────────
 def _run_parallel(levels, nodes_map, edges, context, results, traces,
-                  creds, logger, succ, skip_nodes, _depth, max_workers):
+                  creds, logger, succ, skip_nodes, _depth, max_workers,
+                  node_callback=None):
     """Level-based parallel execution.
 
     Nodes within the same level have no data dependencies between them —
@@ -487,6 +515,17 @@ def _run_parallel(levels, nodes_map, edges, context, results, traces,
         if not active:
             continue
 
+        # Fire node_start for all active nodes before any execute
+        if node_callback:
+            for nid in active:
+                nd = nodes_map.get(nid, {})
+                try:
+                    node_callback({'type': 'node_start', 'node_id': nid,
+                                   'label': nd.get('data', {}).get('label', ''),
+                                   'node_type': nd.get('type', '')})
+                except Exception:
+                    pass
+
         if len(active) == 1:
             # Fast path: avoid threading overhead for single-node levels
             nid = active[0]
@@ -495,7 +534,8 @@ def _run_parallel(levels, nodes_map, edges, context, results, traces,
             )
             _apply_node_result(nid, result, trace, skip_delta, abort_or_loop,
                                context, results, traces, skip_nodes,
-                               nodes_map, edges, creds, logger, succ)
+                               nodes_map, edges, creds, logger, succ,
+                               node_callback=node_callback)
         else:
             # Parallel: run all active nodes in this level concurrently
             node_results = {}
@@ -529,12 +569,13 @@ def _run_parallel(levels, nodes_map, edges, context, results, traces,
                 result, trace, skip_delta, abort_or_loop = node_results[nid]
                 _apply_node_result(nid, result, trace, skip_delta, abort_or_loop,
                                    context, results, traces, skip_nodes,
-                                   nodes_map, edges, creds, logger, succ)
+                                   nodes_map, edges, creds, logger, succ,
+                                   node_callback=node_callback)
 
 
 def _apply_node_result(nid, result, trace, skip_delta, abort_or_loop,
                        context, results, traces, skip_nodes,
-                       nodes_map, edges, creds, logger, succ):
+                       nodes_map, edges, creds, logger, succ, node_callback=None):
     """Apply a completed node's result to shared state. Called sequentially."""
     skip_nodes.update(skip_delta)
 
@@ -543,6 +584,11 @@ def _apply_node_result(nid, result, trace, skip_delta, abort_or_loop,
         context[nid] = {'__error': str(exc)}
         results[nid] = {'__error': str(exc)}
         traces.append(trace)
+        if node_callback:
+            try:
+                node_callback({'type': 'node_done', **trace})
+            except Exception:
+                pass
         raise RuntimeError(
             f"Node [{a_nid}] ({a_ntype}) failed after {attempts} attempt(s): {exc}"
         ) from exc
@@ -550,6 +596,11 @@ def _apply_node_result(nid, result, trace, skip_delta, abort_or_loop,
     context[nid] = result
     results[nid] = result
     traces.append(trace)
+    if node_callback:
+        try:
+            node_callback({'type': 'node_done', **trace})
+        except Exception:
+            pass
 
     if abort_or_loop is not None and isinstance(abort_or_loop, dict) \
             and abort_or_loop.get('__loop__'):

@@ -1,7 +1,10 @@
-"""Runs router — list, delete, trim, replay."""
+"""Runs router — list, delete, trim, replay, stream."""
 import json
 import logging
+import os
+import time as _time
 from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import Optional
 
@@ -227,3 +230,128 @@ def api_replay_run(run_id: int, request: Request):
               {"replayed_run_id": run_id, "task_id": task.id, "graph": g["name"]},
               request.client.host if request.client else None)
     return {"queued": True, "task_id": task.id, "graph": g["name"], "replayed_run_id": run_id}
+
+
+# ── Real-time run log streaming (SSE) ─────────────────────────────────────────
+@router.get("/api/runs/{task_id}/stream")
+def api_stream_run(task_id: str, request: Request):
+    """Server-Sent Events stream for a graph run.
+
+    Emits JSON event objects:
+      {"type": "node_start", "node_id": ..., "label": ..., "node_type": ...}
+      {"type": "node_done",  "node_id": ..., "status": ..., "duration_ms": ..., ...trace fields}
+      {"type": "log",        "msg": ...}
+      {"type": "run_done",   "status": "succeeded"|"failed", "error"?: ...}
+
+    If the run is already finished when the client connects, replays
+    node_done events from stored traces then fires run_done immediately.
+    Falls back to DB polling if Redis pub/sub is unavailable.
+    """
+    _check_admin(request)
+
+    REDIS_URL = os.environ.get("REDIS_URL",
+                os.environ.get("CELERY_BROKER_URL", "redis://redis:6379/0"))
+    TERMINAL  = {"succeeded", "failed", "cancelled"}
+
+    def _sse(data: dict) -> str:
+        return f"data: {json.dumps(data, default=str)}\n\n"
+
+    def event_gen():
+        # ── Fast path: run already finished ───────────────────────────────
+        run = get_run_by_task(task_id)
+        if run and run.get("status") in TERMINAL:
+            traces = run.get("traces") or []
+            if isinstance(traces, str):
+                try:
+                    traces = json.loads(traces)
+                except Exception:
+                    traces = []
+            for t in traces:
+                yield _sse({"type": "node_done", **t})
+            yield _sse({"type": "run_done", "status": run["status"],
+                        "error": (run.get("result") or {}).get("error")})
+            return
+
+        # ── Subscribe to Redis pub/sub ─────────────────────────────────────
+        pubsub = None
+        try:
+            import redis as _redis
+            r = _redis.from_url(REDIS_URL, socket_connect_timeout=2,
+                                socket_timeout=2)
+            r.ping()
+            pubsub = r.pubsub(ignore_subscribe_messages=True)
+            pubsub.subscribe(f"run:{task_id}:stream")
+        except Exception:
+            pubsub = None  # fall through to polling-only path
+
+        deadline       = _time.time() + 300   # 5-minute hard timeout
+        last_db_check  = _time.time()
+        last_heartbeat = _time.time()
+
+        try:
+            while _time.time() < deadline:
+                # Redis path
+                if pubsub:
+                    msg = pubsub.get_message(timeout=0.3)
+                    if msg:
+                        raw = msg["data"]
+                        if isinstance(raw, bytes):
+                            raw = raw.decode()
+                        try:
+                            event = json.loads(raw)
+                        except Exception:
+                            continue
+                        yield f"data: {raw}\n\n"
+                        if event.get("type") == "run_done":
+                            return
+                        last_db_check = _time.time()
+                        continue
+
+                # Heartbeat every 15 s (SSE comment keeps proxy alive)
+                if _time.time() - last_heartbeat > 15:
+                    yield ": ping\n\n"
+                    last_heartbeat = _time.time()
+
+                # DB fallback check every 3 s (catches Redis pub/sub misses)
+                if _time.time() - last_db_check > 3:
+                    last_db_check = _time.time()
+                    run = get_run_by_task(task_id)
+                    if run and run.get("status") in TERMINAL:
+                        # Run finished but pub/sub event was missed — replay
+                        traces = run.get("traces") or []
+                        if isinstance(traces, str):
+                            try:
+                                traces = json.loads(traces)
+                            except Exception:
+                                traces = []
+                        for t in traces:
+                            yield _sse({"type": "node_done", **t})
+                        yield _sse({"type": "run_done", "status": run["status"],
+                                    "error": (run.get("result") or {}).get("error")})
+                        return
+
+                # No Redis and no completion yet — short sleep to avoid busy-spin
+                if not pubsub:
+                    _time.sleep(0.5)
+
+        finally:
+            if pubsub:
+                try:
+                    pubsub.unsubscribe()
+                    pubsub.close()
+                except Exception:
+                    pass
+
+        # Timeout — send a synthetic done event so the client doesn't hang
+        yield _sse({"type": "run_done", "status": "timeout",
+                    "error": "Stream timed out after 5 minutes"})
+
+    return StreamingResponse(
+        event_gen(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",   # disable nginx/Caddy response buffering
+            "Connection": "keep-alive",
+        },
+    )
