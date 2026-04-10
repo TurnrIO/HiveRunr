@@ -73,6 +73,7 @@ from app.core.db import (
     get_owner_user, create_password_reset_token, get_password_reset_by_token,
     consume_password_reset_token,
     log_audit,
+    get_invite_by_hash, consume_invite_token, set_flow_permission, get_user_by_email,
 )
 
 router = APIRouter()
@@ -421,3 +422,125 @@ def auth_reset_password(body: ResetPasswordBody):
     update_user_password(record["user_id"], hash_password(body.new_password))
     consume_password_reset_token(token_hash)
     return {"ok": True, "message": "Password updated. You can now log in."}
+
+
+# ── Invite accept endpoint ────────────────────────────────────────────────────
+@router.get("/api/invite/accept")
+def invite_accept(token: str, request: Request):
+    """Redeem an invite token.
+
+    Flow:
+    1. Validate the token (not expired, not used).
+    2. If the email matches an existing user → grant flow permission + auto-login.
+    3. Otherwise → return 200 with {needs_signup: true, token, email, role, graph_name}
+       so the frontend can redirect to a pre-filled registration form.
+    """
+    from app.auth import hash_token, generate_token, SESSION_COOKIE, SESSION_DAYS
+
+    token_hash = hash_token(token)
+    invite     = get_invite_by_hash(token_hash)
+    if not invite:
+        raise HTTPException(400, "Invalid or expired invite link")
+
+    email      = invite["email"]
+    graph_id   = invite.get("graph_id")
+    role       = invite.get("role", "viewer")
+    graph_name = invite.get("graph_name") or "a flow"
+
+    # Check if the user already exists
+    existing = get_user_by_email(email)
+    if existing:
+        # Grant permission and log them in
+        if graph_id:
+            set_flow_permission(existing["id"], graph_id, role)
+        consume_invite_token(token_hash)
+        sess_token = generate_token()
+        create_session(existing["id"], hash_token(sess_token))
+        from fastapi.responses import JSONResponse
+        resp = JSONResponse({
+            "ok": True,
+            "logged_in": True,
+            "graph_id": graph_id,
+            "role": role,
+            "graph_name": graph_name,
+        })
+        resp.set_cookie(SESSION_COOKIE, sess_token, httponly=True, samesite="lax",
+                        max_age=SESSION_DAYS * 86400)
+        return resp
+
+    # New user — return info so the frontend can show a signup form
+    return {
+        "ok": True,
+        "needs_signup": True,
+        "token": token,        # pass back raw token for the signup form to submit
+        "email": email,
+        "role": role,
+        "graph_id": graph_id,
+        "graph_name": graph_name,
+    }
+
+
+class InviteSignupBody(BaseModel):
+    token: str
+    username: str
+    password: str
+
+
+@router.post("/api/invite/signup")
+def invite_signup(body: InviteSignupBody, request: Request):
+    """Complete signup for a new user arriving via an invite link.
+
+    Validates the invite token, creates the account (viewer global role),
+    grants the per-flow permission, consumes the token, and logs the user in.
+    """
+    from app.auth import hash_token, hash_password, generate_token, SESSION_COOKIE, SESSION_DAYS
+    from fastapi.responses import JSONResponse
+
+    if len(body.password) < 8:
+        raise HTTPException(422, "Password must be at least 8 characters")
+
+    token_hash = hash_token(body.token)
+    invite     = get_invite_by_hash(token_hash)
+    if not invite:
+        raise HTTPException(400, "Invalid or expired invite link")
+
+    email      = invite["email"]
+    graph_id   = invite.get("graph_id")
+    role       = invite.get("role", "viewer")
+
+    # Double-check the email is not already registered
+    if get_user_by_email(email):
+        raise HTTPException(400, "An account with this email already exists. Please log in.")
+
+    try:
+        new_user = create_user(
+            body.username.strip(),
+            email,
+            hash_password(body.password),
+            role="viewer",   # global role is always viewer for invited users
+        )
+    except Exception as exc:
+        raise HTTPException(400, str(exc))
+
+    if graph_id:
+        set_flow_permission(new_user["id"], graph_id, role)
+
+    consume_invite_token(token_hash)
+
+    sess_token = generate_token()
+    create_session(new_user["id"], hash_token(sess_token))
+
+    log_audit("invite", "user.create", "user", new_user["id"],
+              {"username": new_user["username"], "via_invite": True,
+               "graph_id": graph_id, "role": role},
+              request.client.host if request.client else None)
+
+    resp = JSONResponse({
+        "ok": True,
+        "user": {"id": new_user["id"], "username": new_user["username"], "role": new_user["role"]},
+        "graph_id": graph_id,
+        "role": role,
+    })
+    resp.set_cookie(SESSION_COOKIE, sess_token, httponly=True, samesite="lax",
+                    max_age=SESSION_DAYS * 86400)
+    return resp

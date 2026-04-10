@@ -211,3 +211,52 @@ def send_password_reset(to: str, reset_url: str, username: str) -> bool:
     </div>"""
 
     return send_email(to, "Reset your HiveRunr password", html)
+
+
+def send_flow_invite(
+    to: str,
+    invite_url: str,
+    flow_name: str,
+    role: str,
+    invited_by: str,
+) -> bool:
+    """Send a flow access invite email."""
+    app_url = _app_url()
+    role_label = {"viewer": "Viewer", "runner": "Runner", "editor": "Editor"}.get(role, role)
+    html = f"""
+    <div style="background:#0d0f1a;min-height:100vh;padding:40px 20px;
+                font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+      <div style="max-width:480px;margin:0 auto;background:#13151f;
+                  border:1px solid #1e2130;border-radius:16px;overflow:hidden;">
+        <div style="background:linear-gradient(135deg,#7c3aed,#6d28d9);padding:24px 32px;">
+          <div style="color:#fff;font-size:20px;font-weight:700;">⚡ HiveRunr</div>
+        </div>
+        <div style="padding:32px;">
+          <h2 style="color:#e2e8f0;font-size:18px;font-weight:600;margin:0 0 8px;">
+            You've been invited to a flow
+          </h2>
+          <p style="color:#64748b;font-size:14px;margin:0 0 24px;">
+            <strong style="color:#e2e8f0;">{invited_by}</strong> has granted you
+            <strong style="color:#a78bfa;">{role_label}</strong> access to the flow
+            <strong style="color:#e2e8f0;">{flow_name}</strong>.
+          </p>
+          <a href="{invite_url}"
+             style="display:inline-block;padding:12px 28px;
+                    background:linear-gradient(135deg,#7c3aed,#6d28d9);
+                    color:#fff;text-decoration:none;border-radius:8px;
+                    font-size:14px;font-weight:600;">
+            Accept invitation →
+          </a>
+          <p style="color:#374151;font-size:12px;margin:24px 0 0;">
+            This link expires in 7 days. If you didn't expect this invite, you can safely
+            ignore this email.
+          </p>
+        </div>
+        <div style="padding:16px 32px;border-top:1px solid #1e2130;
+                    color:#374151;font-size:11px;">
+          HiveRunr · <a href="{app_url}" style="color:#7c3aed;">Open dashboard</a>
+        </div>
+      </div>
+    </div>"""
+
+    return send_email(to, f"[HiveRunr] You've been invited to '{flow_name}'", html)

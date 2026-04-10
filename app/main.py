@@ -120,6 +120,11 @@ def reset_password_page():
     return FileResponse(str(STATIC_DIR / "reset.html"), media_type="text/html")
 
 
+@app.get("/invite/accept")
+def invite_accept_page():
+    return FileResponse(str(STATIC_DIR / "invite.html"), media_type="text/html")
+
+
 @app.get("/canvas")
 @app.get("/admin/canvas")
 def canvas_page(request: Request):
