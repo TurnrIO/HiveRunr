@@ -4,7 +4,10 @@ import os
 from fastapi import HTTPException, Request
 from fastapi.responses import RedirectResponse
 
-from app.core.db import users_exist, get_api_token_by_hash, touch_api_token
+from app.core.db import (
+    users_exist, get_api_token_by_hash, touch_api_token,
+    get_flow_permission, FLOW_ROLE_LEVELS,
+)
 
 ROLE_LEVELS = {"viewer": 0, "admin": 1, "owner": 2}
 
@@ -111,6 +114,41 @@ def _require_owner(request: Request):
     user = _check_admin(request)
     if user.get("role") != "owner":
         raise HTTPException(403, "This action requires owner role")
+    return user
+
+
+def _check_flow_access(request: Request, graph_id: int, required_role: str = "viewer"):
+    """Enforce per-flow access control for viewer-role users.
+
+    - admin / owner: always granted (skip per-flow check).
+    - API token users: always granted (token-level scope already enforced).
+    - viewer (global role): must have an explicit flow_permissions row with
+      a role >= required_role.
+
+    Returns the user dict on success; raises HTTP 403 otherwise.
+
+    required_role must be one of: 'viewer', 'runner', 'editor'.
+    """
+    user = _check_admin(request)
+    global_role = user.get("role", "viewer")
+
+    # Admins, owners, and token-authenticated callers bypass per-flow checks.
+    if global_role in ("admin", "owner") or user.get("id") == 0:
+        return user
+
+    # Viewer global role: check the flow_permissions table.
+    fp = get_flow_permission(user["id"], graph_id)
+    if fp is None:
+        raise HTTPException(403, "You do not have access to this flow")
+
+    granted_level  = FLOW_ROLE_LEVELS.get(fp["role"], 0)
+    required_level = FLOW_ROLE_LEVELS.get(required_role, 0)
+    if granted_level < required_level:
+        raise HTTPException(
+            403,
+            f"This action requires '{required_role}' access to this flow "
+            f"(you have '{fp['role']}')",
+        )
     return user
 
 

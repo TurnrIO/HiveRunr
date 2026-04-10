@@ -990,3 +990,120 @@ def get_audit_log(
             params,
         )
         return [dict(r) for r in cur.fetchall()]
+
+
+# ── Flow permissions ───────────────────────────────────────────────────────────
+FLOW_ROLE_LEVELS = {"viewer": 0, "runner": 1, "editor": 2}
+
+
+def set_flow_permission(user_id: int, graph_id: int, role: str, granted_by: int | None = None) -> None:
+    """Insert or update a per-flow role for a user."""
+    with get_conn() as conn:
+        conn.cursor().execute(
+            """
+            INSERT INTO flow_permissions (user_id, graph_id, role, granted_by, granted_at)
+            VALUES (%s, %s, %s, %s, NOW())
+            ON CONFLICT (user_id, graph_id)
+            DO UPDATE SET role=EXCLUDED.role, granted_by=EXCLUDED.granted_by, granted_at=NOW()
+            """,
+            (user_id, graph_id, role, granted_by),
+        )
+
+
+def get_flow_permission(user_id: int, graph_id: int) -> dict | None:
+    """Return the flow_permissions row for (user_id, graph_id), or None."""
+    with get_conn() as conn:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur.execute(
+            "SELECT * FROM flow_permissions WHERE user_id=%s AND graph_id=%s",
+            (user_id, graph_id),
+        )
+        row = cur.fetchone()
+        return dict(row) if row else None
+
+
+def list_flow_permissions(graph_id: int) -> list:
+    """Return all flow_permissions rows for a graph, joined with user info."""
+    with get_conn() as conn:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur.execute(
+            """
+            SELECT fp.user_id, fp.graph_id, fp.role, fp.granted_at,
+                   u.username, u.email,
+                   gb.username AS granted_by_username
+            FROM flow_permissions fp
+            JOIN users u ON fp.user_id = u.id
+            LEFT JOIN users gb ON fp.granted_by = gb.id
+            WHERE fp.graph_id = %s
+            ORDER BY u.username
+            """,
+            (graph_id,),
+        )
+        return [dict(r) for r in cur.fetchall()]
+
+
+def delete_flow_permission(user_id: int, graph_id: int) -> None:
+    """Remove a per-flow permission row."""
+    with get_conn() as conn:
+        conn.cursor().execute(
+            "DELETE FROM flow_permissions WHERE user_id=%s AND graph_id=%s",
+            (user_id, graph_id),
+        )
+
+
+def get_permitted_graph_ids(user_id: int) -> list[int]:
+    """Return all graph_ids for which the user has any explicit flow permission."""
+    with get_conn() as conn:
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT graph_id FROM flow_permissions WHERE user_id=%s",
+            (user_id,),
+        )
+        return [row[0] for row in cur.fetchall()]
+
+
+# ── Invite tokens ──────────────────────────────────────────────────────────────
+def create_invite_token(
+    token_hash: str,
+    email: str,
+    graph_id: int | None,
+    role: str,
+    invited_by: int | None,
+    expires_at,
+) -> dict:
+    with get_conn() as conn:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur.execute(
+            """
+            INSERT INTO invite_tokens (token_hash, email, graph_id, role, invited_by, expires_at)
+            VALUES (%s, %s, %s, %s, %s, %s)
+            RETURNING id, email, graph_id, role, expires_at
+            """,
+            (token_hash, email.strip().lower(), graph_id, role, invited_by, expires_at),
+        )
+        row = cur.fetchone()
+        return dict(row)
+
+
+def get_invite_by_hash(token_hash: str) -> dict | None:
+    with get_conn() as conn:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur.execute(
+            """
+            SELECT it.*, g.name AS graph_name
+            FROM invite_tokens it
+            LEFT JOIN graph_workflows g ON it.graph_id = g.id
+            WHERE it.token_hash=%s AND it.used_at IS NULL AND it.expires_at > NOW()
+            """,
+            (token_hash,),
+        )
+        row = cur.fetchone()
+        return dict(row) if row else None
+
+
+def consume_invite_token(token_hash: str) -> None:
+    with get_conn() as conn:
+        conn.cursor().execute(
+            "UPDATE invite_tokens SET used_at=NOW() WHERE token_hash=%s",
+            (token_hash,),
+        )

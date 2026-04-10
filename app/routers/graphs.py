@@ -5,7 +5,7 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 from typing import Optional
 
-from app.deps import _check_admin
+from app.deps import _check_admin, _check_flow_access, ROLE_LEVELS
 from app.core.db import (
     list_graphs, create_graph, get_graph, update_graph, delete_graph,
     get_graph_by_slug, get_graph_by_name, duplicate_graph,
@@ -13,6 +13,10 @@ from app.core.db import (
     sync_graph_schedules,
     get_graph_alerts, update_graph_alerts,
     log_audit,
+    get_user_by_id, get_user_by_username, list_users,
+    list_flow_permissions, set_flow_permission, delete_flow_permission,
+    get_permitted_graph_ids, FLOW_ROLE_LEVELS,
+    create_invite_token, get_invite_by_hash,
 )
 from app.worker import enqueue_graph
 
@@ -39,6 +43,10 @@ def _sync_cron_triggers(graph_id: int, graph_data: dict):
         log.warning(f"Could not sync schedules for graph {graph_id}: {e}")
 
 
+def _is_admin_or_owner(user: dict) -> bool:
+    return ROLE_LEVELS.get(user.get("role", "viewer"), 0) >= 1
+
+
 # ── Graph CRUD ────────────────────────────────────────────────────────────────
 class GraphCreate(BaseModel):
     name: str; description: str = ""; graph_data: dict = {}
@@ -51,13 +59,20 @@ class GraphUpdate(BaseModel):
 
 @router.get("/api/graphs")
 def api_graphs(request: Request):
-    _check_admin(request)
-    return [_graph_with_data(g) for g in list_graphs()]
+    user = _check_admin(request)
+    all_graphs = list_graphs()
+    # Viewer-role users only see flows they have explicit permission for.
+    if not _is_admin_or_owner(user) and user.get("id", 0) != 0:
+        permitted = set(get_permitted_graph_ids(user["id"]))
+        all_graphs = [g for g in all_graphs if g["id"] in permitted]
+    return [_graph_with_data(g) for g in all_graphs]
 
 
 @router.post("/api/graphs")
 def api_graph_create(body: GraphCreate, request: Request):
     user = _check_admin(request)
+    if not _is_admin_or_owner(user):
+        raise HTTPException(403, "Creating flows requires admin or owner role")
     g = create_graph(body.name, body.description, json.dumps(body.graph_data))
     _sync_cron_triggers(g['id'], body.graph_data)
     save_graph_version(g['id'], body.name, json.dumps(body.graph_data), note="Initial version")
@@ -69,19 +84,23 @@ def api_graph_create(body: GraphCreate, request: Request):
 
 @router.get("/api/graphs/by-slug/{slug}")
 def api_graph_by_slug(slug: str, request: Request):
-    _check_admin(request)
+    user = _check_admin(request)
     g = get_graph_by_slug(slug)
     if not g:
         raise HTTPException(404, "Graph not found")
+    if not _is_admin_or_owner(user) and user.get("id", 0) != 0:
+        _check_flow_access(request, g["id"], "viewer")
     return _graph_with_data(g)
 
 
 @router.get("/api/graphs/{graph_id}")
 def api_graph_get(graph_id: int, request: Request):
-    _check_admin(request)
+    user = _check_admin(request)
     g = get_graph(graph_id)
     if not g:
         raise HTTPException(404, "Graph not found")
+    if not _is_admin_or_owner(user) and user.get("id", 0) != 0:
+        _check_flow_access(request, graph_id, "viewer")
     return _graph_with_data(g)
 
 
@@ -91,6 +110,8 @@ def api_graph_update(graph_id: int, body: GraphUpdate, request: Request):
     g = get_graph(graph_id)
     if not g:
         raise HTTPException(404, "Graph not found")
+    if not _is_admin_or_owner(user) and user.get("id", 0) != 0:
+        _check_flow_access(request, graph_id, "editor")
     update_graph(graph_id, name=body.name, description=body.description,
                  graph_json=json.dumps(body.graph_data) if body.graph_data is not None else None,
                  enabled=body.enabled)
@@ -107,6 +128,8 @@ def api_graph_update(graph_id: int, body: GraphUpdate, request: Request):
 @router.delete("/api/graphs/{graph_id}")
 def api_graph_delete(graph_id: int, request: Request):
     user = _check_admin(request)
+    if not _is_admin_or_owner(user):
+        raise HTTPException(403, "Deleting flows requires admin or owner role")
     g = get_graph(graph_id)
     if not g:
         raise HTTPException(404, "Graph not found")
@@ -119,7 +142,9 @@ def api_graph_delete(graph_id: int, request: Request):
 
 @router.post("/api/graphs/reseed")
 def api_graphs_reseed(request: Request):
-    _check_admin(request)
+    user = _check_admin(request)
+    if not _is_admin_or_owner(user):
+        raise HTTPException(403, "This action requires admin or owner role")
     # Import seeding from main to avoid circular deps — seed logic lives on app startup
     from app.seeds import seed_example_graphs
     n = seed_example_graphs()
@@ -139,10 +164,12 @@ def api_test_node(graph_id: int, node_id: str, body: NodeTestBody, request: Requ
     directly with the provided input.  No Celery task, no run record — just
     an instant test invocation that populates the NodeIOPanel in the canvas.
     """
-    _check_admin(request)
+    user = _check_admin(request)
     g = get_graph(graph_id)
     if not g:
         raise HTTPException(404, "Graph not found")
+    if not _is_admin_or_owner(user) and user.get("id", 0) != 0:
+        _check_flow_access(request, graph_id, "runner")
 
     try:
         graph_data = json.loads(g.get('graph_json') or '{}')
@@ -190,6 +217,8 @@ async def api_graph_run(graph_id: int, request: Request):
     g = get_graph(graph_id)
     if not g:
         raise HTTPException(404, "Graph not found")
+    if not _is_admin_or_owner(user) and user.get("id", 0) != 0:
+        _check_flow_access(request, graph_id, "runner")
     try:
         body = await request.json()
     except Exception:
@@ -214,9 +243,11 @@ async def api_graph_run(graph_id: int, request: Request):
 # ── Graph versions ────────────────────────────────────────────────────────────
 @router.get("/api/graphs/{graph_id}/versions")
 def api_graph_versions(graph_id: int, request: Request):
-    _check_admin(request)
+    user = _check_admin(request)
     if not get_graph(graph_id):
         raise HTTPException(404, "Graph not found")
+    if not _is_admin_or_owner(user) and user.get("id", 0) != 0:
+        _check_flow_access(request, graph_id, "viewer")
     return list_graph_versions(graph_id)
 
 
@@ -224,6 +255,8 @@ def api_graph_versions(graph_id: int, request: Request):
 def api_duplicate_graph(graph_id: int, request: Request):
     """Clone a graph with a unique '(copy)' name suffix."""
     user = _check_admin(request)
+    if not _is_admin_or_owner(user):
+        raise HTTPException(403, "Duplicating flows requires admin or owner role")
     try:
         new_g = duplicate_graph(graph_id)
     except ValueError as exc:
@@ -237,9 +270,11 @@ def api_duplicate_graph(graph_id: int, request: Request):
 @router.get("/api/graphs/{graph_id}/versions/{version_id}")
 def api_get_graph_version(graph_id: int, version_id: int, request: Request):
     """Return the full graph_json for a specific version (read-only preview)."""
-    _check_admin(request)
+    user = _check_admin(request)
     if not get_graph(graph_id):
         raise HTTPException(404, "Graph not found")
+    if not _is_admin_or_owner(user) and user.get("id", 0) != 0:
+        _check_flow_access(request, graph_id, "viewer")
     v = get_graph_version(version_id)
     if not v or v['graph_id'] != graph_id:
         raise HTTPException(404, "Version not found")
@@ -256,6 +291,8 @@ def api_restore_version(graph_id: int, version_id: int, request: Request):
     g = get_graph(graph_id)
     if not g:
         raise HTTPException(404, "Graph not found")
+    if not _is_admin_or_owner(user) and user.get("id", 0) != 0:
+        _check_flow_access(request, graph_id, "editor")
     v = get_graph_version(version_id)
     if not v or v['graph_id'] != graph_id:
         raise HTTPException(404, "Version not found")
@@ -281,9 +318,11 @@ class AlertConfig(BaseModel):
 
 @router.get("/api/graphs/{graph_id}/alerts")
 def api_get_alerts(graph_id: int, request: Request):
-    _check_admin(request)
+    user = _check_admin(request)
     if not get_graph(graph_id):
         raise HTTPException(404, "Graph not found")
+    if not _is_admin_or_owner(user) and user.get("id", 0) != 0:
+        _check_flow_access(request, graph_id, "editor")
     cfg = get_graph_alerts(graph_id)
     if cfg is None:
         raise HTTPException(404, "Graph not found")
@@ -292,9 +331,11 @@ def api_get_alerts(graph_id: int, request: Request):
 
 @router.put("/api/graphs/{graph_id}/alerts")
 def api_update_alerts(graph_id: int, body: AlertConfig, request: Request):
-    _check_admin(request)
+    user = _check_admin(request)
     if not get_graph(graph_id):
         raise HTTPException(404, "Graph not found")
+    if not _is_admin_or_owner(user) and user.get("id", 0) != 0:
+        _check_flow_access(request, graph_id, "editor")
     update_graph_alerts(
         graph_id,
         alert_emails=body.alert_emails,
@@ -302,3 +343,141 @@ def api_update_alerts(graph_id: int, body: AlertConfig, request: Request):
         alert_on_success=body.alert_on_success,
     )
     return get_graph_alerts(graph_id)
+
+
+# ── Per-flow permissions ───────────────────────────────────────────────────────
+@router.get("/api/graphs/{graph_id}/permissions")
+def api_get_permissions(graph_id: int, request: Request):
+    """List all user permissions for this flow (admin/owner only)."""
+    user = _check_admin(request)
+    if not _is_admin_or_owner(user):
+        raise HTTPException(403, "Managing permissions requires admin or owner role")
+    if not get_graph(graph_id):
+        raise HTTPException(404, "Graph not found")
+    perms = list_flow_permissions(graph_id)
+    # Also return all users (for the "add user" dropdown)
+    all_users = [
+        {"id": u["id"], "username": u["username"], "email": u["email"], "role": u["role"]}
+        for u in list_users()
+        if u.get("role") not in ("owner",)   # owner doesn't need per-flow perms
+    ]
+    return {"permissions": perms, "users": all_users}
+
+
+class SetPermissionBody(BaseModel):
+    user_id: int
+    role: str   # viewer | runner | editor
+
+
+@router.put("/api/graphs/{graph_id}/permissions")
+def api_set_permission(graph_id: int, body: SetPermissionBody, request: Request):
+    """Grant or update a user's role on this flow (admin/owner only)."""
+    user = _check_admin(request)
+    if not _is_admin_or_owner(user):
+        raise HTTPException(403, "Managing permissions requires admin or owner role")
+    if not get_graph(graph_id):
+        raise HTTPException(404, "Graph not found")
+    if body.role not in FLOW_ROLE_LEVELS:
+        raise HTTPException(422, f"role must be one of: {list(FLOW_ROLE_LEVELS)}")
+    target = get_user_by_id(body.user_id)
+    if not target:
+        raise HTTPException(404, "User not found")
+    if target.get("role") == "owner":
+        raise HTTPException(400, "Cannot set per-flow permissions for the owner")
+    actor_id = user.get("id") or None
+    if actor_id == 0:
+        actor_id = None
+    set_flow_permission(body.user_id, graph_id, body.role, granted_by=actor_id)
+    log_audit(user["username"], "flow.permission.set", "graph", graph_id,
+              {"user_id": body.user_id, "username": target["username"], "role": body.role},
+              request.client.host if request.client else None)
+    return {"ok": True, "user_id": body.user_id, "graph_id": graph_id, "role": body.role}
+
+
+@router.delete("/api/graphs/{graph_id}/permissions/{user_id}")
+def api_delete_permission(graph_id: int, user_id: int, request: Request):
+    """Remove a user's access to this flow (admin/owner only)."""
+    user = _check_admin(request)
+    if not _is_admin_or_owner(user):
+        raise HTTPException(403, "Managing permissions requires admin or owner role")
+    if not get_graph(graph_id):
+        raise HTTPException(404, "Graph not found")
+    delete_flow_permission(user_id, graph_id)
+    log_audit(user["username"], "flow.permission.delete", "graph", graph_id,
+              {"user_id": user_id},
+              request.client.host if request.client else None)
+    return {"ok": True}
+
+
+# ── Flow invite (send link by email) ─────────────────────────────────────────
+class InviteBody(BaseModel):
+    email: str
+    role: str = "viewer"
+
+
+@router.post("/api/graphs/{graph_id}/invite")
+def api_invite_to_flow(graph_id: int, body: InviteBody, request: Request):
+    """Send an email invite link that grants access to this flow.
+
+    If the email matches an existing user, the invite grants them the requested
+    role directly.  Otherwise, following the link creates a new viewer/runner
+    account scoped to this flow.
+    """
+    import secrets as _sec
+    import datetime as _dt
+    import os
+    from app.email import _is_configured
+    from app.auth import hash_token
+
+    user = _check_admin(request)
+    if not _is_admin_or_owner(user):
+        raise HTTPException(403, "Inviting users requires admin or owner role")
+    g = get_graph(graph_id)
+    if not g:
+        raise HTTPException(404, "Graph not found")
+    if body.role not in FLOW_ROLE_LEVELS:
+        raise HTTPException(422, f"role must be one of: {list(FLOW_ROLE_LEVELS)}")
+
+    email = body.email.strip().lower()
+    if not email or "@" not in email:
+        raise HTTPException(422, "Invalid email address")
+
+    raw_token  = _sec.token_urlsafe(32)
+    token_hash = hash_token(raw_token)
+    expires_at = _dt.datetime.utcnow() + _dt.timedelta(days=7)
+    actor_id = user.get("id") or None
+    if actor_id == 0:
+        actor_id = None
+
+    create_invite_token(token_hash, email, graph_id, body.role, actor_id, expires_at)
+
+    app_url    = os.environ.get("APP_URL", "http://localhost").rstrip("/")
+    invite_url = f"{app_url}/invite/accept?token={raw_token}"
+
+    # Send email if configured; otherwise just return the link in the response.
+    sent = False
+    if _is_configured():
+        try:
+            from app.email import send_flow_invite
+            send_flow_invite(
+                to=email,
+                invite_url=invite_url,
+                flow_name=g["name"],
+                role=body.role,
+                invited_by=user["username"],
+            )
+            sent = True
+        except Exception as exc:
+            log.warning("Could not send invite email: %s", exc)
+
+    log_audit(user["username"], "flow.invite", "graph", graph_id,
+              {"email": email, "role": body.role, "sent": sent},
+              request.client.host if request.client else None)
+    return {
+        "ok": True,
+        "email": email,
+        "role": body.role,
+        "invite_url": invite_url,
+        "email_sent": sent,
+        "expires_at": expires_at.isoformat(),
+    }
