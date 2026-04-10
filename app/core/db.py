@@ -1107,3 +1107,173 @@ def consume_invite_token(token_hash: str) -> None:
             "UPDATE invite_tokens SET used_at=NOW() WHERE token_hash=%s",
             (token_hash,),
         )
+
+
+# ── Workspaces ─────────────────────────────────────────────────────────────────
+WORKSPACE_ROLE_LEVELS = {"viewer": 0, "admin": 1, "owner": 2}
+
+
+def _slugify(name: str) -> str:
+    """Convert a workspace name to a URL-safe slug."""
+    import re
+    slug = name.strip().lower()
+    slug = re.sub(r"[^a-z0-9]+", "-", slug)
+    slug = slug.strip("-")
+    return slug or "workspace"
+
+
+def create_workspace(name: str, slug: str | None = None, plan: str = "free") -> dict:
+    """Create a new workspace.  Raises if the slug already exists."""
+    final_slug = slug or _slugify(name)
+    with get_conn() as conn:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur.execute(
+            """
+            INSERT INTO workspaces (name, slug, plan, created_at, updated_at)
+            VALUES (%s, %s, %s, NOW(), NOW())
+            RETURNING *
+            """,
+            (name.strip(), final_slug, plan),
+        )
+        row = cur.fetchone()
+        return dict(row)
+
+
+def get_workspace(workspace_id: int) -> dict | None:
+    with get_conn() as conn:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur.execute("SELECT * FROM workspaces WHERE id=%s", (workspace_id,))
+        row = cur.fetchone()
+        return dict(row) if row else None
+
+
+def get_workspace_by_slug(slug: str) -> dict | None:
+    with get_conn() as conn:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur.execute("SELECT * FROM workspaces WHERE slug=%s", (slug,))
+        row = cur.fetchone()
+        return dict(row) if row else None
+
+
+def list_workspaces() -> list:
+    """Return all workspaces ordered by name (super-admin view)."""
+    with get_conn() as conn:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur.execute(
+            """
+            SELECT w.*,
+                   COUNT(wm.user_id) AS member_count
+            FROM workspaces w
+            LEFT JOIN workspace_members wm ON w.id = wm.workspace_id
+            GROUP BY w.id
+            ORDER BY w.name
+            """
+        )
+        return [dict(r) for r in cur.fetchall()]
+
+
+def update_workspace(workspace_id: int, name: str | None = None,
+                     slug: str | None = None, plan: str | None = None) -> dict | None:
+    """Update mutable workspace fields.  Returns the updated row."""
+    parts = []
+    params: list = []
+    if name is not None:
+        parts.append("name=%s")
+        params.append(name.strip())
+    if slug is not None:
+        parts.append("slug=%s")
+        params.append(slug.strip())
+    if plan is not None:
+        parts.append("plan=%s")
+        params.append(plan)
+    if not parts:
+        return get_workspace(workspace_id)
+    parts.append("updated_at=NOW()")
+    params.append(workspace_id)
+    with get_conn() as conn:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur.execute(
+            f"UPDATE workspaces SET {', '.join(parts)} WHERE id=%s RETURNING *",
+            params,
+        )
+        row = cur.fetchone()
+        return dict(row) if row else None
+
+
+def delete_workspace(workspace_id: int) -> None:
+    """Delete a workspace and all its members (CASCADE)."""
+    with get_conn() as conn:
+        conn.cursor().execute("DELETE FROM workspaces WHERE id=%s", (workspace_id,))
+
+
+# ── Workspace members ──────────────────────────────────────────────────────────
+def list_workspace_members(workspace_id: int) -> list:
+    with get_conn() as conn:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur.execute(
+            """
+            SELECT wm.workspace_id, wm.user_id, wm.role, wm.joined_at,
+                   u.username, u.email, u.role AS global_role
+            FROM workspace_members wm
+            JOIN users u ON wm.user_id = u.id
+            WHERE wm.workspace_id = %s
+            ORDER BY wm.role DESC, u.username
+            """,
+            (workspace_id,),
+        )
+        return [dict(r) for r in cur.fetchall()]
+
+
+def get_workspace_member(workspace_id: int, user_id: int) -> dict | None:
+    with get_conn() as conn:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur.execute(
+            "SELECT * FROM workspace_members WHERE workspace_id=%s AND user_id=%s",
+            (workspace_id, user_id),
+        )
+        row = cur.fetchone()
+        return dict(row) if row else None
+
+
+def set_workspace_member(workspace_id: int, user_id: int, role: str) -> None:
+    """Upsert a member's workspace role."""
+    with get_conn() as conn:
+        conn.cursor().execute(
+            """
+            INSERT INTO workspace_members (workspace_id, user_id, role, joined_at)
+            VALUES (%s, %s, %s, NOW())
+            ON CONFLICT (workspace_id, user_id)
+            DO UPDATE SET role=EXCLUDED.role
+            """,
+            (workspace_id, user_id, role),
+        )
+
+
+def remove_workspace_member(workspace_id: int, user_id: int) -> None:
+    with get_conn() as conn:
+        conn.cursor().execute(
+            "DELETE FROM workspace_members WHERE workspace_id=%s AND user_id=%s",
+            (workspace_id, user_id),
+        )
+
+
+def list_user_workspaces(user_id: int) -> list:
+    """Return all workspaces the user belongs to, with their role in each."""
+    with get_conn() as conn:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur.execute(
+            """
+            SELECT w.*, wm.role AS member_role, wm.joined_at
+            FROM workspaces w
+            JOIN workspace_members wm ON w.id = wm.workspace_id
+            WHERE wm.user_id = %s
+            ORDER BY wm.role DESC, w.name
+            """,
+            (user_id,),
+        )
+        return [dict(r) for r in cur.fetchall()]
+
+
+def get_default_workspace() -> dict | None:
+    """Return the 'default' workspace (always exists after migration 0008)."""
+    return get_workspace_by_slug("default")
