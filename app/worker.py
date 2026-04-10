@@ -204,6 +204,29 @@ def enqueue_script(self, script_name: str, payload: dict):
             pass  # best-effort — don't let a DB error create a second FAILURE
 
 
+def _make_run_publisher(task_id: str):
+    """Return a publish(event_dict) callable that pushes to Redis pub/sub.
+
+    The channel name is  run:<task_id>:stream  — the same key the SSE
+    endpoint subscribes to.  Returns None (silently) if Redis is unavailable.
+    """
+    try:
+        import redis as _redis
+        r = _redis.from_url(broker, socket_connect_timeout=2, socket_timeout=2)
+        r.ping()
+        channel = f"run:{task_id}:stream"
+
+        def _publish(event: dict):
+            try:
+                r.publish(channel, json.dumps(event, default=str))
+            except Exception:
+                pass  # non-fatal — fall back to DB polling on the client
+
+        return _publish
+    except Exception:
+        return None
+
+
 @app.task(bind=True, name="app.worker.enqueue_graph")
 def enqueue_graph(self, graph_id: int, payload: dict):
     task_id = self.request.id
@@ -214,16 +237,34 @@ def enqueue_graph(self, graph_id: int, payload: dict):
         pass
     update_run(task_id, "running")
     traces = []
+
+    publish = _make_run_publisher(task_id)
+
     try:
         g = get_graph(graph_id)
         if not g:
             raise ValueError(f"Graph {graph_id} not found")
         graph_data = json.loads(g.get('graph_json') or '{}')
         from app.core.executor import run_graph
+
         msgs = []
-        result = run_graph(graph_data, payload, logger=msgs.append)
+
+        def _streaming_logger(msg: str):
+            msgs.append(msg)
+            if publish:
+                publish({"type": "log", "msg": msg})
+
+        def _node_callback(event: dict):
+            if publish:
+                publish(event)
+
+        result = run_graph(graph_data, payload,
+                           logger=_streaming_logger,
+                           node_callback=_node_callback)
         traces = result.get('traces', [])
         update_run(task_id, "succeeded", result=result, traces=traces)
+        if publish:
+            publish({"type": "run_done", "status": "succeeded"})
         _send_run_alert(
             graph_id=graph_id,
             flow_name=g.get("name", f"graph#{graph_id}"),
@@ -233,6 +274,8 @@ def enqueue_graph(self, graph_id: int, payload: dict):
     except Exception as e:
         log.exception(f"Graph {graph_id} failed")
         update_run(task_id, "failed", result={"error": str(e)}, traces=traces)
+        if publish:
+            publish({"type": "run_done", "status": "failed", "error": str(e)})
         _send_run_alert(
             graph_id=graph_id,
             flow_name=(g or {}).get("name", f"graph#{graph_id}") if "g" in dir() else f"graph#{graph_id}",

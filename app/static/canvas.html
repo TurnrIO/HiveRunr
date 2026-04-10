@@ -2629,57 +2629,103 @@ function App(){
       return;
     }
 
-    // Poll the single-run endpoint at 800ms — much faster and cheaper than fetching all runs
-    const poll = setInterval(async()=>{
-      try {
-        const run = await api("GET",`/api/runs/by-task/${taskId}`);
-        if(!run || run.status==="running" || run.status==="queued") return;
-        clearInterval(poll);
-        setRunning(false);
-        refreshInspectorRuns();
+    // ── Live streaming via SSE — falls back to polling if EventSource fails ──
+    const liveTraceMap = {};
 
-        const traces = run.traces || [];
-        const traceMap = {};
-        traces.forEach(t => { if(t.node_id) traceMap[t.node_id] = t; });
-        const ctx = (run.result?.context) || {};
-        const err = run.result?.error || run.error || "";
+    function applyRunDone(status, errMsg) {
+      setRunning(false);
+      refreshInspectorRuns();
+      if (status === "succeeded") {
+        showToast("Run succeeded ✓");
+      } else if (status === "timeout") {
+        showToast("Run timed out", "error");
+      } else {
+        const err = errMsg || "";
+        let failedNodeId = null;
+        const m = err.match(/\[([a-zA-Z0-9_]+)\]/);
+        if (m) failedNodeId = m[1];
+        let failedNodeName = failedNodeId;
+        setNodes(ns => { const n = ns.find(x => x.id === failedNodeId); if (n) failedNodeName = n.data?.label || failedNodeId; return ns; });
+        setRunError({ msg: err, nodeName: failedNodeName });
+      }
+      // Final node annotation — clear any nodes still stuck on "pending"
+      setNodes(ns => ns.map(n => {
+        if (n.data.type === "note") return n;
+        const t = liveTraceMap[n.id];
+        if (t) {
+          const st = t.status === "ok" ? "ok" : t.status === "error" ? "err" : "skip";
+          return { ...n, data: { ...n.data, _runStatus: st, _runOutput: t.output, _runInput: t.input, _runDurationMs: t.duration_ms } };
+        }
+        return { ...n, data: { ...n.data, _runStatus: undefined } };
+      }));
+      setSelectedNode(s => {
+        if (!s) return s;
+        const t = liveTraceMap[s.id];
+        if (!t) return { ...s, data: { ...s.data, _runStatus: undefined } };
+        const st = t.status === "ok" ? "ok" : t.status === "error" ? "err" : "skip";
+        return { ...s, data: { ...s.data, _runStatus: st, _runOutput: t.output, _runInput: t.input, _runDurationMs: t.duration_ms } };
+      });
+    }
 
-        if(run.status==="succeeded"){
-          showToast("Run succeeded ✓");
-        } else {
-          let failedNodeId = null;
-          const m = err.match(/\[([a-zA-Z0-9_]+)\]/);
-          if(m) failedNodeId = m[1];
-          let failedNodeName = failedNodeId;
-          setNodes(ns=>{ const n=ns.find(x=>x.id===failedNodeId); if(n) failedNodeName=n.data?.label||failedNodeId; return ns; });
-          setRunError({ msg: err, nodeName: failedNodeName });
+    let evtSource = null;
+    const safetyTimer = setTimeout(() => { if (evtSource) { evtSource.close(); applyRunDone("timeout"); } }, 300000);
+
+    try {
+      evtSource = new EventSource(`/api/runs/${taskId}/stream`);
+
+      evtSource.onmessage = (e) => {
+        let event;
+        try { event = JSON.parse(e.data); } catch { return; }
+
+        if (event.type === "node_start") {
+          // Flip the node to "running" pulse while it executes
+          setNodes(ns => ns.map(n => n.id !== event.node_id ? n :
+            { ...n, data: { ...n.data, _runStatus: "running" } }));
+          setSelectedNode(s => s && s.id === event.node_id
+            ? { ...s, data: { ...s.data, _runStatus: "running" } } : s);
         }
 
-        // Annotate nodes with trace results (status + duration)
-        setNodes(ns => ns.map(n=>{
-          if(n.data.type==="note") return n;
-          const t = traceMap[n.id];
-          if(t){
-            const status = t.status==="ok"?"ok":t.status==="error"?"err":"skip";
-            return { ...n, data:{ ...n.data, _runStatus:status, _runOutput:t.output, _runInput:t.input, _runDurationMs:t.duration_ms }};
-          }
-          // Node wasn't reached — clear pending
-          return { ...n, data:{ ...n.data, _runStatus:undefined }};
-        }));
+        if (event.type === "node_done") {
+          liveTraceMap[event.node_id] = event;
+          const st = event.status === "ok" ? "ok" : event.status === "error" ? "err" : "skip";
+          setNodes(ns => ns.map(n => n.id !== event.node_id ? n :
+            { ...n, data: { ...n.data, _runStatus: st, _runOutput: event.output, _runInput: event.input, _runDurationMs: event.duration_ms } }));
+          setSelectedNode(s => s && s.id === event.node_id
+            ? { ...s, data: { ...s.data, _runStatus: st, _runOutput: event.output, _runInput: event.input, _runDurationMs: event.duration_ms } } : s);
+        }
 
-        // Update selected node if open
-        setSelectedNode(s => {
-          if(!s) return s;
-          const t = traceMap[s.id];
-          if(!t) return {...s, data:{...s.data, _runStatus:undefined}};
-          const st = t.status==="ok"?"ok":t.status==="error"?"err":"skip";
-          return { ...s, data:{ ...s.data, _runStatus:st, _runOutput:t.output, _runInput:t.input, _runDurationMs:t.duration_ms }};
-        });
-      } catch(e){ /* keep polling */ }
-    }, 800);
+        if (event.type === "run_done") {
+          clearTimeout(safetyTimer);
+          evtSource.close();
+          applyRunDone(event.status, event.error);
+        }
+      };
 
-    // Safety timeout after 5 min
-    setTimeout(()=>{ clearInterval(poll); setRunning(false) }, 300000);
+      evtSource.onerror = () => {
+        evtSource.close();
+        clearTimeout(safetyTimer);
+        // Fallback: single poll to get final state
+        api("GET", `/api/runs/by-task/${taskId}`).then(run => {
+          if (!run) { setRunning(false); return; }
+          (run.traces || []).forEach(t => { if (t.node_id) liveTraceMap[t.node_id] = t; });
+          applyRunDone(run.status, (run.result || {}).error || run.error);
+        }).catch(() => setRunning(false));
+      };
+
+    } catch(initErr) {
+      // EventSource not supported — fall back to polling
+      clearTimeout(safetyTimer);
+      const poll = setInterval(async () => {
+        try {
+          const run = await api("GET", `/api/runs/by-task/${taskId}`);
+          if (!run || run.status === "running" || run.status === "queued") return;
+          clearInterval(poll);
+          (run.traces || []).forEach(t => { if (t.node_id) liveTraceMap[t.node_id] = t; });
+          applyRunDone(run.status, (run.result || {}).error || run.error);
+        } catch(e) { /* keep polling */ }
+      }, 800);
+      setTimeout(() => { clearInterval(poll); setRunning(false); }, 300000);
+    }
   }
 
   // ── Single-node test ───────────────────────────────────────────────────────
