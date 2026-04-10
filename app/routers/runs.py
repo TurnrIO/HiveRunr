@@ -8,7 +8,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import Optional
 
-from app.deps import _check_admin, _require_run_scope, _require_manage_scope
+from app.deps import _check_admin, _require_run_scope, _require_manage_scope, _resolve_workspace
 from app.core.db import (
     list_runs, delete_run, clear_runs, get_run_by_task, update_run, get_graph,
     trim_runs_by_count, trim_runs_by_age,
@@ -73,9 +73,10 @@ def api_runs(
     flow_id:   Optional[int]  = Query(None, description="Filter by graph_workflows.id"),
     q:         Optional[str]  = Query(None, description="Search flow name / task_id"),
 ):
-    _check_admin(request)
+    user = _check_admin(request)
+    workspace_id = _resolve_workspace(request, user)
     _sync_stuck_runs()
-    return list_runs(page=page, page_size=page_size, status=status, flow_id=flow_id, q=q)
+    return list_runs(page=page, page_size=page_size, status=status, flow_id=flow_id, q=q, workspace_id=workspace_id)
 
 
 @router.get("/api/runs/by-task/{task_id}")

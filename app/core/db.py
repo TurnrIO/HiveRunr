@@ -211,7 +211,8 @@ def _init_db_legacy():
 
 # ── runs ──────────────────────────────────────────────────────────────────
 def list_runs(page: int = 1, page_size: int = 50,
-              status: str = None, flow_id: int = None, q: str = None):
+              status: str = None, flow_id: int = None, q: str = None,
+              workspace_id: int | None = None):
     """Return a page of runs with optional filtering.
 
     Args:
@@ -243,6 +244,9 @@ def list_runs(page: int = 1, page_size: int = 50,
         )
         like = f"%{q}%"
         params.extend([like, like, q.strip()])
+    if workspace_id is not None:
+        conditions.append("r.workspace_id = %s")
+        params.append(workspace_id)
 
     where = ("WHERE " + " AND ".join(conditions)) if conditions else ""
 
@@ -405,13 +409,19 @@ def sync_graph_schedules(graph_id: int, cron_nodes: list):
             )
 
 # ── graph_workflows ───────────────────────────────────────────────────────
-def list_graphs():
+def list_graphs(workspace_id: int | None = None):
     with get_conn() as conn:
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-        cur.execute("SELECT * FROM graph_workflows ORDER BY id")
+        if workspace_id is not None:
+            cur.execute(
+                "SELECT * FROM graph_workflows WHERE workspace_id=%s ORDER BY id",
+                (workspace_id,),
+            )
+        else:
+            cur.execute("SELECT * FROM graph_workflows ORDER BY id")
         return [dict(r) for r in cur.fetchall()]
 
-def create_graph(name, description, graph_json):
+def create_graph(name, description, graph_json, workspace_id: int | None = None):
     import secrets as _sec
     with get_conn() as conn:
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
@@ -422,8 +432,8 @@ def create_graph(name, description, graph_json):
             if not cur.fetchone():
                 break
         cur.execute(
-            "INSERT INTO graph_workflows(name,description,graph_json,slug) VALUES(%s,%s,%s,%s) RETURNING *",
-            (name, description, graph_json, slug)
+            "INSERT INTO graph_workflows(name,description,graph_json,slug,workspace_id) VALUES(%s,%s,%s,%s,%s) RETURNING *",
+            (name, description, graph_json, slug, workspace_id)
         )
         return dict(cur.fetchone())
 
@@ -480,7 +490,7 @@ def duplicate_graph(graph_id: int) -> dict:
             candidate = f"{base} (copy {n})"
             cur.execute("SELECT 1 FROM graph_workflows WHERE name=%s", (candidate,))
             n += 1
-    return create_graph(candidate, src.get('description', ''), src.get('graph_json') or '{}')
+    return create_graph(candidate, src.get('description', ''), src.get('graph_json') or '{}', workspace_id=src.get('workspace_id'))
 
 
 def delete_graph(graph_id):

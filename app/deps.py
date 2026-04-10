@@ -7,6 +7,8 @@ from fastapi.responses import RedirectResponse
 from app.core.db import (
     users_exist, get_api_token_by_hash, touch_api_token,
     get_flow_permission, FLOW_ROLE_LEVELS,
+    get_workspace, get_workspace_by_slug, get_workspace_member,
+    list_user_workspaces, get_default_workspace, WORKSPACE_ROLE_LEVELS,
 )
 
 ROLE_LEVELS = {"viewer": 0, "admin": 1, "owner": 2}
@@ -150,6 +152,77 @@ def _check_flow_access(request: Request, graph_id: int, required_role: str = "vi
             f"(you have '{fp['role']}')",
         )
     return user
+
+
+WORKSPACE_COOKIE = "hr_workspace"
+
+
+def _resolve_workspace(request: Request, user: dict) -> int | None:
+    """Determine the active workspace_id for this request.
+
+    Resolution order (first match wins):
+    1. X-Workspace-Id header  — explicit per-request override (API clients)
+    2. hr_workspace cookie    — last workspace the browser user switched to
+    3. User's first workspace  — from workspace_members
+    4. Global default          — the workspace with slug='default'
+    5. None                    — workspaces table not yet populated (pre-migration)
+
+    The returned workspace_id is validated: the user must be a member (unless
+    they are the global owner, who can access any workspace).
+    """
+    uid = user.get("id", 0)
+    is_global_owner = user.get("role") == "owner"
+
+    def _validate(ws_id: int) -> int | None:
+        """Return ws_id if valid and the user has access, else None."""
+        ws = get_workspace(ws_id)
+        if not ws:
+            return None
+        if is_global_owner or uid == 0:
+            return ws_id
+        member = get_workspace_member(ws_id, uid)
+        return ws_id if member else None
+
+    # 1. Explicit header
+    header_val = request.headers.get("X-Workspace-Id", "").strip()
+    if header_val:
+        try:
+            wid = int(header_val)
+            result = _validate(wid)
+            if result:
+                return result
+        except (ValueError, TypeError):
+            pass
+
+    # 2. Browser cookie
+    cookie_val = request.cookies.get(WORKSPACE_COOKIE, "").strip()
+    if cookie_val:
+        try:
+            wid = int(cookie_val)
+            result = _validate(wid)
+            if result:
+                return result
+        except (ValueError, TypeError):
+            pass
+
+    # 3. User's first workspace
+    if uid and uid != 0:
+        try:
+            memberships = list_user_workspaces(uid)
+            if memberships:
+                return memberships[0]["id"]
+        except Exception:
+            pass
+
+    # 4. Global default workspace
+    try:
+        default = get_default_workspace()
+        if default:
+            return default["id"]
+    except Exception:
+        pass
+
+    return None
 
 
 def _auth_redirect(request: Request):
