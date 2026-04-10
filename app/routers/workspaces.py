@@ -225,3 +225,37 @@ def api_my_workspaces(request: Request):
         # API token users — return all workspaces
         return list_workspaces()
     return list_user_workspaces(uid)
+
+
+# ── Workspace switch (sets browser cookie) ────────────────────────────────────
+@router.post("/api/workspaces/{workspace_id}/switch")
+def api_switch_workspace(workspace_id: int, request: Request):
+    """Set the active workspace cookie for the browser session.
+
+    Validates that the user is a member of the workspace (or is the global
+    owner), then sets the hr_workspace cookie which _resolve_workspace() reads.
+    Returns the workspace row so the frontend can update its state immediately.
+    """
+    from fastapi.responses import JSONResponse
+    from app.deps import WORKSPACE_COOKIE
+
+    user = _check_admin(request)
+    ws = get_workspace(workspace_id)
+    if not ws:
+        raise HTTPException(404, "Workspace not found")
+
+    uid = user.get("id", 0)
+    if user.get("role") != "owner" and uid != 0:
+        member = get_workspace_member(workspace_id, uid)
+        if not member:
+            raise HTTPException(403, "You are not a member of this workspace")
+
+    resp = JSONResponse({"ok": True, "workspace": ws})
+    resp.set_cookie(
+        WORKSPACE_COOKIE,
+        str(workspace_id),
+        httponly=False,   # JS needs to read this for display
+        samesite="lax",
+        max_age=365 * 86400,
+    )
+    return resp

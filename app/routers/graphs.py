@@ -5,7 +5,7 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 from typing import Optional
 
-from app.deps import _check_admin, _check_flow_access, ROLE_LEVELS
+from app.deps import _check_admin, _check_flow_access, _resolve_workspace, ROLE_LEVELS
 from app.core.db import (
     list_graphs, create_graph, get_graph, update_graph, delete_graph,
     get_graph_by_slug, get_graph_by_name, duplicate_graph,
@@ -60,7 +60,8 @@ class GraphUpdate(BaseModel):
 @router.get("/api/graphs")
 def api_graphs(request: Request):
     user = _check_admin(request)
-    all_graphs = list_graphs()
+    workspace_id = _resolve_workspace(request, user)
+    all_graphs = list_graphs(workspace_id=workspace_id)
     # Viewer-role users only see flows they have explicit permission for.
     if not _is_admin_or_owner(user) and user.get("id", 0) != 0:
         permitted = set(get_permitted_graph_ids(user["id"]))
@@ -73,7 +74,8 @@ def api_graph_create(body: GraphCreate, request: Request):
     user = _check_admin(request)
     if not _is_admin_or_owner(user):
         raise HTTPException(403, "Creating flows requires admin or owner role")
-    g = create_graph(body.name, body.description, json.dumps(body.graph_data))
+    workspace_id = _resolve_workspace(request, user)
+    g = create_graph(body.name, body.description, json.dumps(body.graph_data), workspace_id=workspace_id)
     _sync_cron_triggers(g['id'], body.graph_data)
     save_graph_version(g['id'], body.name, json.dumps(body.graph_data), note="Initial version")
     log_audit(user["username"], "graph.create", "graph", g["id"],
@@ -219,6 +221,7 @@ async def api_graph_run(graph_id: int, request: Request):
         raise HTTPException(404, "Graph not found")
     if not _is_admin_or_owner(user) and user.get("id", 0) != 0:
         _check_flow_access(request, graph_id, "runner")
+    workspace_id = _resolve_workspace(request, user)
     try:
         body = await request.json()
     except Exception:
@@ -229,8 +232,8 @@ async def api_graph_run(graph_id: int, request: Request):
         from app.core.db import get_conn
         with get_conn() as conn:
             conn.cursor().execute(
-                "INSERT INTO runs(task_id, graph_id, status, initial_payload) VALUES(%s,%s,'queued',%s)",
-                (task.id, graph_id, json.dumps(payload))
+                "INSERT INTO runs(task_id, graph_id, status, initial_payload, workspace_id) VALUES(%s,%s,'queued',%s,%s)",
+                (task.id, graph_id, json.dumps(payload), workspace_id)
             )
     except Exception as e:
         log.warning(f"Could not pre-create run record: {e}")

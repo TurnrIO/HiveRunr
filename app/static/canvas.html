@@ -383,10 +383,20 @@ const GROUPS = [
 // ── helpers ───────────────────────────────────────────────────────────────────
 function uid(){ return Math.random().toString(36).slice(2,9) }
 
+// Active workspace id — read from the hr_workspace cookie set by /api/workspaces/{id}/switch.
+// _getWorkspaceId() is used by the api() helper to stamp every request with X-Workspace-Id.
+function _getWorkspaceId() {
+  const m = document.cookie.match(/(?:^|;\s*)hr_workspace=([^;]+)/);
+  return m ? m[1] : null;
+}
+
 async function api(method, path, body){
+  const headers = {"Content-Type":"application/json"};
+  const wid = _getWorkspaceId();
+  if (wid) headers["X-Workspace-Id"] = wid;
   const r = await fetch(path, {
     method,
-    headers:{"Content-Type":"application/json"},
+    headers,
     credentials:"same-origin",
     body: body ? JSON.stringify(body) : undefined
   });
@@ -2589,6 +2599,8 @@ function App(){
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [showPermissionsModal, setShowPermissionsModal] = useState(false);
   const [currentUser, setCurrentUser] = useState(null);
+  const [workspaces, setWorkspaces]     = useState([]);
+  const [activeWorkspace, setActiveWorkspace] = useState(null);
   const [contextMenu, setContextMenu]    = useState(null); // {x,y,node}
   const [toast, setToast]                = useState(null);
   const [saving, setSaving]              = useState(false);
@@ -2624,6 +2636,13 @@ function App(){
     api("GET","/api/credentials").then(setCredentials).catch(()=>{});
     // Fetch current user for permission-gating UI elements
     api("GET","/api/auth/me").then(setCurrentUser).catch(()=>{});
+    // Load workspaces and resolve active one from cookie
+    api("GET","/api/workspaces/my/list").then(list=>{
+      setWorkspaces(list||[]);
+      const wid = _getWorkspaceId();
+      const active = wid ? (list||[]).find(w=>String(w.id)===String(wid)) : null;
+      setActiveWorkspace(active || (list&&list[0]) || null);
+    }).catch(()=>{});
   },[]);
 
   // keyboard shortcuts
@@ -3281,6 +3300,34 @@ function App(){
           <button className="btn btn-ghost btn-sm" style={{color:"#f87171"}} onClick={()=>loadInspectorRun(null)} title="Clear run overlay">✕</button>
         )}
         <div className="tb-divider"/>
+        {workspaces.length > 1 && (
+          <select
+            className="btn btn-ghost btn-sm"
+            style={{cursor:"pointer",maxWidth:160,padding:"2px 6px",color:"#a78bfa"}}
+            title="Switch workspace"
+            value={activeWorkspace?.id||""}
+            onChange={async e=>{
+              const wid = parseInt(e.target.value);
+              if(!wid) return;
+              try {
+                const res = await api("POST",`/api/workspaces/${wid}/switch`);
+                setActiveWorkspace(res.workspace);
+                loadGraphList();
+                showToast(`Switched to ${res.workspace.name}`);
+              } catch(err){ showToast(err.message,"error"); }
+            }}
+          >
+            {workspaces.map(w=>(
+              <option key={w.id} value={w.id}>🏢 {w.name}</option>
+            ))}
+          </select>
+        )}
+        {workspaces.length === 1 && activeWorkspace && (
+          <span style={{fontSize:11,color:"#6366f1",whiteSpace:"nowrap",padding:"0 4px"}}
+            title={`Workspace: ${activeWorkspace.name}`}>
+            🏢 {activeWorkspace.name}
+          </span>
+        )}
         <a href="/admin" className="btn btn-ghost btn-sm">← Admin</a>
         <button className="btn btn-ghost btn-sm" onClick={()=>setShowTestModal(true)} disabled={!currentGraph}>🧪 Test</button>
         <button className="btn btn-ghost btn-sm" onClick={saveGraph} disabled={saving} title="Save (Ctrl+S)">

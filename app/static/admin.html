@@ -122,10 +122,18 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:#7c3aed}
 <script type="text/babel">
 const { useState, useEffect, useCallback, useRef } = React;
 
+function _getWorkspaceId() {
+  const m = document.cookie.match(/(?:^|;\s*)hr_workspace=([^;]+)/);
+  return m ? m[1] : null;
+}
+
 async function api(method, path, body) {
+  const headers = {"Content-Type":"application/json"};
+  const wid = _getWorkspaceId();
+  if (wid) headers["X-Workspace-Id"] = wid;
   const r = await fetch(path, {
     method,
-    headers: {"Content-Type":"application/json"},
+    headers,
     credentials: "same-origin",
     body: body ? JSON.stringify(body) : undefined
   });
@@ -3290,11 +3298,19 @@ function App() {
   const [toast, setToast]                  = useState(null);
   const [currentUser, setCurrentUser]      = useState(null);
   const [encryptionOk, setEncryptionOk]   = useState(true);
+  const [workspaces, setWorkspaces]        = useState([]);
+  const [activeWorkspace, setActiveWorkspace] = useState(null);
   const showToast = useCallback((msg, type="success") => setToast({msg,type,key:Date.now()}), []);
 
   useEffect(()=>{
     api("GET","/api/auth/me").then(u=>{ if(u) setCurrentUser(u); }).catch(()=>{});
     api("GET","/api/auth/status").then(s=>{ if(s) setEncryptionOk(!!s.encryption_configured); }).catch(()=>{});
+    api("GET","/api/workspaces/my/list").then(list=>{
+      setWorkspaces(list||[]);
+      const wid = _getWorkspaceId();
+      const active = wid ? (list||[]).find(w=>String(w.id)===String(wid)) : null;
+      setActiveWorkspace(active||(list&&list[0])||null);
+    }).catch(()=>{});
   },[]);
 
   const setPage = useCallback((id) => {
@@ -3317,6 +3333,34 @@ function App() {
     <>
       <div className="sidebar">
         <div className="logo">⚡ HiveRunr</div>
+        {/* Workspace selector — only shown when the user belongs to multiple workspaces */}
+        {workspaces.length > 1 && (
+          <div style={{padding:"0 12px 12px",borderBottom:"1px solid #2a2d3e",marginBottom:4}}>
+            <div style={{fontSize:10,color:"#4b5563",marginBottom:4,textTransform:"uppercase",letterSpacing:.06,fontWeight:600}}>Workspace</div>
+            <select
+              value={activeWorkspace?.id||""}
+              onChange={async e=>{
+                const wid = parseInt(e.target.value);
+                if(!wid) return;
+                try {
+                  const res = await api("POST",`/api/workspaces/${wid}/switch`);
+                  setActiveWorkspace(res.workspace);
+                  window.location.reload();
+                } catch(err){ alert(err.message); }
+              }}
+              style={{width:"100%",background:"#1e2130",border:"1px solid #2d3148",borderRadius:6,
+                      color:"#a78bfa",fontSize:12,padding:"5px 8px",cursor:"pointer"}}
+            >
+              {workspaces.map(w=><option key={w.id} value={w.id}>{w.name}</option>)}
+            </select>
+          </div>
+        )}
+        {workspaces.length === 1 && activeWorkspace && (
+          <div style={{padding:"0 12px 10px",borderBottom:"1px solid #2a2d3e",marginBottom:4}}>
+            <div style={{fontSize:10,color:"#4b5563",marginBottom:2,textTransform:"uppercase",letterSpacing:.06,fontWeight:600}}>Workspace</div>
+            <div style={{fontSize:12,color:"#a78bfa",fontWeight:600}}>🏢 {activeWorkspace.name}</div>
+          </div>
+        )}
         {PAGES.map(p=>(
           <div key={p.id} className={`nav-item${page===p.id?" active":""}`} onClick={()=>setPage(p.id)}>
             <span className="nav-icon">{p.icon}</span>{p.label}
