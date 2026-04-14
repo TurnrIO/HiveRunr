@@ -1,5 +1,6 @@
 """Auth, user management, and API token routers."""
 import logging
+import os
 import secrets as _sec
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse, Response, RedirectResponse
@@ -577,11 +578,10 @@ def auth_signup(body: SignupBody, request: Request):
     The new user gets global role 'viewer' and is the 'owner' of their
     own workspace.
     """
-    import os as _os
     from app.auth import hash_password, hash_token, generate_token, SESSION_COOKIE, SESSION_DAYS
     from app.deps import WORKSPACE_COOKIE
 
-    if _os.environ.get("ALLOW_SIGNUP", "false").lower() != "true":
+    if os.environ.get("ALLOW_SIGNUP", "false").lower() != "true":
         raise HTTPException(403, "Self-serve signup is not enabled on this instance")
 
     if len(body.password) < 8:
