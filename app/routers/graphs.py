@@ -190,7 +190,9 @@ def api_test_node(graph_id: int, node_id: str, body: NodeTestBody, request: Requ
 
     try:
         from app.core.db import load_all_credentials
-        creds = load_all_credentials()
+        from app.deps import _resolve_workspace
+        workspace_id = _resolve_workspace(request, user)
+        creds = load_all_credentials(workspace_id=workspace_id)
     except Exception:
         creds = {}
 
