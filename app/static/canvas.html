@@ -381,7 +381,14 @@ const GROUPS = [
 ];
 
 // ── helpers ───────────────────────────────────────────────────────────────────
-function uid(){ return Math.random().toString(36).slice(2,9) }
+function uid(){
+  // RFC 4122 v4 UUID — collision-safe node identifiers
+  if (typeof crypto !== "undefined" && crypto.randomUUID) return crypto.randomUUID();
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, c => {
+    const r = Math.random() * 16 | 0;
+    return (c === "x" ? r : (r & 0x3 | 0x8)).toString(16);
+  });
+}
 
 // Active workspace id — read from the hr_workspace cookie set by /api/workspaces/{id}/switch.
 // _getWorkspaceId() is used by the api() helper to stamp every request with X-Workspace-Id.
@@ -2605,6 +2612,7 @@ function App(){
   const [toast, setToast]                = useState(null);
   const [saving, setSaving]              = useState(false);
   const [isDirty, setIsDirty]            = useState(false);
+  const [lastSaved, setLastSaved]        = useState(null);  // Date of last successful save
   const [running, setRunning]            = useState(false);
   const [runError, setRunError]          = useState(null);  // {msg, nodeName}
   const [showMap, setShowMap]            = useState(true);
@@ -2664,6 +2672,14 @@ function App(){
     window.addEventListener("beforeunload", h);
     return ()=>window.removeEventListener("beforeunload", h);
   }, [isDirty]);
+
+  // Autosave: 30 s after the most recent change (timer resets on each new change).
+  // Only fires when an existing graph is open and is not already saving.
+  useEffect(()=>{
+    if (!isDirty || !currentGraph || saving) return;
+    const timer = setTimeout(()=>{ saveGraph(); }, 30_000);
+    return ()=>clearTimeout(timer);
+  }, [isDirty, currentGraph, saving]);
 
   function saveSnap(ns, es){
     if(restoring.current) return;
@@ -2880,12 +2896,14 @@ function App(){
       if(currentGraph){
         await api("PUT",`/api/graphs/${currentGraph.id}`,{ name:graphName, graph_data:gd });
         setIsDirty(false);
+        setLastSaved(new Date());
         showToast("Graph saved!");
         await loadGraphList();
       } else {
         const g = await api("POST","/api/graphs",{ name:graphName, description:"", graph_data:gd });
         setCurrentGraph(g);
         setIsDirty(false);
+        setLastSaved(new Date());
         showToast("Graph created!");
         await loadGraphList();
       }
@@ -3269,6 +3287,20 @@ function App(){
             #{currentGraph.id}
           </span>
         )}
+        {/* Dirty / saved indicator */}
+        {isDirty && !saving && (
+          <span style={{fontSize:11,color:"#f59e0b",whiteSpace:"nowrap",
+            background:"#f59e0b15",border:"1px solid #f59e0b44",
+            borderRadius:4,padding:"1px 7px",marginLeft:2}}>
+            ● Unsaved
+          </span>
+        )}
+        {!isDirty && lastSaved && (
+          <span style={{fontSize:11,color:"#475569",whiteSpace:"nowrap",marginLeft:4}}
+            title={`Last saved: ${lastSaved.toLocaleTimeString()}`}>
+            ✓ Saved
+          </span>
+        )}
         <div className="topbar-spacer"/>
         {/* Undo / Redo */}
         <button className="btn btn-ghost btn-sm" onClick={doUndo}
@@ -3330,8 +3362,10 @@ function App(){
         )}
         <a href="/admin" className="btn btn-ghost btn-sm">← Admin</a>
         <button className="btn btn-ghost btn-sm" onClick={()=>setShowTestModal(true)} disabled={!currentGraph}>🧪 Test</button>
-        <button className="btn btn-ghost btn-sm" onClick={saveGraph} disabled={saving} title="Save (Ctrl+S)">
-          {saving ? <><span style={{animation:"spin .8s linear infinite",display:"inline-block"}}>⟳</span> Saving…</> : isDirty ? "💾 Save ●" : "💾 Save"}
+        <button className="btn btn-ghost btn-sm" onClick={saveGraph} disabled={saving}
+          title="Save (Ctrl+S)"
+          style={isDirty && !saving ? {color:"#f59e0b",borderColor:"#f59e0b55"} : {}}>
+          {saving ? <><span style={{animation:"spin .8s linear infinite",display:"inline-block"}}>⟳</span> Saving…</> : "💾 Save"}
         </button>
         <button className="btn btn-success btn-sm" onClick={()=>runGraph()} disabled={running||!currentGraph}>
           {running ? <><span style={{animation:"spin .8s linear infinite",display:"inline-block"}}>⟳</span> Running…</> : "▶ Run"}
