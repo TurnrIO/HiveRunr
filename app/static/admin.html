@@ -3313,7 +3313,7 @@ function WorkspacesPage({showToast, user}) {
       ]);
       const list = myList || [];
       setAllUsers(usersResp || []);
-      const active = wsId ? list.find(w => String(w.id) === String(wsId)) : list[0];
+      const active = (wsId ? list.find(w => String(w.id) === String(wsId)) : null) || list[0];
       if (active) {
         setWs(active);
         setNewName(active.name);
@@ -3423,127 +3423,139 @@ function WorkspacesPage({showToast, user}) {
   const nonMemberUsers = allUsers.filter(u => !members.find(m => m.user_id === u.id));
 
   if (loading) return <div className="page"><div className="empty-state">Loading…</div></div>;
-  if (!ws) return <div className="page"><div className="empty-state">No workspace found. Try refreshing.</div></div>;
 
   return (
     <div className="page">
       <h1 className="page-title">🏢 Workspaces</h1>
 
-      {/* ── Current workspace ─────────────────────────────────────────── */}
-      <div className="card">
-        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
-          <div>
-            <div className="card-title" style={{marginBottom:2}}>Current: {ws.name}</div>
-            <div style={{fontSize:12,color:"#475569"}}>
-              Slug: <code style={{color:"#a78bfa"}}>{ws.slug}</code>
-              &nbsp;·&nbsp; Plan: <span style={{color:"#94a3b8",textTransform:"capitalize"}}>{ws.plan||"free"}</span>
-            </div>
+      {/* Warning when no active workspace resolved from cookie */}
+      {!ws && (
+        <div className="card" style={{borderColor:"#f59e0b44",background:"#f59e0b08"}}>
+          <div style={{color:"#f59e0b",fontSize:13}}>
+            ⚠ No active workspace found. Switch to one using the table below, or create a new one.
           </div>
-          {isAdmin && !editingName && (
-            <button className="btn btn-ghost" style={{fontSize:12}}
-              onClick={()=>{ setNewName(ws.name); setEditingName(true); }}>✏ Rename</button>
+        </div>
+      )}
+
+      {/* ── Current workspace ───────────────────────────────────────────────────── */}
+      {ws && (
+        <div className="card">
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
+            <div>
+              <div className="card-title" style={{marginBottom:2}}>Current: {ws.name}</div>
+              <div style={{fontSize:12,color:"#475569"}}>
+                Slug: <code style={{color:"#a78bfa"}}>{ws.slug}</code>
+                &nbsp;·&nbsp; Plan: <span style={{color:"#94a3b8",textTransform:"capitalize"}}>{ws.plan||"free"}</span>
+              </div>
+            </div>
+            {isAdmin && !editingName && (
+              <button className="btn btn-ghost" style={{fontSize:12}}
+                onClick={()=>{ setNewName(ws.name); setEditingName(true); }}>✏ Rename</button>
+            )}
+          </div>
+          {editingName && (
+            <form onSubmit={rename} style={{display:"flex",gap:10,alignItems:"flex-end"}}>
+              <div className="form-group" style={{flex:1,marginBottom:0}}>
+                <label>New Name</label>
+                <input value={newName} onChange={e=>setNewName(e.target.value)} required autoFocus/>
+              </div>
+              <button type="submit" className="btn btn-primary"
+                disabled={renaming || !newName.trim() || newName.trim()===ws.name}>
+                {renaming ? "Saving…" : "Save"}
+              </button>
+              <button type="button" className="btn btn-ghost"
+                onClick={()=>setEditingName(false)}>Cancel</button>
+            </form>
           )}
         </div>
-        {editingName && (
-          <form onSubmit={rename} style={{display:"flex",gap:10,alignItems:"flex-end"}}>
-            <div className="form-group" style={{flex:1,marginBottom:0}}>
-              <label>New Name</label>
-              <input value={newName} onChange={e=>setNewName(e.target.value)} required autoFocus/>
-            </div>
-            <button type="submit" className="btn btn-primary"
-              disabled={renaming || !newName.trim() || newName.trim()===ws.name}>
-              {renaming ? "Saving…" : "Save"}
-            </button>
-            <button type="button" className="btn btn-ghost"
-              onClick={()=>setEditingName(false)}>Cancel</button>
-          </form>
-        )}
-      </div>
+      )}
 
-      {/* ── Members ───────────────────────────────────────────────────── */}
-      <div className="card">
-        <div className="card-title">Members</div>
-        <table>
-          <thead><tr><th>User</th><th>Workspace Role</th>{isAdmin && <th></th>}</tr></thead>
-          <tbody>
-            {members.map(m => {
-              const isMe = user?.id === m.user_id;
-              const isWsOwner = m.role === "owner";
-              return (
-                <tr key={m.user_id}>
-                  <td>
-                    <div style={{display:"flex",alignItems:"center",gap:8}}>
-                      <div style={{width:26,height:26,borderRadius:"50%",flexShrink:0,
-                        background:WS_ROLE_COLORS[m.role]+"22",
-                        border:`1px solid ${WS_ROLE_COLORS[m.role]}55`,
-                        display:"flex",alignItems:"center",justifyContent:"center",
-                        fontSize:11,fontWeight:700,color:WS_ROLE_COLORS[m.role]}}>
-                        {(m.username||"?")[0].toUpperCase()}
+      {/* ── Members ──────────────────────────────────────────────────────────── */}
+      {ws && (
+        <div className="card">
+          <div className="card-title">Members</div>
+          <table>
+            <thead><tr><th>User</th><th>Workspace Role</th>{isAdmin && <th></th>}</tr></thead>
+            <tbody>
+              {members.map(m => {
+                const isMe = user?.id === m.user_id;
+                const isWsOwner = m.role === "owner";
+                return (
+                  <tr key={m.user_id}>
+                    <td>
+                      <div style={{display:"flex",alignItems:"center",gap:8}}>
+                        <div style={{width:26,height:26,borderRadius:"50%",flexShrink:0,
+                          background:WS_ROLE_COLORS[m.role]+"22",
+                          border:`1px solid ${WS_ROLE_COLORS[m.role]}55`,
+                          display:"flex",alignItems:"center",justifyContent:"center",
+                          fontSize:11,fontWeight:700,color:WS_ROLE_COLORS[m.role]}}>
+                          {(m.username||"?")[0].toUpperCase()}
+                        </div>
+                        <span style={{fontWeight:500}}>{m.username}
+                          {isMe && <span style={{fontSize:10,color:"#475569",marginLeft:5}}>(you)</span>}
+                        </span>
                       </div>
-                      <span style={{fontWeight:500}}>{m.username}
-                        {isMe && <span style={{fontSize:10,color:"#475569",marginLeft:5}}>(you)</span>}
-                      </span>
-                    </div>
-                  </td>
-                  <td>
-                    {isAdmin && !isWsOwner ? (
-                      <select value={m.role} onChange={e=>changeRole(m.user_id, e.target.value)}
-                        style={{background:"#1e2130",border:"1px solid #2d3148",borderRadius:6,
-                                color:"#e2e8f0",fontSize:12,padding:"3px 6px"}}>
-                        <option value="viewer">viewer</option>
-                        <option value="admin">admin</option>
-                        <option value="owner">owner</option>
-                      </select>
-                    ) : (
-                      <span style={{fontSize:12,color:WS_ROLE_COLORS[m.role],fontWeight:600,
-                                    textTransform:"capitalize"}}>{m.role}</span>
-                    )}
-                  </td>
-                  {isAdmin && (
-                    <td style={{textAlign:"right"}}>
-                      {!isWsOwner && !isMe && (
-                        <button className="btn btn-ghost" style={{fontSize:11,padding:"2px 8px",color:"#f87171"}}
-                          onClick={()=>removeMember(m.user_id, m.username)}>Remove</button>
+                    </td>
+                    <td>
+                      {isAdmin && !isWsOwner ? (
+                        <select value={m.role} onChange={e=>changeRole(m.user_id, e.target.value)}
+                          style={{background:"#1e2130",border:"1px solid #2d3148",borderRadius:6,
+                                  color:"#e2e8f0",fontSize:12,padding:"3px 6px"}}>
+                          <option value="viewer">viewer</option>
+                          <option value="admin">admin</option>
+                          <option value="owner">owner</option>
+                        </select>
+                      ) : (
+                        <span style={{fontSize:12,color:WS_ROLE_COLORS[m.role],fontWeight:600,
+                                      textTransform:"capitalize"}}>{m.role}</span>
                       )}
                     </td>
-                  )}
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-        {isAdmin && nonMemberUsers.length > 0 && (
-          <form onSubmit={addMember} style={{display:"flex",gap:10,alignItems:"flex-end",marginTop:16,
-                                            borderTop:"1px solid #2a2d3e",paddingTop:14}}>
-            <div className="form-group" style={{flex:1,marginBottom:0}}>
-              <label>Add Member</label>
-              <select value={addUserId} onChange={e=>setAddUserId(e.target.value)} required
-                style={{width:"100%",background:"#1e2130",border:"1px solid #2d3148",borderRadius:6,
-                        color:"#e2e8f0",fontSize:13,padding:"6px 8px"}}>
-                <option value="">— select user —</option>
-                {nonMemberUsers.map(u=>(
-                  <option key={u.id} value={u.id}>{u.username} ({u.email})</option>
-                ))}
-              </select>
-            </div>
-            <div className="form-group" style={{width:130,marginBottom:0}}>
-              <label>Role</label>
-              <select value={addRole} onChange={e=>setAddRole(e.target.value)}
-                style={{width:"100%",background:"#1e2130",border:"1px solid #2d3148",borderRadius:6,
-                        color:"#e2e8f0",fontSize:13,padding:"6px 8px"}}>
-                <option value="viewer">viewer</option>
-                <option value="admin">admin</option>
-                <option value="owner">owner</option>
-              </select>
-            </div>
-            <button type="submit" className="btn btn-primary" disabled={addBusy||!addUserId}>
-              {addBusy ? "Adding…" : "+ Add"}
-            </button>
-          </form>
-        )}
-      </div>
+                    {isAdmin && (
+                      <td style={{textAlign:"right"}}>
+                        {!isWsOwner && !isMe && (
+                          <button className="btn btn-ghost" style={{fontSize:11,padding:"2px 8px",color:"#f87171"}}
+                            onClick={()=>removeMember(m.user_id, m.username)}>Remove</button>
+                        )}
+                      </td>
+                    )}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+          {isAdmin && nonMemberUsers.length > 0 && (
+            <form onSubmit={addMember} style={{display:"flex",gap:10,alignItems:"flex-end",marginTop:16,
+                                              borderTop:"1px solid #2a2d3e",paddingTop:14}}>
+              <div className="form-group" style={{flex:1,marginBottom:0}}>
+                <label>Add Member</label>
+                <select value={addUserId} onChange={e=>setAddUserId(e.target.value)} required
+                  style={{width:"100%",background:"#1e2130",border:"1px solid #2d3148",borderRadius:6,
+                          color:"#e2e8f0",fontSize:13,padding:"6px 8px"}}>
+                  <option value="">— select user —</option>
+                  {nonMemberUsers.map(u=>(
+                    <option key={u.id} value={u.id}>{u.username} ({u.email})</option>
+                  ))}
+                </select>
+              </div>
+              <div className="form-group" style={{width:130,marginBottom:0}}>
+                <label>Role</label>
+                <select value={addRole} onChange={e=>setAddRole(e.target.value)}
+                  style={{width:"100%",background:"#1e2130",border:"1px solid #2d3148",borderRadius:6,
+                          color:"#e2e8f0",fontSize:13,padding:"6px 8px"}}>
+                  <option value="viewer">viewer</option>
+                  <option value="admin">admin</option>
+                  <option value="owner">owner</option>
+                </select>
+              </div>
+              <button type="submit" className="btn btn-primary" disabled={addBusy||!addUserId}>
+                {addBusy ? "Adding…" : "+ Add"}
+              </button>
+            </form>
+          )}
+        </div>
+      )}
 
-      {/* ── All workspaces (owner only) ──────────────────────────────── */}
+      {/* ── All workspaces (owner only) ───────────────────────────────────── */}
       {isOwner && (
         <div className="card">
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
@@ -3609,7 +3621,6 @@ function WorkspacesPage({showToast, user}) {
     </div>
   );
 }
-
 
 // ── App shell ─────────────────────────────────────────────────────────────
 const PAGES = [
