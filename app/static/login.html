@@ -78,9 +78,26 @@
     <button class="btn" id="forgot-btn" type="submit">Send reset link</button>
     <a class="back-link" onclick="showLogin()">← Back to login</a>
   </form>
+
+  <p id="signup-link" style="display:none;text-align:center;font-size:13px;color:#64748b;margin-top:16px">
+    Don't have an account? <a href="/signup" style="color:#7c3aed;text-decoration:none">Create one free</a>
+  </p>
 </div>
 
 <script>
+// Show signup link if self-serve signup is enabled on this instance
+(async () => {
+  try {
+    const res = await fetch('/api/auth/status');
+    if (res.ok) {
+      const data = await res.json();
+      if (data.allow_signup) {
+        document.getElementById('signup-link').style.display = 'block';
+      }
+    }
+  } catch (e) { /* ignore */ }
+})();
+
 function showForgot(e) {
   e && e.preventDefault();
   document.getElementById('login-form').style.display = 'none';

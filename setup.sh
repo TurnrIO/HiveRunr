@@ -169,6 +169,23 @@ current_tz="${current_tz:-$detected_tz}"
 new_tz=$(ask_val "APP_TIMEZONE (IANA timezone for the scheduler UI, e.g. Europe/London)" "$current_tz")
 [ -n "$new_tz" ] && set_env "APP_TIMEZONE" "$new_tz" && ok "APP_TIMEZONE set to $new_tz"
 
+# ── Self-serve signup ─────────────────────────────────────────────────────────
+echo ""
+if ask_yn "Enable self-serve signup? (lets anyone register their own account + workspace)" n; then
+  set_env "ALLOW_SIGNUP" "true"
+  ok "Self-serve signup enabled — /signup page is now active"
+
+  current_domain=$(grep '^APP_DOMAIN=' .env 2>/dev/null | cut -d'=' -f2-)
+  new_domain=$(ask_val "APP_DOMAIN for subdomain routing (e.g. hiverunr.com, leave blank to skip)" "${current_domain}")
+  if [ -n "$new_domain" ]; then
+    set_env "APP_DOMAIN" "$new_domain"
+    set_env "SUBDOMAIN_ROUTING" "true"
+    ok "Subdomain routing enabled — <slug>.${new_domain} will scope to the matching workspace"
+  fi
+else
+  set_env "ALLOW_SIGNUP" "false"
+fi
+
 # ── Run Script node ───────────────────────────────────────────────────────────
 echo ""
 if ask_yn "Enable the 'Run Python Script' node? ${RED}(security risk — read the warning below)${RESET}" n; then
@@ -190,6 +207,8 @@ printf "  %-22s %s\n" "AGENTMAIL_FROM:"    "$(grep '^AGENTMAIL_FROM=' .env | cut
 printf "  %-22s %s\n" "OWNER_EMAIL:"       "$(grep '^OWNER_EMAIL=' .env | cut -d'=' -f2-)"
 printf "  %-22s %s\n" "APP_URL:"           "$(grep '^APP_URL=' .env | cut -d'=' -f2-)"
 printf "  %-22s %s\n" "APP_TIMEZONE:"      "$(grep '^APP_TIMEZONE=' .env | cut -d'=' -f2-);"
+printf "  %-22s %s\n" "ALLOW_SIGNUP:"      "$(grep '^ALLOW_SIGNUP=' .env | cut -d'=' -f2-)"
+printf "  %-22s %s\n" "SUBDOMAIN_ROUTING:" "$(grep '^SUBDOMAIN_ROUTING=' .env | cut -d'=' -f2-)"
 printf "  %-22s %s\n" "RUN_SCRIPT:"        "$(grep '^ENABLE_RUN_SCRIPT=' .env | cut -d'=' -f2-)"
 echo ""
 info "Edit .env at any time to add OpenAI, Slack, Telegram, and other integration keys."

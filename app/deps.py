@@ -183,6 +183,13 @@ def _resolve_workspace(request: Request, user: dict) -> int | None:
         member = get_workspace_member(ws_id, uid)
         return ws_id if member else None
 
+    # 0. Subdomain-resolved workspace (highest priority — set by SubdomainWorkspaceMiddleware)
+    subdomain_ws_id = getattr(request.state, "subdomain_workspace_id", None)
+    if subdomain_ws_id:
+        result = _validate(subdomain_ws_id)
+        if result:
+            return result
+
     # 1. Explicit header
     header_val = request.headers.get("X-Workspace-Id", "").strip()
     if header_val:

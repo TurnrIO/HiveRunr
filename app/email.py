@@ -7,11 +7,11 @@ Configuration (via .env):
     OWNER_EMAIL        — Owner's email for password-reset and system alerts
 
 AgentMail API: https://docs.agentmail.to/api-reference/inboxes/messages/send
-  POST https://api.agentmail.to/v0/inboxes/{inbox_id}/messages
+  POST https://api.agentmail.to/v0/inboxes/{inbox_id}/messages/send
   Authorization: Bearer {AGENTMAIL_API_KEY}
   Body: { "to": ["addr"], "subject": "...", "html": "...", "text": "..." }
 
-The inbox_id is the local part of AGENTMAIL_FROM (everything before the @).
+The inbox_id is the full AGENTMAIL_FROM address (e.g. alerts@agentmail.to).
 """
 import os
 import logging
@@ -44,8 +44,8 @@ def send_email(to: "str | list[str]", subject: str, html: str, text: str = "") -
         log.warning("email: AGENTMAIL_API_KEY / AGENTMAIL_FROM not configured — skipping")
         return False
 
-    # Derive inbox_id from the from address (local-part before @)
-    inbox_id = from_addr.split("@")[0] if "@" in from_addr else from_addr
+    # inbox_id is the full AGENTMAIL_FROM address (e.g. alerts@agentmail.to)
+    inbox_id = from_addr.strip()
 
     if isinstance(to, str):
         to = [t.strip() for t in to.split(",") if t.strip()]
@@ -69,7 +69,7 @@ def send_email(to: "str | list[str]", subject: str, html: str, text: str = "") -
     try:
         import httpx
         resp = httpx.post(
-            f"{AGENTMAIL_BASE}/inboxes/{inbox_id}/messages",
+            f"{AGENTMAIL_BASE}/inboxes/{inbox_id}/messages/send",
             headers={
                 "Authorization": f"Bearer {api_key}",
                 "Content-Type":  "application/json",
