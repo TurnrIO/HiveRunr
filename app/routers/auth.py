@@ -126,7 +126,7 @@ class SetupBody(BaseModel):
 
 @router.post("/api/auth/setup")
 def auth_setup(body: SetupBody):
-    from app.auth import hash_password, hash_token, generate_token, SESSION_COOKIE, SESSION_DAYS
+    from app.auth import hash_password, hash_token, generate_token, SESSION_COOKIE, SESSION_DAYS, is_secure_context
     if users_exist():
         raise HTTPException(400, "Setup already completed — an owner account already exists")
     if len(body.password) < 8:
@@ -138,7 +138,7 @@ def auth_setup(body: SetupBody):
     resp = JSONResponse({"ok": True, "user": {"id": user["id"],
                          "username": user["username"], "role": user["role"]}})
     resp.set_cookie(SESSION_COOKIE, token, httponly=True, samesite="lax",
-                    max_age=SESSION_DAYS * 86400)
+                    max_age=SESSION_DAYS * 86400, secure=is_secure_context())
     return resp
 
 
@@ -149,7 +149,7 @@ class LoginBody(BaseModel):
 
 @router.post("/api/auth/login")
 def auth_login(body: LoginBody, request: Request):
-    from app.auth import verify_password, hash_token, generate_token, SESSION_COOKIE, SESSION_DAYS
+    from app.auth import verify_password, hash_token, generate_token, SESSION_COOKIE, SESSION_DAYS, is_secure_context
     # Prefer X-Forwarded-For (set by Caddy/nginx) so we rate-limit the real client
     ip = (request.headers.get("x-forwarded-for", "").split(",")[0].strip()
           or request.client.host
@@ -165,7 +165,7 @@ def auth_login(body: LoginBody, request: Request):
     resp = JSONResponse({"ok": True, "user": {"id": user["id"],
                          "username": user["username"], "role": user["role"]}})
     resp.set_cookie(SESSION_COOKIE, token, httponly=True, samesite="lax",
-                    max_age=SESSION_DAYS * 86400)
+                    max_age=SESSION_DAYS * 86400, secure=is_secure_context())
     return resp
 
 
@@ -451,7 +451,7 @@ def invite_accept(token: str, request: Request):
     3. Otherwise → return 200 with {needs_signup: true, token, email, role, graph_name}
        so the frontend can redirect to a pre-filled registration form.
     """
-    from app.auth import hash_token, generate_token, SESSION_COOKIE, SESSION_DAYS
+    from app.auth import hash_token, generate_token, SESSION_COOKIE, SESSION_DAYS, is_secure_context
 
     token_hash = hash_token(token)
     invite     = get_invite_by_hash(token_hash)
@@ -481,7 +481,7 @@ def invite_accept(token: str, request: Request):
             "graph_name": graph_name,
         })
         resp.set_cookie(SESSION_COOKIE, sess_token, httponly=True, samesite="lax",
-                        max_age=SESSION_DAYS * 86400)
+                        max_age=SESSION_DAYS * 86400, secure=is_secure_context())
         return resp
 
     # New user — return info so the frontend can show a signup form
@@ -509,7 +509,7 @@ def invite_signup(body: InviteSignupBody, request: Request):
     Validates the invite token, creates the account (viewer global role),
     grants the per-flow permission, consumes the token, and logs the user in.
     """
-    from app.auth import hash_token, hash_password, generate_token, SESSION_COOKIE, SESSION_DAYS
+    from app.auth import hash_token, hash_password, generate_token, SESSION_COOKIE, SESSION_DAYS, is_secure_context
     from fastapi.responses import JSONResponse
 
     if len(body.password) < 8:
@@ -558,7 +558,7 @@ def invite_signup(body: InviteSignupBody, request: Request):
         "role": role,
     })
     resp.set_cookie(SESSION_COOKIE, sess_token, httponly=True, samesite="lax",
-                    max_age=SESSION_DAYS * 86400)
+                    max_age=SESSION_DAYS * 86400, secure=is_secure_context())
     return resp
 
 
@@ -578,7 +578,7 @@ def auth_signup(body: SignupBody, request: Request):
     The new user gets global role 'viewer' and is the 'owner' of their
     own workspace.
     """
-    from app.auth import hash_password, hash_token, generate_token, SESSION_COOKIE, SESSION_DAYS
+    from app.auth import hash_password, hash_token, generate_token, SESSION_COOKIE, SESSION_DAYS, is_secure_context
     from app.deps import WORKSPACE_COOKIE
 
     if os.environ.get("ALLOW_SIGNUP", "false").lower() != "true":
@@ -623,9 +623,10 @@ def auth_signup(body: SignupBody, request: Request):
         "user": {"id": new_user["id"], "username": new_user["username"], "role": new_user["role"]},
         "workspace": {"id": ws["id"], "name": ws["name"]} if ws else None,
     })
+    _secure = is_secure_context()
     resp.set_cookie(SESSION_COOKIE, sess_token, httponly=True, samesite="lax",
-                    max_age=SESSION_DAYS * 86400)
+                    max_age=SESSION_DAYS * 86400, secure=_secure)
     if ws:
         resp.set_cookie(WORKSPACE_COOKIE, str(ws["id"]), httponly=True, samesite="lax",
-                        max_age=SESSION_DAYS * 86400)
+                        max_age=SESSION_DAYS * 86400, secure=_secure)
     return resp

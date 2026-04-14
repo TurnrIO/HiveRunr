@@ -79,6 +79,86 @@ def api_runs(
     return list_runs(page=page, page_size=page_size, status=status, flow_id=flow_id, q=q, workspace_id=workspace_id)
 
 
+@router.get("/api/runs/stats")
+def api_runs_stats(request: Request):
+    """Server-side run aggregates for the Dashboard and Metrics page.
+
+    Returns:
+      - counts: total/succeeded/failed/running/queued across all time (workspace-scoped)
+      - top_failing: top 5 flows by failed-run count (all time, workspace-scoped)
+      - recent: last 10 runs with id, task_id, flow_name, status, created_at, duration_ms
+    """
+    from app.core.db import get_conn
+    import psycopg2.extras
+
+    user = _check_admin(request)
+    workspace_id = _resolve_workspace(request, user)
+
+    ws_filter    = "WHERE r.workspace_id = %(ws)s" if workspace_id else ""
+    ws_filter_and = "AND r.workspace_id = %(ws)s" if workspace_id else ""
+    params = {"ws": workspace_id}
+
+    with get_conn() as conn:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+
+        # ── Overall counts ────────────────────────────────────────────────────
+        cur.execute(f"""
+            SELECT
+                COUNT(*)                                          AS total,
+                COUNT(*) FILTER (WHERE status='succeeded')       AS succeeded,
+                COUNT(*) FILTER (WHERE status='failed')          AS failed,
+                COUNT(*) FILTER (WHERE status='running')         AS running,
+                COUNT(*) FILTER (WHERE status='queued')          AS queued,
+                ROUND(AVG(
+                    EXTRACT(EPOCH FROM (updated_at - created_at)) * 1000
+                ) FILTER (WHERE status IN ('succeeded','failed')))::bigint AS avg_ms
+            FROM runs r
+            {ws_filter}
+        """, params)
+        counts = dict(cur.fetchone() or {})
+
+        # ── Top 5 failing flows ───────────────────────────────────────────────
+        cur.execute(f"""
+            SELECT
+                COALESCE(g.name, r.workflow, 'unknown') AS flow_name,
+                COUNT(*)                                 AS failed_count
+            FROM runs r
+            LEFT JOIN graph_workflows g ON r.graph_id = g.id
+            WHERE r.status = 'failed'
+              {ws_filter_and}
+            GROUP BY 1
+            ORDER BY 2 DESC
+            LIMIT 5
+        """, params)
+        top_failing = [dict(row) for row in cur.fetchall()]
+
+        # ── 10 most recent runs ───────────────────────────────────────────────
+        cur.execute(f"""
+            SELECT
+                r.id,
+                r.task_id,
+                COALESCE(g.name, r.workflow, 'unknown') AS flow_name,
+                r.status,
+                r.created_at,
+                ROUND(
+                    EXTRACT(EPOCH FROM (r.updated_at - r.created_at)) * 1000
+                )::bigint AS duration_ms
+            FROM runs r
+            LEFT JOIN graph_workflows g ON r.graph_id = g.id
+            {ws_filter}
+            ORDER BY r.created_at DESC
+            LIMIT 10
+        """, params)
+        recent = [dict(row) for row in cur.fetchall()]
+
+    # Compute success_rate
+    total = counts.get("total") or 0
+    succeeded = counts.get("succeeded") or 0
+    counts["success_rate"] = round(succeeded / total * 100, 1) if total else 0.0
+
+    return {"counts": counts, "top_failing": top_failing, "recent": recent}
+
+
 @router.get("/api/runs/by-task/{task_id}")
 def api_run_by_task(task_id: str, request: Request):
     """Lightweight single-run polling endpoint — used by canvas during execution."""
