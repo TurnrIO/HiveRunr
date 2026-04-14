@@ -3052,9 +3052,13 @@ function App(){
     try {
       const text = await file.text();
       const data = JSON.parse(text);
-      const name   = (data.name || file.name.replace(/\.flow\.json$/i,"").replace(/_/g," ")) + " (imported)";
-      const gd     = data.graph_data || data; // support raw graph_data too
-      const created = await api("POST","/api/graphs",{name, description: data.description||"", graph_data: gd});
+      // Support both full export bundles and raw graph_data objects
+      const bundle = {
+        name:        data.name || file.name.replace(/\.flow\.json$/i,"").replace(/_/g," "),
+        description: data.description || "",
+        graph_data:  data.graph_data || data,
+      };
+      const created = await api("POST", "/api/graphs/import", bundle);
       showToast(`Imported as "${created.name}"`);
       await loadGraphList();
       onSelectGraph(created);
