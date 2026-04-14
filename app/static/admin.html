@@ -3307,12 +3307,16 @@ function WorkspacesPage({showToast, user}) {
     setLoading(true);
     try {
       const _isOwner = user?.role === "owner";
+      // For owner, my/list already returns ALL workspaces (backend fix)
+      // so we reuse the same list for both the active-workspace lookup
+      // and the All Workspaces table — no second round-trip needed.
       const [myList, usersResp] = await Promise.all([
         api("GET", "/api/workspaces/my/list"),
         api("GET", "/api/users"),
       ]);
       const list = myList || [];
       setAllUsers(usersResp || []);
+      if (_isOwner) setAllWs(list);   // owner sees every workspace
       const active = (wsId ? list.find(w => String(w.id) === String(wsId)) : null) || list[0];
       if (active) {
         setWs(active);
@@ -3320,10 +3324,6 @@ function WorkspacesPage({showToast, user}) {
         setEditingName(false);
         const mem = await api("GET", `/api/workspaces/${active.id}/members`);
         setMembers(mem || []);
-      }
-      if (_isOwner) {
-        const all = await api("GET", "/api/workspaces");
-        setAllWs(all || []);
       }
     } catch(e) { showToast(e.message, "error"); }
     setLoading(false);

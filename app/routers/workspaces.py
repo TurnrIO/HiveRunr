@@ -218,11 +218,16 @@ def api_remove_member(workspace_id: int, user_id: int, request: Request):
 # ── Current user's workspace context ──────────────────────────────────────────
 @router.get("/api/workspaces/my/list")
 def api_my_workspaces(request: Request):
-    """Return all workspaces the authenticated user belongs to."""
+    """Return workspaces for the authenticated user.
+
+    Global owner and API tokens receive ALL workspaces so they can always
+    switch to any workspace, even if the workspace_members row is missing.
+    Regular users receive only the workspaces they belong to.
+    """
     user = _check_admin(request)
     uid = user.get("id", 0)
-    if uid == 0:
-        # API token users — return all workspaces
+    if uid == 0 or user.get("role") == "owner":
+        # Owner / API token — full list so switching is never blocked
         return list_workspaces()
     return list_user_workspaces(uid)
 
