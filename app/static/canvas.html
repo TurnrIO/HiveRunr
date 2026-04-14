@@ -1355,30 +1355,57 @@ function TestPayloadModal({ isOpen, onClose, onRun, testPayload, onPayloadChange
 
 // ── History Modal ──────────────────────────────────────────────────────────────
 function HistoryModal({ isOpen, onClose, graphId, showToast, onRestored }) {
-  const [versions, setVersions]     = useState([]);
-  const [loading, setLoading]       = useState(false);
-  const [selected, setSelected]     = useState(null);   // version object
-  const [preview, setPreview]       = useState(null);   // {nodes, edges} from version detail
-  const [restoring, setRestoring]   = useState(false);
+  const [versions, setVersions]         = useState([]);
+  const [loading, setLoading]           = useState(false);
+  const [selected, setSelected]         = useState(null);   // version object
+  const [preview, setPreview]           = useState(null);   // {nodes, edges} from version detail
+  const [currentPreview, setCurrentPreview] = useState(null); // {nodes, edges} of latest saved version
+  const [restoring, setRestoring]       = useState(false);
   const [confirmState, setConfirmState] = useState(null);
+  const [previewTab, setPreviewTab]     = useState("diff");  // "diff" | "nodes"
 
   useEffect(() => {
     if (!isOpen || !graphId) return;
-    setSelected(null); setPreview(null);
+    setSelected(null); setPreview(null); setCurrentPreview(null);
     async function load() {
       setLoading(true);
       try {
         const v = await api("GET", `/api/graphs/${graphId}/versions`);
         setVersions(v || []);
+        // Pre-load the latest version so we can diff against it
+        if (v && v.length > 0) {
+          const latest = await api("GET", `/api/graphs/${graphId}/versions/${v[0].version}`);
+          const gd = latest.graph_data || {};
+          setCurrentPreview({ nodes: gd.nodes || [], edges: gd.edges || [] });
+        }
       } catch (e) { showToast(e.message, "error"); }
       setLoading(false);
     }
     load();
   }, [isOpen, graphId]);
 
+  function computeDiff(selNodes, curNodes) {
+    const selMap = new Map((selNodes||[]).filter(n=>n.type!=="note").map(n=>[n.id,n]));
+    const curMap = new Map((curNodes||[]).filter(n=>n.type!=="note").map(n=>[n.id,n]));
+    const added=[], removed=[], changed=[], same=[];
+    for (const [id, sn] of selMap) {
+      if (!curMap.has(id)) { added.push(sn); }
+      else {
+        const cn = curMap.get(id);
+        const sLabel = sn.data?.label || sn.type;
+        const cLabel = cn.data?.label || cn.type;
+        if (sLabel !== cLabel || sn.type !== cn.type) changed.push({sel:sn, cur:cn});
+        else same.push(sn);
+      }
+    }
+    for (const [id, cn] of curMap) { if (!selMap.has(id)) removed.push(cn); }
+    return { added, removed, changed, same };
+  }
+
   async function selectVersion(v) {
     setSelected(v);
     setPreview(null);
+    setPreviewTab("diff");
     try {
       const detail = await api("GET", `/api/graphs/${graphId}/versions/${v.version}`);
       const gd = detail.graph_data || {};
@@ -1410,6 +1437,10 @@ function HistoryModal({ isOpen, onClose, graphId, showToast, onRestored }) {
   }
 
   const nonNoteNodes = (preview?.nodes || []).filter(n => n.type !== "note");
+  const isCurrentVersion = versions.length > 0 && selected?.version === versions[0]?.version;
+  const diff = (!isCurrentVersion && preview && currentPreview)
+    ? computeDiff(preview.nodes, currentPreview.nodes)
+    : null;
 
   if (!isOpen) return null;
   return (
@@ -1473,9 +1504,93 @@ function HistoryModal({ isOpen, onClose, graphId, showToast, onRestored }) {
                   {selected.note && <div style={{fontSize:12,color:"#94a3b8",marginTop:4}}>{selected.note}</div>}
                 </div>
 
+                {/* Tab bar — only show Diff tab when comparing against a non-current version */}
+                {!isCurrentVersion && preview && currentPreview && (
+                  <div style={{display:"flex",borderBottom:"1px solid #1e2130",padding:"0 18px"}}>
+                    {["diff","nodes"].map(tab => (
+                      <button key={tab} onClick={()=>setPreviewTab(tab)}
+                        style={{padding:"7px 14px",fontSize:12,fontWeight:600,border:"none",
+                          background:"transparent",cursor:"pointer",borderBottom:"2px solid",
+                          borderBottomColor: previewTab===tab ? "#7c3aed" : "transparent",
+                          color: previewTab===tab ? "#a78bfa" : "#475569"}}>
+                        {tab === "diff" ? "⚡ Diff vs current" : "📋 All nodes"}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
                 <div style={{flex:1,overflowY:"auto",padding:"12px 18px"}}>
                   {!preview ? (
                     <div style={{color:"#64748b",fontSize:12}}>Loading preview…</div>
+                  ) : previewTab === "diff" && diff ? (
+                    <>
+                      {/* Summary chips */}
+                      <div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:14}}>
+                        {diff.added.length > 0 && (
+                          <span style={{fontSize:11,fontWeight:600,padding:"3px 9px",borderRadius:4,
+                            background:"#14532d44",color:"#4ade80",border:"1px solid #14532d"}}>
+                            +{diff.added.length} restored
+                          </span>
+                        )}
+                        {diff.removed.length > 0 && (
+                          <span style={{fontSize:11,fontWeight:600,padding:"3px 9px",borderRadius:4,
+                            background:"#7f1d1d44",color:"#f87171",border:"1px solid #7f1d1d"}}>
+                            −{diff.removed.length} removed
+                          </span>
+                        )}
+                        {diff.changed.length > 0 && (
+                          <span style={{fontSize:11,fontWeight:600,padding:"3px 9px",borderRadius:4,
+                            background:"#78350f44",color:"#fbbf24",border:"1px solid #78350f"}}>
+                            ~{diff.changed.length} reverted
+                          </span>
+                        )}
+                        {diff.same.length > 0 && (
+                          <span style={{fontSize:11,fontWeight:600,padding:"3px 9px",borderRadius:4,
+                            background:"#0f1117",color:"#475569",border:"1px solid #1e2130"}}>
+                            {diff.same.length} unchanged
+                          </span>
+                        )}
+                        {diff.added.length===0 && diff.removed.length===0 && diff.changed.length===0 && (
+                          <span style={{fontSize:12,color:"#64748b"}}>No structural changes vs current version.</span>
+                        )}
+                      </div>
+                      <div style={{display:"flex",flexDirection:"column",gap:3}}>
+                        {diff.added.map(n => (
+                          <div key={n.id} style={{display:"flex",alignItems:"center",gap:8,padding:"5px 8px",
+                            background:"#14532d22",border:"1px solid #14532d55",borderRadius:5}}>
+                            <span style={{fontSize:11,color:"#4ade80",fontWeight:700,flexShrink:0}}>+</span>
+                            <span style={{fontSize:11,color:"#86efac",minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{n.data?.label || n.type}</span>
+                            <span style={{fontSize:10,color:"#166534",marginLeft:"auto",whiteSpace:"nowrap"}}>{n.type}</span>
+                          </div>
+                        ))}
+                        {diff.removed.map(n => (
+                          <div key={n.id} style={{display:"flex",alignItems:"center",gap:8,padding:"5px 8px",
+                            background:"#7f1d1d22",border:"1px solid #7f1d1d55",borderRadius:5}}>
+                            <span style={{fontSize:11,color:"#f87171",fontWeight:700,flexShrink:0}}>−</span>
+                            <span style={{fontSize:11,color:"#fca5a5",minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{n.data?.label || n.type}</span>
+                            <span style={{fontSize:10,color:"#991b1b",marginLeft:"auto",whiteSpace:"nowrap"}}>{n.type}</span>
+                          </div>
+                        ))}
+                        {diff.changed.map(({sel,cur}) => (
+                          <div key={sel.id} style={{display:"flex",alignItems:"center",gap:8,padding:"5px 8px",
+                            background:"#78350f22",border:"1px solid #78350f55",borderRadius:5}}>
+                            <span style={{fontSize:11,color:"#fbbf24",fontWeight:700,flexShrink:0}}>~</span>
+                            <span style={{fontSize:11,color:"#fde68a",minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                              {sel.data?.label || sel.type}
+                              <span style={{color:"#92400e"}}> ← {cur.data?.label || cur.type}</span>
+                            </span>
+                          </div>
+                        ))}
+                        {diff.same.map(n => (
+                          <div key={n.id} style={{display:"flex",alignItems:"center",gap:8,padding:"5px 8px",
+                            background:"#0f1117",borderRadius:5,opacity:0.5}}>
+                            <span style={{fontSize:11,color:"#475569",fontWeight:700,flexShrink:0}}>=</span>
+                            <span style={{fontSize:11,color:"#64748b",minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{n.data?.label || n.type}</span>
+                            <span style={{fontSize:10,color:"#334155",marginLeft:"auto",whiteSpace:"nowrap"}}>{n.type}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </>
                   ) : (
                     <>
                       <div style={{display:"flex",gap:16,marginBottom:12}}>
