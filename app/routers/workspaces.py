@@ -237,6 +237,7 @@ def api_switch_workspace(workspace_id: int, request: Request):
     Returns the workspace row so the frontend can update its state immediately.
     """
     from fastapi.responses import JSONResponse
+    from fastapi.encoders import jsonable_encoder
     from app.deps import WORKSPACE_COOKIE
 
     user = _check_admin(request)
@@ -250,7 +251,7 @@ def api_switch_workspace(workspace_id: int, request: Request):
         if not member:
             raise HTTPException(403, "You are not a member of this workspace")
 
-    resp = JSONResponse({"ok": True, "workspace": ws})
+    resp = JSONResponse(jsonable_encoder({"ok": True, "workspace": ws}))
     resp.set_cookie(
         WORKSPACE_COOKIE,
         str(workspace_id),
