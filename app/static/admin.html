@@ -188,19 +188,27 @@ function Dashboard({ showToast, user }) {
 
   const load = useCallback(async () => {
     try {
-      const [r, w, g] = await Promise.all([api("GET","/api/runs?page_size=200"), api("GET","/api/workflows"), api("GET","/api/graphs")]);
-      setRuns(r.runs ?? r); setWfs(w); setGraphs(g);
+      const [statsResp, w, g] = await Promise.all([
+        api("GET", "/api/runs/stats"),
+        api("GET", "/api/workflows"),
+        api("GET", "/api/graphs"),
+      ]);
+      setRuns(statsResp?.recent ?? []);
+      setWfs(w);
+      setGraphs(g);
+      _setRunStats(statsResp?.counts ?? {});
     } catch(e) { showToast(e.message,"error"); }
     setLoading(false);
   }, []);
 
+  const [_runStats, _setRunStats] = useState({});
   useEffect(() => { load(); const t=setInterval(load,5000); return ()=>clearInterval(t); }, []);
 
   const stats = {
-    total: runs.length,
-    active: runs.filter(r=>r.status==="running"||r.status==="queued").length,
-    ok: runs.filter(r=>r.status==="succeeded").length,
-    failed: runs.filter(r=>r.status==="failed").length
+    total:  _runStats.total  ?? 0,
+    active: (_runStats.running ?? 0) + (_runStats.queued ?? 0),
+    ok:     _runStats.succeeded ?? 0,
+    failed: _runStats.failed ?? 0,
   };
 
   async function toggleWf(name) {
@@ -391,21 +399,14 @@ function Metrics({ showToast }) {
 
   const load = useCallback(async () => {
     try {
-      const m = await api("GET", "/api/metrics");
+      const [m, statsResp] = await Promise.all([
+        api("GET", "/api/metrics"),
+        api("GET", "/api/runs/stats"),
+      ]);
       setMetrics(m);
-
-      const runsResp = await api("GET", "/api/runs?page_size=200");
-      const runs = runsResp.runs ?? runsResp;
-      const failMap = {};
-      runs.forEach(r => {
-        if (r.status === "failed") {
-          const wf = r.flow_name || "unknown";
-          failMap[wf] = (failMap[wf] || 0) + 1;
-        }
-      });
-      const failing = Object.entries(failMap).sort((a, b) => b[1] - a[1]).slice(0, 5);
-      setFailingFlows(failing);
-      setRecentRuns(runs.slice(0, 10));
+      // top_failing is [{flow_name, failed_count}] from server
+      setFailingFlows((statsResp?.top_failing ?? []).map(f => [f.flow_name, f.failed_count]));
+      setRecentRuns(statsResp?.recent ?? []);
     } catch(e) { showToast(e.message, "error"); }
     setLoading(false);
   }, []);

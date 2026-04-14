@@ -36,7 +36,26 @@ from app.routers.workspaces  import router as workspaces_router
 log          = logging.getLogger(__name__)
 STATIC_DIR   = Path(__file__).parent / "static"
 WORKFLOWS    = ["example"]
-API_KEY      = os.environ.get("API_KEY", "dev_api_key")
+
+# ── Legacy webhook API key ────────────────────────────────────────────────────
+# API_KEY gates the legacy /run/{workflow} endpoint only.
+# If API_KEY is not set the endpoint is disabled (fail closed).
+# The old default "dev_api_key" is no longer accepted — it must be set explicitly.
+_raw_api_key = os.environ.get("API_KEY", "").strip()
+if not _raw_api_key:
+    log.warning(
+        "API_KEY is not configured — the legacy /run/{workflow} endpoint is DISABLED. "
+        "Set API_KEY in your .env to re-enable it."
+    )
+    API_KEY = None   # disables the endpoint
+elif _raw_api_key == "dev_api_key":
+    log.warning(
+        "API_KEY is set to the insecure placeholder 'dev_api_key'. "
+        "Replace it with a strong random secret before exposing this instance to the internet."
+    )
+    API_KEY = _raw_api_key
+else:
+    API_KEY = _raw_api_key
 
 app = FastAPI(title="HiveRunr", docs_url=None, redoc_url=None, openapi_url=None)
 
@@ -115,8 +134,8 @@ def startup():
     for name in WORKFLOWS:
         try:
             upsert_workflow(name)
-        except Exception:
-            pass
+        except Exception as exc:
+            log.warning("startup: upsert_workflow(%r) failed — %s", name, exc)
 
 
 # ── Health ────────────────────────────────────────────────────────────────────
@@ -223,7 +242,9 @@ def redoc_page(request: Request):
 
 # ── Legacy workflow trigger ───────────────────────────────────────────────────
 def _check_api_key(key: str):
-    if API_KEY and key != API_KEY:
+    if API_KEY is None:
+        raise HTTPException(503, "Legacy /run endpoint is disabled — API_KEY is not configured")
+    if key != API_KEY:
         raise HTTPException(401, "Invalid API key")
 
 
