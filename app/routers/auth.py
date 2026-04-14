@@ -6,7 +6,7 @@ from fastapi.responses import JSONResponse, Response, RedirectResponse
 from pydantic import BaseModel
 from typing import Optional
 
-from app.deps import _check_admin, _require_writer, _require_owner
+from app.deps import _check_admin, _require_writer, _require_owner, _resolve_workspace
 
 log = logging.getLogger(__name__)
 
@@ -306,8 +306,9 @@ def api_delete_user(user_id: int, request: Request):
 # ── API token management ──────────────────────────────────────────────────────
 @router.get("/api/tokens")
 def api_list_tokens(request: Request):
-    _require_owner(request)
-    return list_api_tokens()
+    user = _require_owner(request)
+    workspace_id = _resolve_workspace(request, user)
+    return list_api_tokens(workspace_id=workspace_id)
 
 
 class CreateTokenBody(BaseModel):
@@ -333,8 +334,9 @@ def api_create_token(body: CreateTokenBody, request: Request):
         expires_at = _dt.datetime.utcnow() + _dt.timedelta(days=body.expires_days)
     raw = "hr_" + _sec.token_hex(32)
     th  = hash_token(raw)
+    workspace_id = _resolve_workspace(request, actor)
     tok = create_api_token(body.name.strip(), th, actor.get("id") or None,
-                           scope=body.scope, expires_at=expires_at)
+                           scope=body.scope, expires_at=expires_at, workspace_id=workspace_id)
     log_audit(actor["username"], "token.create", "token", tok["id"],
               {"name": tok["name"], "scope": tok["scope"]},
               request.client.host if request.client else None)

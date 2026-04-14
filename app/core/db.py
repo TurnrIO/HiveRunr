@@ -324,11 +324,12 @@ def toggle_workflow(name):
         return dict(row) if row else None
 
 # ── schedules ─────────────────────────────────────────────────────────────
-def list_schedules():
+def list_schedules(workspace_id: int | None = None):
     """Return all schedules enriched with the graph name and last-run info."""
     with get_conn() as conn:
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-        cur.execute("""
+        ws_filter = "WHERE s.workspace_id = %(wid)s" if workspace_id is not None else ""
+        cur.execute(f"""
             SELECT
                 s.*,
                 g.name AS graph_name,
@@ -338,6 +339,7 @@ def list_schedules():
                 lr.duration_ms     AS last_run_duration_ms
             FROM schedules s
             LEFT JOIN graph_workflows g ON g.id = s.graph_id
+            {ws_filter}
             LEFT JOIN LATERAL (
                 SELECT
                     id,
@@ -354,7 +356,7 @@ def list_schedules():
                 LIMIT  1
             ) lr ON TRUE
             ORDER BY s.id
-        """)
+        """, {"wid": workspace_id} if workspace_id is not None else {})
         return [dict(r) for r in cur.fetchall()]
 
 def get_schedule(sid):
@@ -364,12 +366,12 @@ def get_schedule(sid):
         row = cur.fetchone()
         return dict(row) if row else None
 
-def create_schedule(name, workflow=None, graph_id=None, cron=None, payload=None, timezone="UTC", run_at=None):
+def create_schedule(name, workflow=None, graph_id=None, cron=None, payload=None, timezone="UTC", run_at=None, workspace_id: int | None = None):
     with get_conn() as conn:
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         cur.execute(
-            "INSERT INTO schedules(name,workflow,graph_id,cron,payload,timezone,run_at) VALUES(%s,%s,%s,%s,%s,%s,%s) RETURNING *",
-            (name, workflow, graph_id, cron, json.dumps(payload or {}), timezone, run_at)
+            "INSERT INTO schedules(name,workflow,graph_id,cron,payload,timezone,run_at,workspace_id) VALUES(%s,%s,%s,%s,%s,%s,%s,%s) RETURNING *",
+            (name, workflow, graph_id, cron, json.dumps(payload or {}), timezone, run_at, workspace_id)
         )
         return dict(cur.fetchone())
 
@@ -501,11 +503,18 @@ def delete_graph(graph_id):
         cur.execute("DELETE FROM graph_workflows WHERE id=%s",      (graph_id,))
 
 # ── credentials ───────────────────────────────────────────────────────────
-def list_credentials():
+def list_credentials(workspace_id: int | None = None):
     with get_conn() as conn:
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         # never return secret values in the list
-        cur.execute("SELECT id, name, type, note, created_at, updated_at FROM credentials ORDER BY name")
+        if workspace_id is not None:
+            cur.execute(
+                "SELECT id, name, type, note, created_at, updated_at FROM credentials "
+                "WHERE workspace_id=%s ORDER BY name",
+                (workspace_id,),
+            )
+        else:
+            cur.execute("SELECT id, name, type, note, created_at, updated_at FROM credentials ORDER BY name")
         return [dict(r) for r in cur.fetchall()]
 
 def get_credential_secret(name):
@@ -519,26 +528,37 @@ def get_credential_secret(name):
             return None
         return decrypt(row['secret'])
 
-def load_all_credentials():
-    """Return name→decrypted-secret mapping. Called once per graph run."""
+def load_all_credentials(workspace_id: int | None = None):
+    """Return name→decrypted-secret mapping. Called once per graph run.
+
+    When workspace_id is supplied only credentials from that workspace are
+    loaded, so graphs cannot accidentally access secrets from other workspaces.
+    Falls back to all credentials if workspace_id is None (legacy path).
+    """
     from app.crypto import decrypt
     with get_conn() as conn:
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-        cur.execute("SELECT name, secret FROM credentials")
+        if workspace_id is not None:
+            cur.execute(
+                "SELECT name, secret FROM credentials WHERE workspace_id=%s",
+                (workspace_id,),
+            )
+        else:
+            cur.execute("SELECT name, secret FROM credentials")
         return {r['name']: decrypt(r['secret']) for r in cur.fetchall()}
 
-def upsert_credential(name, type_, secret, note=""):
+def upsert_credential(name, type_, secret, note="", workspace_id: int | None = None):
     from app.crypto import encrypt
     with get_conn() as conn:
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         cur.execute("""
-            INSERT INTO credentials(name, type, secret, note)
-            VALUES(%s, %s, %s, %s)
+            INSERT INTO credentials(name, type, secret, note, workspace_id)
+            VALUES(%s, %s, %s, %s, %s)
             ON CONFLICT(name) DO UPDATE
               SET type=EXCLUDED.type, secret=EXCLUDED.secret,
-                  note=EXCLUDED.note, updated_at=NOW()
+                  note=EXCLUDED.note, workspace_id=EXCLUDED.workspace_id, updated_at=NOW()
             RETURNING id, name, type, note, created_at, updated_at
-        """, (name, type_, encrypt(secret), note))
+        """, (name, type_, encrypt(secret), note, workspace_id))
         return dict(cur.fetchone())
 
 def update_credential(cred_id, type_, secret, note):
@@ -769,29 +789,40 @@ def purge_expired_sessions():
 API_TOKEN_SCOPES = ("read", "run", "manage")
 
 def create_api_token(name: str, token_hash: str, created_by: int,
-                     scope: str = "manage", expires_at=None) -> dict:
+                     scope: str = "manage", expires_at=None,
+                     workspace_id: int | None = None) -> dict:
     if scope not in API_TOKEN_SCOPES:
         raise ValueError(f"scope must be one of {API_TOKEN_SCOPES}")
     with get_conn() as conn:
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         cur.execute(
-            """INSERT INTO api_tokens (name, token_hash, created_by, scope, expires_at)
-               VALUES (%s, %s, %s, %s, %s)
+            """INSERT INTO api_tokens (name, token_hash, created_by, scope, expires_at, workspace_id)
+               VALUES (%s, %s, %s, %s, %s, %s)
                RETURNING id, name, created_at, scope, expires_at""",
-            (name, token_hash, created_by, scope, expires_at)
+            (name, token_hash, created_by, scope, expires_at, workspace_id)
         )
         return dict(cur.fetchone())
 
-def list_api_tokens() -> list:
+def list_api_tokens(workspace_id: int | None = None) -> list:
     with get_conn() as conn:
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-        cur.execute("""
-            SELECT t.id, t.name, t.created_at, t.last_used,
-                   t.scope, t.expires_at,
-                   u.username AS created_by_username
-            FROM api_tokens t LEFT JOIN users u ON t.created_by = u.id
-            ORDER BY t.created_at DESC
-        """)
+        if workspace_id is not None:
+            cur.execute("""
+                SELECT t.id, t.name, t.created_at, t.last_used,
+                       t.scope, t.expires_at,
+                       u.username AS created_by_username
+                FROM api_tokens t LEFT JOIN users u ON t.created_by = u.id
+                WHERE t.workspace_id = %s
+                ORDER BY t.created_at DESC
+            """, (workspace_id,))
+        else:
+            cur.execute("""
+                SELECT t.id, t.name, t.created_at, t.last_used,
+                       t.scope, t.expires_at,
+                       u.username AS created_by_username
+                FROM api_tokens t LEFT JOIN users u ON t.created_by = u.id
+                ORDER BY t.created_at DESC
+            """)
         return [dict(r) for r in cur.fetchall()]
 
 def get_api_token_by_hash(token_hash: str):

@@ -3,7 +3,7 @@ from typing import Optional
 from fastapi import APIRouter, Request
 from pydantic import BaseModel
 
-from app.deps import _check_admin
+from app.deps import _check_admin, _resolve_workspace
 from app.core.db import list_credentials, upsert_credential, update_credential, delete_credential
 
 router = APIRouter()
@@ -21,13 +21,16 @@ class CredUpdate(BaseModel):
 
 @router.get("/api/credentials")
 def api_creds(request: Request):
-    _check_admin(request); return list_credentials()
+    user = _check_admin(request)
+    workspace_id = _resolve_workspace(request, user)
+    return list_credentials(workspace_id=workspace_id)
 
 
 @router.post("/api/credentials")
 def api_cred_create(body: CredCreate, request: Request):
-    _check_admin(request)
-    return upsert_credential(body.name, body.type, body.secret, body.note)
+    user = _check_admin(request)
+    workspace_id = _resolve_workspace(request, user)
+    return upsert_credential(body.name, body.type, body.secret, body.note, workspace_id=workspace_id)
 
 
 @router.put("/api/credentials/{cred_id}")
