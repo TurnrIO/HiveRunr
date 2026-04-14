@@ -101,14 +101,27 @@ def _make_job(sched, scheduler_ref=None):
 
     def job():
         from app.worker import enqueue_workflow, enqueue_graph, enqueue_script
-        import json
+        import json as _json
         payload = (
-            json.loads(sched["payload"])
+            _json.loads(sched["payload"])
             if isinstance(sched["payload"], str)
             else (sched["payload"] or {})
         )
         if sched.get("graph_id"):
-            enqueue_graph.delay(sched["graph_id"], payload)
+            task = enqueue_graph.delay(sched["graph_id"], payload)
+            # Pre-create a run record scoped to the schedule's workspace
+            try:
+                from app.core.db import get_conn
+                workspace_id = sched.get("workspace_id")
+                with get_conn() as conn:
+                    conn.cursor().execute(
+                        "INSERT INTO runs(task_id, graph_id, status, initial_payload, workspace_id)"
+                        " VALUES(%s,%s,'queued',%s,%s)"
+                        " ON CONFLICT (task_id) DO NOTHING",
+                        (task.id, sched["graph_id"], _json.dumps(payload), workspace_id),
+                    )
+            except Exception as exc:
+                log.warning("Could not pre-create run record for schedule %s: %s", sid, exc)
         elif sched.get("workflow", "").startswith("script:"):
             script_name = sched["workflow"][len("script:"):]
             enqueue_script.delay(script_name, payload)

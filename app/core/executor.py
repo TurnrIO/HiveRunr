@@ -315,7 +315,7 @@ def _expand_loop(nid, loop_result, nodes_map, edges, context, creds, logger, suc
 
 # ── main graph runner ─────────────────────────────────────────────────────
 def run_graph(graph_data: dict, initial_payload: dict = None, logger=None, _depth: int = 0,
-              node_callback=None) -> dict:
+              node_callback=None, workspace_id: int = None) -> dict:
     """Execute a graph and return {context, results, traces}.
 
     node_callback(event: dict) — optional callable fired after each node
@@ -336,7 +336,7 @@ def run_graph(graph_data: dict, initial_payload: dict = None, logger=None, _dept
 
     try:
         from app.core.db import load_all_credentials
-        creds = load_all_credentials()
+        creds = load_all_credentials(workspace_id=workspace_id)
     except Exception as e:
         log.warning(f"Could not load credentials: {e}")
         creds = {}

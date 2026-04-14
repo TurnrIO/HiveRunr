@@ -260,7 +260,8 @@ def enqueue_graph(self, graph_id: int, payload: dict):
 
         result = run_graph(graph_data, payload,
                            logger=_streaming_logger,
-                           node_callback=_node_callback)
+                           node_callback=_node_callback,
+                           workspace_id=g.get('workspace_id'))
         traces = result.get('traces', [])
         update_run(task_id, "succeeded", result=result, traces=traces)
         if publish:
