@@ -287,6 +287,7 @@ const NODE_DEFS = {
   "trigger.manual":      { label:"Manual Trigger",    icon:"▶",  color:"#059669", group:"trigger",   fields:[] },
   "trigger.webhook":     { label:"Webhook Trigger",   icon:"🔗", color:"#0284c7", group:"trigger",   fields:[{k:"description",l:"Description",ph:"What this webhook receives…"}] },
   "trigger.cron":        { label:"Cron Schedule",     icon:"⏰", color:"#7c3aed", group:"trigger",   fields:[{k:"cron",l:"Cron expression",ph:"0 9 * * 1-5"},{k:"timezone",l:"Timezone",ph:"UTC"},{k:"description",l:"Description (optional)",ph:"Weekdays at 9am"}] },
+  "trigger.email":       { label:"Email Trigger (IMAP)", icon:"📧", color:"#0891b2", group:"trigger", fields:[{k:"credential",l:"IMAP Credential (name)",ph:"my-imap-cred"},{k:"folder",l:"Folder",ph:"INBOX"},{k:"search_criteria",l:"IMAP search criteria",ph:"UNSEEN"},{k:"filter_expression",l:"Filter expression (Python, use 'email')",ph:"'invoice' in email['subject'].lower()",mono:true},{k:"max_messages",l:"Max messages",ph:"10"},{k:"mark_read",l:"Mark as read",ph:"false",type:"select",options:["false","true"]}] },
   "action.http_request": { label:"HTTP Request",      icon:"🌐", color:"#0891b2", group:"action",    fields:[{k:"url",l:"URL",ph:"https://api.example.com/data"},{k:"method",l:"Method",ph:"GET",type:"select",options:["GET","POST","PUT","PATCH","DELETE","HEAD"]},{k:"credential",l:"Bearer Credential (name)",ph:"my-api-credential"},{k:"headers_json",l:"Headers (JSON)",ph:'{"Authorization":"Bearer {{token}}"}',mono:true},{k:"body_json",l:"Body (JSON)",ph:'{"key":"{{value}}"}',mono:true,textarea:true},{k:"form_json",l:"Form data (JSON)",ph:'{"field":"value"}',mono:true},{k:"timeout",l:"Timeout (seconds)",ph:"30"},{k:"ignore_errors",l:"Ignore HTTP errors",ph:"false",type:"select",options:["false","true"]}] },
   "action.transform":    { label:"Transform",         icon:"⚙",  color:"#7c3aed", group:"action",    fields:[{k:"expression",l:"Python expression",ph:"{'out': input['value'] * 2}",mono:true,textarea:true}] },
   "action.condition":    { label:"Condition",         icon:"◈",  color:"#d97706", group:"action",    fields:[{k:"expression",l:"Condition (Python bool)",ph:"input.get('status') == 'ok'",mono:true}] },
@@ -1008,6 +1009,21 @@ function ConfigPanel({ node, onChange, onDelete, edges }){
               <span style={{color:"#64748b"}}>Every 15 min</span><code>*/15 * * * *</code>
               <span style={{color:"#64748b"}}>1st of month</span><code>0 0 1 * *</code>
             </div>
+          </div>
+        )}
+        {node.data.type === "trigger.email" && (
+          <div style={{background:"#0f1117",border:"1px solid #2a2d3e",borderRadius:6,padding:"8px 10px",fontSize:10,color:"#94a3b8",marginTop:6,lineHeight:1.8}}>
+            <div style={{color:"#0ea5e9",fontWeight:600,marginBottom:4}}>📧 Output fields</div>
+            <div style={{display:"grid",gridTemplateColumns:"auto 1fr",gap:"0 10px"}}>
+              <code style={{color:"#4ade80"}}>emails</code><span>list of all fetched messages</span>
+              <code style={{color:"#4ade80"}}>count</code><span>number of messages returned</span>
+              <code style={{color:"#94a3b8"}}>subject</code><span>first email subject</span>
+              <code style={{color:"#94a3b8"}}>from</code><span>sender address</span>
+              <code style={{color:"#94a3b8"}}>body</code><span>plain-text body</span>
+              <code style={{color:"#94a3b8"}}>html_body</code><span>HTML body</span>
+              <code style={{color:"#94a3b8"}}>attachment_names</code><span>list of filenames</span>
+            </div>
+            <div style={{color:"#64748b",marginTop:4}}>Credential keys: <code>host</code> · <code>port</code> · <code>username</code> · <code>password</code> · <code>use_ssl</code></div>
           </div>
         )}
 
@@ -2308,6 +2324,17 @@ function NodeEditorModal({ node, onChange, onDelete, onClose, edges, allNodes, c
                   <span style={{color:"#64748b"}}>Daily at 9am</span><code>0 9 * * *</code>
                   <span style={{color:"#64748b"}}>Weekdays 9am</span><code>0 9 * * 1-5</code>
                   <span style={{color:"#64748b"}}>Every 15 min</span><code>*/15 * * * *</code>
+                </div>
+              </div>
+            )}
+            {node.data.type==="trigger.email"&&(
+              <div style={{background:"#0f1117",border:"1px solid #2a2d3e",borderRadius:6,padding:"8px 10px",fontSize:10,color:"#94a3b8",marginTop:6,lineHeight:1.8}}>
+                <div style={{color:"#0ea5e9",fontWeight:600,marginBottom:4}}>📧 Output fields</div>
+                <div style={{display:"grid",gridTemplateColumns:"auto 1fr",gap:"0 10px"}}>
+                  <code style={{color:"#4ade80"}}>emails</code><span>list of all fetched messages</span>
+                  <code style={{color:"#4ade80"}}>count</code><span>number of messages returned</span>
+                  <code style={{color:"#94a3b8"}}>subject / from / body</code><span>top-level first-email shortcut</span>
+                  <code style={{color:"#94a3b8"}}>attachment_names</code><span>list of filenames</span>
                 </div>
               </div>
             )}
