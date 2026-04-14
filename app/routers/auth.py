@@ -74,6 +74,7 @@ from app.core.db import (
     consume_password_reset_token,
     log_audit,
     get_invite_by_hash, consume_invite_token, set_flow_permission, get_user_by_email,
+    create_workspace, set_workspace_member,
 )
 
 router = APIRouter()
@@ -105,10 +106,12 @@ def auth_status(request: Request):
     from app.crypto import encryption_configured
     setup_needed = not users_exist()
     user = get_current_user(request)
+    allow_signup = os.environ.get("ALLOW_SIGNUP", "false").lower() == "true"
     return {
         "setup_needed": setup_needed,
         "logged_in": user is not None,
         "encryption_configured": encryption_configured(),
+        "allow_signup": allow_signup,
         "user": {"id": user["id"], "username": user["username"],
                  "email": user["email"], "role": user["role"]} if user else None,
     }
@@ -392,13 +395,23 @@ def auth_forgot_password(body: ForgotPasswordBody):
             create_password_reset_token(owner["id"], token_hash, expires_at)
             app_url   = os.environ.get("APP_URL", "http://localhost").rstrip("/")
             reset_url = f"{app_url}/reset-password?token={raw_token}"
-            send_password_reset(
+            sent = send_password_reset(
                 to=owner["email"],
                 reset_url=reset_url,
                 username=owner["username"],
             )
+            if not sent:
+                log.error("forgot-password: email delivery failed for owner %s", owner["id"])
+                raise HTTPException(
+                    503,
+                    "Email delivery failed. Check that AGENTMAIL_API_KEY and AGENTMAIL_FROM "
+                    "are correctly configured, then try again."
+                )
+        except HTTPException:
+            raise
         except Exception as exc:
             log.error("forgot-password: %s", exc)
+            raise HTTPException(500, "An error occurred while sending the reset email.")
 
     return {"ok": True, "message": "If that email matches the owner account, a reset link has been sent."}
 
@@ -545,4 +558,74 @@ def invite_signup(body: InviteSignupBody, request: Request):
     })
     resp.set_cookie(SESSION_COOKIE, sess_token, httponly=True, samesite="lax",
                     max_age=SESSION_DAYS * 86400)
+    return resp
+
+
+# ── Self-serve signup (SaaS) ──────────────────────────────────────────────────
+class SignupBody(BaseModel):
+    username: str
+    email: str
+    password: str
+    workspace_name: Optional[str] = None
+
+
+@router.post("/api/auth/signup")
+def auth_signup(body: SignupBody, request: Request):
+    """Self-serve signup: create an account + a new workspace.
+
+    Only available when ALLOW_SIGNUP=true is set in the environment.
+    The new user gets global role 'viewer' and is the 'owner' of their
+    own workspace.
+    """
+    import os as _os
+    from app.auth import hash_password, hash_token, generate_token, SESSION_COOKIE, SESSION_DAYS
+    from app.deps import WORKSPACE_COOKIE
+
+    if _os.environ.get("ALLOW_SIGNUP", "false").lower() != "true":
+        raise HTTPException(403, "Self-serve signup is not enabled on this instance")
+
+    if len(body.password) < 8:
+        raise HTTPException(422, "Password must be at least 8 characters")
+    if not body.username.strip():
+        raise HTTPException(422, "Username is required")
+    if not body.email.strip():
+        raise HTTPException(422, "Email is required")
+
+    # Create user (global viewer)
+    try:
+        new_user = create_user(
+            body.username.strip(),
+            body.email.strip().lower(),
+            hash_password(body.password),
+            role="viewer",
+        )
+    except Exception as exc:
+        raise HTTPException(400, str(exc))
+
+    # Create a personal workspace
+    ws_name = (body.workspace_name or "").strip() or f"{body.username.strip()}'s Workspace"
+    try:
+        ws = create_workspace(ws_name, plan="free")
+        set_workspace_member(ws["id"], new_user["id"], "owner")
+    except Exception as exc:
+        log.warning("Could not create workspace for new user %s: %s", new_user["id"], exc)
+        ws = None
+
+    log_audit(new_user["username"], "user.signup", "user", new_user["id"],
+              {"username": new_user["username"], "workspace": ws_name if ws else None},
+              request.client.host if request.client else None)
+
+    sess_token = generate_token()
+    create_session(new_user["id"], hash_token(sess_token))
+
+    resp = JSONResponse({
+        "ok": True,
+        "user": {"id": new_user["id"], "username": new_user["username"], "role": new_user["role"]},
+        "workspace": {"id": ws["id"], "name": ws["name"]} if ws else None,
+    })
+    resp.set_cookie(SESSION_COOKIE, sess_token, httponly=True, samesite="lax",
+                    max_age=SESSION_DAYS * 86400)
+    if ws:
+        resp.set_cookie(WORKSPACE_COOKIE, str(ws["id"]), httponly=True, samesite="lax",
+                        max_age=SESSION_DAYS * 86400)
     return resp

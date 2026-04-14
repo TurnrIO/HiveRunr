@@ -3298,6 +3298,9 @@ function WorkspacesPage({showToast, user}) {
   const [createName, setCreateName] = useState("");
   const [createBusy, setCreateBusy] = useState(false);
 
+  // Plan + usage
+  const [usage, setUsage] = useState(null);
+
   const [confirmState, setConfirmState] = useState(null);
 
   const wsId = _getWorkspaceId();
@@ -3322,8 +3325,12 @@ function WorkspacesPage({showToast, user}) {
         setWs(active);
         setNewName(active.name);
         setEditingName(false);
-        const mem = await api("GET", `/api/workspaces/${active.id}/members`);
+        const [mem, usageData] = await Promise.all([
+          api("GET", `/api/workspaces/${active.id}/members`),
+          api("GET", `/api/workspaces/${active.id}/usage`).catch(() => null),
+        ]);
         setMembers(mem || []);
+        setUsage(usageData || null);
       }
     } catch(e) { showToast(e.message, "error"); }
     setLoading(false);
@@ -3466,6 +3473,55 @@ function WorkspacesPage({showToast, user}) {
               <button type="button" className="btn btn-ghost"
                 onClick={()=>setEditingName(false)}>Cancel</button>
             </form>
+          )}
+        </div>
+      )}
+
+      {/* ── Plan & Usage ─────────────────────────────────────────────────────── */}
+      {ws && usage && (
+        <div className="card">
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
+            <div className="card-title" style={{marginBottom:0}}>Plan &amp; Usage</div>
+            <span style={{fontSize:12,fontWeight:600,padding:"2px 10px",borderRadius:20,
+              background:"#7c3aed22",color:"#a78bfa",border:"1px solid #7c3aed44",
+              textTransform:"capitalize"}}>{usage.plan}</span>
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:12}}>
+            {[
+              {label:"Flows", used: usage.usage.flows, limit: usage.limits.flows},
+              {label:"Members", used: usage.usage.members, limit: usage.limits.members},
+              {label:"Runs today", used: usage.usage.runs_today, limit: usage.limits.runs_per_day},
+            ].map(({label, used, limit}) => {
+              const pct = limit ? Math.min(100, Math.round(used / limit * 100)) : 0;
+              const isUnlimited = limit === null;
+              const isWarn = !isUnlimited && pct >= 80;
+              const barColor = isWarn ? "#f59e0b" : "#7c3aed";
+              return (
+                <div key={label} style={{background:"#0d0f1a",borderRadius:10,padding:"14px 16px",
+                  border:"1px solid #1e2130"}}>
+                  <div style={{fontSize:11,color:"#64748b",fontWeight:600,textTransform:"uppercase",
+                    letterSpacing:".04em",marginBottom:6}}>{label}</div>
+                  <div style={{fontSize:22,fontWeight:700,color:"#e2e8f0",marginBottom:4}}>
+                    {used}
+                    {!isUnlimited && <span style={{fontSize:13,color:"#475569",fontWeight:400}}>
+                      &nbsp;/ {limit}
+                    </span>}
+                    {isUnlimited && <span style={{fontSize:13,color:"#475569",fontWeight:400}}>&nbsp;/ ∞</span>}
+                  </div>
+                  {!isUnlimited && (
+                    <div style={{height:4,borderRadius:2,background:"#1e2130",overflow:"hidden"}}>
+                      <div style={{width:`${pct}%`,height:"100%",borderRadius:2,
+                        background:barColor,transition:"width .3s"}}/>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          {usage.plan === "free" && isAdmin && (
+            <div style={{marginTop:14,fontSize:12,color:"#475569",borderTop:"1px solid #1e2130",paddingTop:12}}>
+              Need more capacity? Contact your administrator to upgrade to a Pro or Enterprise plan.
+            </div>
           )}
         </div>
       )}

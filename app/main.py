@@ -40,8 +40,53 @@ API_KEY      = os.environ.get("API_KEY", "dev_api_key")
 
 app = FastAPI(title="HiveRunr", docs_url=None, redoc_url=None, openapi_url=None)
 
+
+# ── Subdomain workspace resolver middleware ───────────────────────────────────
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request as StarletteRequest
+from starlette.responses import Response as StarletteResponse
+
+
+class SubdomainWorkspaceMiddleware(BaseHTTPMiddleware):
+    """Resolve workspace from subdomain when SUBDOMAIN_ROUTING=true.
+
+    If the inbound Host header is <slug>.<APP_DOMAIN>, look up the workspace
+    by slug and stash its id in request.state.subdomain_workspace_id so that
+    _resolve_workspace() in deps.py can pick it up with highest priority.
+    """
+
+    def __init__(self, app, app_domain: str):
+        super().__init__(app)
+        self.app_domain = app_domain.lstrip(".")  # e.g. "hiverunr.com"
+
+    async def dispatch(self, request: StarletteRequest, call_next):
+        request.state.subdomain_workspace_id = None
+        if self.app_domain:
+            host = (
+                request.headers.get("x-forwarded-host")
+                or request.headers.get("host", "")
+            ).split(":")[0]  # strip port if present
+            suffix = f".{self.app_domain}"
+            if host.endswith(suffix):
+                slug = host[: -len(suffix)]
+                if slug and slug != "www":
+                    try:
+                        from app.core.db import get_workspace_by_slug
+                        ws = get_workspace_by_slug(slug)
+                        if ws:
+                            request.state.subdomain_workspace_id = ws["id"]
+                    except Exception:
+                        pass
+        return await call_next(request)
+
+
 # ── Middleware ────────────────────────────────────────────────────────────────
 app.add_middleware(PrometheusMiddleware)
+
+_subdomain_routing = os.environ.get("SUBDOMAIN_ROUTING", "false").lower() == "true"
+_app_domain = os.environ.get("APP_DOMAIN", "")
+if _subdomain_routing and _app_domain:
+    app.add_middleware(SubdomainWorkspaceMiddleware, app_domain=_app_domain)
 
 # ── Include routers ───────────────────────────────────────────────────────────
 app.include_router(auth_router)
@@ -115,6 +160,19 @@ def admin_page(request: Request, rest: str = ""):
     if redir:
         return redir
     return FileResponse(str(STATIC_DIR / "admin.html"), media_type="text/html")
+
+
+@app.get("/signup")
+def signup_page(request: Request):
+    from app.core.db import users_exist as _users_exist
+    if not _users_exist():
+        return RedirectResponse("/setup", status_code=302)
+    from app.auth import get_current_user
+    if get_current_user(request):
+        return RedirectResponse("/", status_code=302)
+    if os.environ.get("ALLOW_SIGNUP", "false").lower() != "true":
+        return RedirectResponse("/login", status_code=302)
+    return FileResponse(str(STATIC_DIR / "signup.html"), media_type="text/html")
 
 
 @app.get("/reset-password")
