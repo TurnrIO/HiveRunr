@@ -288,6 +288,7 @@ const NODE_DEFS = {
   "trigger.webhook":     { label:"Webhook Trigger",   icon:"🔗", color:"#0284c7", group:"trigger",   fields:[{k:"description",l:"Description",ph:"What this webhook receives…"}] },
   "trigger.cron":        { label:"Cron Schedule",     icon:"⏰", color:"#7c3aed", group:"trigger",   fields:[{k:"cron",l:"Cron expression",ph:"0 9 * * 1-5"},{k:"timezone",l:"Timezone",ph:"UTC"},{k:"description",l:"Description (optional)",ph:"Weekdays at 9am"}] },
   "trigger.email":       { label:"Email Trigger (IMAP)", icon:"📧", color:"#0891b2", group:"trigger", fields:[{k:"credential",l:"IMAP Credential (name)",ph:"my-imap-cred"},{k:"folder",l:"Folder",ph:"INBOX"},{k:"search_criteria",l:"IMAP search criteria",ph:"UNSEEN"},{k:"filter_expression",l:"Filter expression (Python, use 'email')",ph:"'invoice' in email['subject'].lower()",mono:true},{k:"max_messages",l:"Max messages",ph:"10"},{k:"mark_read",l:"Mark as read",ph:"false",type:"select",options:["false","true"]}] },
+  "action.s3":           { label:"S3 Storage",           icon:"☁",  color:"#ea580c", group:"action",    fields:[{k:"credential",l:"S3 Credential (name)",ph:"my-s3-cred"},{k:"operation",l:"Operation",ph:"get",type:"select",options:["get","put","list","delete","presigned_url","head","copy"]},{k:"bucket",l:"Bucket",ph:"my-bucket"},{k:"key",l:"Object key",ph:"path/to/file.csv"},{k:"content",l:"Content (put only)",ph:"{{input.body}}",textarea:true},{k:"content_type",l:"Content-Type (put only)",ph:"text/csv"},{k:"prefix",l:"Prefix (list only)",ph:"reports/"},{k:"source_key",l:"Source key (copy only)",ph:"original/file.csv"},{k:"dest_key",l:"Destination key (copy only)",ph:"archive/file.csv"},{k:"expires_in",l:"Expires (presigned, seconds)",ph:"3600"},{k:"max_keys",l:"Max keys (list only)",ph:"1000"}] },
   "action.postgres":     { label:"SQL Query",           icon:"🗄",  color:"#0369a1", group:"action",    fields:[{k:"credential",l:"DB Credential (name)",ph:"my-postgres"},{k:"query",l:"SQL Query",ph:"SELECT * FROM users WHERE id = %s",mono:true,textarea:true},{k:"params",l:"Params (JSON array)",ph:'["{{input.user_id}}"]',mono:true},{k:"row_limit",l:"Row limit",ph:"1000"}] },
   "action.http_request": { label:"HTTP Request",      icon:"🌐", color:"#0891b2", group:"action",    fields:[{k:"url",l:"URL",ph:"https://api.example.com/data"},{k:"method",l:"Method",ph:"GET",type:"select",options:["GET","POST","PUT","PATCH","DELETE","HEAD"]},{k:"credential",l:"Bearer Credential (name)",ph:"my-api-credential"},{k:"headers_json",l:"Headers (JSON)",ph:'{"Authorization":"Bearer {{token}}"}',mono:true},{k:"body_json",l:"Body (JSON)",ph:'{"key":"{{value}}"}',mono:true,textarea:true},{k:"form_json",l:"Form data (JSON)",ph:'{"field":"value"}',mono:true},{k:"timeout",l:"Timeout (seconds)",ph:"30"},{k:"ignore_errors",l:"Ignore HTTP errors",ph:"false",type:"select",options:["false","true"]}] },
   "action.transform":    { label:"Transform",         icon:"⚙",  color:"#7c3aed", group:"action",    fields:[{k:"expression",l:"Python expression",ph:"{'out': input['value'] * 2}",mono:true,textarea:true}] },
@@ -920,6 +921,21 @@ function ConfigPanel({ node, onChange, onDelete, edges }){
               It is <strong>disabled by default</strong> — set <code style={{color:"#fca5a5"}}>ENABLE_RUN_SCRIPT=true</code> in <code style={{color:"#fca5a5"}}>.env</code> to allow execution.<br/>
               Every run is written to the audit log. Assign output to <code style={{color:"#fca5a5"}}>result</code>.
             </div>
+          </div>
+        )}
+        {node.data.type === "action.s3" && (
+          <div style={{background:"#0f1117",border:"1px solid #2a2d3e",borderRadius:6,padding:"8px 10px",fontSize:10,color:"#94a3b8",marginTop:6,lineHeight:1.8}}>
+            <div style={{color:"#ea580c",fontWeight:600,marginBottom:4}}>☁ Output by operation</div>
+            <div style={{display:"grid",gridTemplateColumns:"auto 1fr",gap:"0 10px"}}>
+              <code style={{color:"#4ade80"}}>get</code><span>body · content_type · size · last_modified · metadata</span>
+              <code style={{color:"#4ade80"}}>put</code><span>ok · etag · version_id</span>
+              <code style={{color:"#4ade80"}}>list</code><span>objects[] · count · truncated</span>
+              <code style={{color:"#94a3b8"}}>delete</code><span>ok</span>
+              <code style={{color:"#94a3b8"}}>presigned_url</code><span>url · expires_in</span>
+              <code style={{color:"#94a3b8"}}>head</code><span>exists · size · content_type</span>
+              <code style={{color:"#94a3b8"}}>copy</code><span>ok · source_key · dest_key · etag</span>
+            </div>
+            <div style={{color:"#64748b",marginTop:4}}>Credential JSON: <code>access_key · secret_key · region · endpoint_url</code></div>
           </div>
         )}
         {node.data.type === "action.postgres" && (
@@ -2261,6 +2277,17 @@ function NodeEditorModal({ node, onChange, onDelete, onClose, edges, allNodes, c
                   Runs Python via <code style={{color:"#fca5a5"}}>exec()</code> with <code style={{color:"#fca5a5"}}>os</code>, <code style={{color:"#fca5a5"}}>json</code>, <code style={{color:"#fca5a5"}}>time</code> in scope.<br/>
                   <strong>Disabled by default</strong> — set <code style={{color:"#fca5a5"}}>ENABLE_RUN_SCRIPT=true</code> in <code style={{color:"#fca5a5"}}>.env</code> to enable.<br/>
                   Every execution is written to the audit log. Assign output to <code style={{color:"#fca5a5"}}>result</code>.
+                </div>
+              </div>
+            )}
+            {node.data.type==="action.s3"&&(
+              <div style={{background:"#0f1117",border:"1px solid #2a2d3e",borderRadius:6,padding:"8px 10px",fontSize:10,color:"#94a3b8",marginTop:6,lineHeight:1.8}}>
+                <div style={{color:"#ea580c",fontWeight:600,marginBottom:4}}>☁ Output by operation</div>
+                <div style={{display:"grid",gridTemplateColumns:"auto 1fr",gap:"0 10px"}}>
+                  <code style={{color:"#4ade80"}}>get</code><span>body · content_type · size</span>
+                  <code style={{color:"#4ade80"}}>put</code><span>ok · etag · version_id</span>
+                  <code style={{color:"#4ade80"}}>list</code><span>objects[] · count · truncated</span>
+                  <code style={{color:"#94a3b8"}}>presigned_url</code><span>url · expires_in</span>
                 </div>
               </div>
             )}
