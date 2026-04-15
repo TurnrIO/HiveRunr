@@ -287,6 +287,7 @@ const NODE_DEFS = {
   "trigger.manual":      { label:"Manual Trigger",    icon:"▶",  color:"#059669", group:"trigger",   fields:[] },
   "trigger.webhook":     { label:"Webhook Trigger",   icon:"🔗", color:"#0284c7", group:"trigger",   fields:[{k:"description",l:"Description",ph:"What this webhook receives…"}] },
   "trigger.cron":        { label:"Cron Schedule",     icon:"⏰", color:"#7c3aed", group:"trigger",   fields:[{k:"cron",l:"Cron expression",ph:"0 9 * * 1-5"},{k:"timezone",l:"Timezone",ph:"UTC"},{k:"description",l:"Description (optional)",ph:"Weekdays at 9am"}] },
+  "trigger.file_watch":  { label:"File Watch",           icon:"📂", color:"#b45309", group:"trigger",  fields:[{k:"path",l:"Directory path",ph:"/data/inbox"},{k:"pattern",l:"Filename pattern",ph:"*.csv"},{k:"lookback_minutes",l:"Lookback window (minutes)",ph:"60"},{k:"min_age_seconds",l:"Min file age (seconds, write-guard)",ph:"5"},{k:"min_size_bytes",l:"Min file size (bytes)",ph:"0"},{k:"recursive",l:"Recursive",ph:"false",type:"select",options:["false","true"]},{k:"sftp_credential",l:"SFTP Credential (blank = local)",ph:"my-sftp-server"}] },
   "trigger.email":       { label:"Email Trigger (IMAP)", icon:"📧", color:"#0891b2", group:"trigger", fields:[{k:"credential",l:"IMAP Credential (name)",ph:"my-imap-cred"},{k:"folder",l:"Folder",ph:"INBOX"},{k:"search_criteria",l:"IMAP search criteria",ph:"UNSEEN"},{k:"filter_expression",l:"Filter expression (Python, use 'email')",ph:"'invoice' in email['subject'].lower()",mono:true},{k:"max_messages",l:"Max messages",ph:"10"},{k:"mark_read",l:"Mark as read",ph:"false",type:"select",options:["false","true"]}] },
   "action.s3":           { label:"S3 Storage",           icon:"☁",  color:"#ea580c", group:"action",    fields:[{k:"credential",l:"S3 Credential (name)",ph:"my-s3-cred"},{k:"operation",l:"Operation",ph:"get",type:"select",options:["get","put","list","delete","presigned_url","head","copy"]},{k:"bucket",l:"Bucket",ph:"my-bucket"},{k:"key",l:"Object key",ph:"path/to/file.csv"},{k:"content",l:"Content (put only)",ph:"{{input.body}}",textarea:true},{k:"content_type",l:"Content-Type (put only)",ph:"text/csv"},{k:"prefix",l:"Prefix (list only)",ph:"reports/"},{k:"source_key",l:"Source key (copy only)",ph:"original/file.csv"},{k:"dest_key",l:"Destination key (copy only)",ph:"archive/file.csv"},{k:"expires_in",l:"Expires (presigned, seconds)",ph:"3600"},{k:"max_keys",l:"Max keys (list only)",ph:"1000"}] },
   "action.postgres":     { label:"SQL Query",           icon:"🗄",  color:"#0369a1", group:"action",    fields:[{k:"credential",l:"DB Credential (name)",ph:"my-postgres"},{k:"query",l:"SQL Query",ph:"SELECT * FROM users WHERE id = %s",mono:true,textarea:true},{k:"params",l:"Params (JSON array)",ph:'["{{input.user_id}}"]',mono:true},{k:"row_limit",l:"Row limit",ph:"1000"}] },
@@ -1043,6 +1044,19 @@ function ConfigPanel({ node, onChange, onDelete, edges }){
               <span style={{color:"#64748b"}}>Every 15 min</span><code>*/15 * * * *</code>
               <span style={{color:"#64748b"}}>1st of month</span><code>0 0 1 * *</code>
             </div>
+          </div>
+        )}
+        {node.data.type === "trigger.file_watch" && (
+          <div style={{background:"#0f1117",border:"1px solid #2a2d3e",borderRadius:6,padding:"8px 10px",fontSize:10,color:"#94a3b8",marginTop:6,lineHeight:1.8}}>
+            <div style={{color:"#b45309",fontWeight:600,marginBottom:4}}>📂 Output fields</div>
+            <div style={{display:"grid",gridTemplateColumns:"auto 1fr",gap:"0 10px"}}>
+              <code style={{color:"#4ade80"}}>files</code><span>list of matched file objects</span>
+              <code style={{color:"#4ade80"}}>count</code><span>number of files found</span>
+              <code style={{color:"#94a3b8"}}>path</code><span>first file path (shortcut)</span>
+              <code style={{color:"#94a3b8"}}>name</code><span>first file name (shortcut)</span>
+            </div>
+            <div style={{color:"#64748b",marginTop:4}}>Each file: <code>path · name · size · modified · modified_ts</code><br/>
+            Leave <strong>SFTP Credential</strong> blank for local paths. Pair with a <strong>Cron</strong> trigger and set <code>lookback_minutes</code> to match the schedule interval.</div>
           </div>
         )}
         {node.data.type === "trigger.email" && (
@@ -2379,6 +2393,16 @@ function NodeEditorModal({ node, onChange, onDelete, onClose, edges, allNodes, c
                   <span style={{color:"#64748b"}}>Daily at 9am</span><code>0 9 * * *</code>
                   <span style={{color:"#64748b"}}>Weekdays 9am</span><code>0 9 * * 1-5</code>
                   <span style={{color:"#64748b"}}>Every 15 min</span><code>*/15 * * * *</code>
+                </div>
+              </div>
+            )}
+            {node.data.type==="trigger.file_watch"&&(
+              <div style={{background:"#0f1117",border:"1px solid #2a2d3e",borderRadius:6,padding:"8px 10px",fontSize:10,color:"#94a3b8",marginTop:6,lineHeight:1.8}}>
+                <div style={{color:"#b45309",fontWeight:600,marginBottom:4}}>📂 Output</div>
+                <div style={{display:"grid",gridTemplateColumns:"auto 1fr",gap:"0 10px"}}>
+                  <code style={{color:"#4ade80"}}>files</code><span>matched file objects</span>
+                  <code style={{color:"#4ade80"}}>count</code><span>number of files</span>
+                  <code style={{color:"#94a3b8"}}>path / name</code><span>first-file shortcuts</span>
                 </div>
               </div>
             )}
