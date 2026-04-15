@@ -773,12 +773,23 @@ function Credentials({ showToast, user, encryptionOk }) {
   const [confirmState, setConfirmState] = useState(null);
   const [editingId, setEditingId] = useState(null);
   const [editForm, setEditForm] = useState({});
+  const [testResults, setTestResults] = useState({});
 
   const load = useCallback(async () => {
     try { setCredentials(await api("GET","/api/credentials")); }
     catch(e) { showToast(e.message,"error"); }
     setLoading(false);
   }, []);
+
+  async function testCred(id) {
+    setTestResults(r => ({...r, [id]: {loading: true}}));
+    try {
+      const res = await api("POST", `/api/credentials/${id}/test`);
+      setTestResults(r => ({...r, [id]: {ok: res.ok, message: res.message, type: res.type, ms: res.latency_ms}}));
+    } catch(err) {
+      setTestResults(r => ({...r, [id]: {ok: false, message: err.message}}));
+    }
+  }
 
   useEffect(()=>{ load(); },[]);
 
@@ -949,11 +960,35 @@ function Credentials({ showToast, user, encryptionOk }) {
                     <td style={{color:"#475569",fontSize:11}}>{credFieldSummary(c.type) || <span style={{color:"#334155"}}>••••••••</span>}</td>
                     <td style={{color:"#64748b",fontSize:12}}>{c.note||"—"}</td>
                     <td style={{color:"#64748b",fontSize:12}}>{new Date(c.created_at).toLocaleString()}</td>
-                    {!ro && <td><div style={{display:"flex",gap:6}}>
+                    {!ro && <td><div style={{display:"flex",gap:6,alignItems:"center"}}>
+                      <button className="btn btn-ghost" onClick={()=>testCred(c.id)} title="Test connection" disabled={testResults[c.id]?.loading}>
+                        {testResults[c.id]?.loading ? "…" : "🔌 Test"}
+                      </button>
                       <button className="btn btn-ghost" onClick={()=>startEdit(c)}>✏️ Edit</button>
                       <button className="btn btn-danger" onClick={()=>del(c.id)}>✕</button>
                     </div></td>}
                   </tr>
+                  {testResults[c.id] && !testResults[c.id].loading && (
+                    <tr style={{background:"#0a0d16"}}>
+                      <td colSpan="99" style={{padding:"6px 16px"}}>
+                        <div style={{display:"flex",alignItems:"center",gap:8,fontSize:12}}>
+                          <span style={{
+                            display:"inline-flex",alignItems:"center",gap:4,
+                            padding:"2px 10px",borderRadius:99,fontWeight:600,
+                            background: testResults[c.id].ok ? "#052e16" : "#2d0a0a",
+                            color:      testResults[c.id].ok ? "#4ade80"  : "#f87171",
+                            border:     `1px solid ${testResults[c.id].ok ? "#16a34a" : "#7f1d1d"}`,
+                          }}>
+                            {testResults[c.id].ok ? "✓ Connected" : "✗ Failed"}
+                          </span>
+                          <span style={{color:"#94a3b8"}}>{testResults[c.id].message}</span>
+                          {testResults[c.id].ms != null && (
+                            <span style={{color:"#475569",marginLeft:"auto"}}>{testResults[c.id].ms}ms</span>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  )}
                   {editingId === c.id && (
                     <tr style={{background:"#0f1117"}}>
                       <td colSpan="99" style={{padding:"12px 16px"}}>
