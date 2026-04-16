@@ -292,12 +292,23 @@ def get_run_by_task(task_id):
         row = cur.fetchone()
         return dict(row) if row else None
 
-def update_run(task_id, status, result=None, traces=None):
+def update_run(task_id, status, result=None, traces=None, retry_count: int | None = None):
+    """Update a run's status, result, traces, and optionally its retry_count.
+
+    retry_count is only written when explicitly passed (not None) so callers
+    that don't use retries don't accidentally reset the counter.
+    """
     with get_conn() as conn:
-        conn.cursor().execute(
-            "UPDATE runs SET status=%s, result=%s, traces=%s, updated_at=NOW() WHERE task_id=%s",
-            (status, json.dumps(result or {}), json.dumps(traces or []), task_id)
-        )
+        if retry_count is not None:
+            conn.cursor().execute(
+                "UPDATE runs SET status=%s, result=%s, traces=%s, retry_count=%s, updated_at=NOW() WHERE task_id=%s",
+                (status, json.dumps(result or {}), json.dumps(traces or []), retry_count, task_id),
+            )
+        else:
+            conn.cursor().execute(
+                "UPDATE runs SET status=%s, result=%s, traces=%s, updated_at=NOW() WHERE task_id=%s",
+                (status, json.dumps(result or {}), json.dumps(traces or []), task_id),
+            )
 
 def delete_run(run_id):
     with get_conn() as conn:

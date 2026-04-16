@@ -1937,7 +1937,7 @@ function Logs({ showToast }) {
     load(pg, statusFilter, search);
   };
 
-  const STATUS_COLOR = {succeeded:"#4ade80",failed:"#f87171",running:"#34d399",queued:"#60a5fa",cancelled:"#9ca3af"};
+  const STATUS_COLOR = {succeeded:"#4ade80",failed:"#f87171",dead:"#ef4444",retrying:"#fb923c",running:"#34d399",queued:"#60a5fa",cancelled:"#9ca3af"};
   const TRACE_DOT    = {ok:"#4ade80",error:"#f87171",skipped:"#64748b"};
 
   function fmtTs(ts) {
@@ -1973,6 +1973,8 @@ function Logs({ showToast }) {
           <option value="all">All statuses</option>
           <option value="succeeded">Succeeded</option>
           <option value="failed">Failed</option>
+          <option value="dead">Dead (exhausted retries)</option>
+          <option value="retrying">Retrying</option>
           <option value="running">Running</option>
           <option value="queued">Queued</option>
           <option value="cancelled">Cancelled</option>
@@ -1997,9 +1999,20 @@ function Logs({ showToast }) {
                   <span style={{fontWeight:600,fontSize:13,color:"#e2e8f0"}}>
                     {r.flow_name || `run #${r.id}`}
                   </span>
-                  <span style={{fontSize:11,fontWeight:600,color:STATUS_COLOR[r.status]||"#94a3b8"}}>
-                    {r.status}
-                  </span>
+                  <div style={{display:"flex",gap:5,alignItems:"center"}}>
+                    {r.status === "dead" && (
+                      <span title="Exhausted all retries" style={{fontSize:10,fontWeight:700,color:"#ef4444",background:"#1f0a0a",border:"1px solid #dc262644",borderRadius:10,padding:"1px 6px"}}>DEAD</span>
+                    )}
+                    {r.status === "retrying" && (
+                      <span title={`Attempt ${(r.retry_count||0)+1}`} style={{fontSize:10,fontWeight:700,color:"#fb923c",background:"#1c1000",border:"1px solid #ea580c44",borderRadius:10,padding:"1px 6px"}}>RETRY {r.retry_count||0}</span>
+                    )}
+                    {(r.retry_count > 0 && r.status !== "retrying" && r.status !== "dead") && (
+                      <span title={`Succeeded after ${r.retry_count} ${r.retry_count===1?"retry":"retries"}`} style={{fontSize:10,color:"#94a3b8",background:"#1e2235",borderRadius:10,padding:"1px 6px"}}>{r.retry_count}↺</span>
+                    )}
+                    <span style={{fontSize:11,fontWeight:600,color:STATUS_COLOR[r.status]||"#94a3b8"}}>
+                      {r.status}
+                    </span>
+                  </div>
                 </div>
                 <div style={{fontSize:11,color:"#64748b"}}>
                   #{r.id} · {fmtTs(r.created_at)}
@@ -2040,12 +2053,26 @@ function Logs({ showToast }) {
                       </div>
                     </div>
                     <span style={{fontSize:12,fontWeight:700,padding:"4px 10px",borderRadius:20,
-                      background:selRun.status==="succeeded"?"#14532d":selRun.status==="failed"?"#3f1111":"#1e3a5f",
+                      background:selRun.status==="succeeded"?"#14532d":selRun.status==="dead"?"#2d0a0a":selRun.status==="failed"?"#3f1111":"#1e3a5f",
                       color:STATUS_COLOR[selRun.status]||"#94a3b8"}}>
                       {selRun.status}
                     </span>
                   </div>
-                  {selRun.error && <div style={{marginTop:10,padding:"8px 10px",background:"#3f1111",borderRadius:6,fontSize:12,color:"#f87171"}}>{selRun.error}</div>}
+                  {selRun.retry_count > 0 && (
+                    <div style={{marginTop:8,fontSize:12,color:"#94a3b8"}}>
+                      {selRun.status === "dead"
+                        ? `⚠ Exhausted all ${selRun.retry_count} retry attempt${selRun.retry_count!==1?"s":""}. Fix the error in the flow then re-run manually.`
+                        : selRun.status === "retrying"
+                        ? `↺ Retry attempt ${selRun.retry_count} in progress…`
+                        : `↺ Succeeded after ${selRun.retry_count} retry attempt${selRun.retry_count!==1?"s":""}`
+                      }
+                    </div>
+                  )}
+                  {selRun.result?.error && (
+                    <div style={{marginTop:8,padding:"8px 10px",background:"#3f1111",borderRadius:6,fontSize:12,color:"#f87171",fontFamily:"monospace",wordBreak:"break-word"}}>
+                      {selRun.result.error}
+                    </div>
+                  )}
                 </div>
 
                 {traces.length===0

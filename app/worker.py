@@ -231,16 +231,45 @@ def _make_run_publisher(task_id: str):
         return None
 
 
-@app.task(bind=True, name="app.worker.enqueue_graph")
+# Exceptions that indicate a transient infrastructure problem worth retrying.
+# Flow logic errors (ValueError, KeyError, etc.) are NOT retried — they are
+# permanent failures that the user needs to fix in the flow definition.
+_TRANSIENT_EXCEPTIONS = (
+    ConnectionError,
+    TimeoutError,
+    OSError,
+)
+
+# Maximum Celery retries before a run is marked "dead" (permanently failed).
+_MAX_RETRIES = 3
+# Exponential backoff: 30 s, 60 s, 120 s between retry attempts.
+_RETRY_BACKOFF_BASE = 30  # seconds
+
+
+@app.task(bind=True, name="app.worker.enqueue_graph", max_retries=_MAX_RETRIES)
 def enqueue_graph(self, graph_id: int, payload: dict):
+    """Execute a graph flow.
+
+    Retry policy: up to 3 retries with exponential backoff (30 s / 60 s / 120 s)
+    for transient infrastructure errors (connection failures, timeouts, OS errors).
+    Flow logic errors (bad config, missing node, etc.) fail immediately — they
+    require the user to fix the flow, not just wait and try again.
+
+    Run status lifecycle:
+      queued → running → succeeded   (happy path)
+      queued → running → retrying    (transient error, will retry)
+      queued → running → dead        (exhausted retries or permanent error)
+    """
     task_id = self.request.id
+    retry_attempt = self.request.retries  # 0 on first attempt, 1+ on retries
     try:
         from app.core.db import init_db
         init_db()
     except Exception:
         pass
-    update_run(task_id, "running")
+    update_run(task_id, "running", retry_count=retry_attempt)
     traces = []
+    g = None
 
     publish = _make_run_publisher(task_id)
 
@@ -251,10 +280,7 @@ def enqueue_graph(self, graph_id: int, payload: dict):
         graph_data = json.loads(g.get('graph_json') or '{}')
         from app.core.executor import run_graph
 
-        msgs = []
-
         def _streaming_logger(msg: str):
-            msgs.append(msg)
             if publish:
                 publish({"type": "log", "msg": msg})
 
@@ -267,7 +293,7 @@ def enqueue_graph(self, graph_id: int, payload: dict):
                            node_callback=_node_callback,
                            workspace_id=g.get('workspace_id'))
         traces = result.get('traces', [])
-        update_run(task_id, "succeeded", result=result, traces=traces)
+        update_run(task_id, "succeeded", result=result, traces=traces, retry_count=retry_attempt)
         if publish:
             publish({"type": "run_done", "status": "succeeded"})
         _send_run_alert(
@@ -276,15 +302,43 @@ def enqueue_graph(self, graph_id: int, payload: dict):
             status="succeeded",
             task_id=task_id,
         )
-    except Exception as e:
-        log.exception(f"Graph {graph_id} failed")
-        update_run(task_id, "failed", result={"error": str(e)}, traces=traces)
+
+    except _TRANSIENT_EXCEPTIONS as exc:
+        # Transient error — retry with exponential backoff if attempts remain.
+        attempt = self.request.retries
+        countdown = _RETRY_BACKOFF_BASE * (2 ** attempt)  # 30, 60, 120 s
+        log.warning(
+            "Graph %s transient error (attempt %d/%d, retry in %ds): %s",
+            graph_id, attempt + 1, _MAX_RETRIES, countdown, exc,
+        )
+        update_run(
+            task_id, "retrying",
+            result={"error": str(exc), "retry_attempt": attempt + 1, "retry_in_seconds": countdown},
+            traces=traces,
+            retry_count=attempt + 1,
+        )
         if publish:
-            publish({"type": "run_done", "status": "failed", "error": str(e)})
+            publish({"type": "run_done", "status": "retrying",
+                     "error": str(exc), "retry_attempt": attempt + 1})
+        raise self.retry(exc=exc, countdown=countdown)
+
+    except Exception as exc:
+        # Permanent failure — log, mark dead, send alert.
+        log.exception("Graph %s failed permanently (attempt %d)", graph_id, retry_attempt + 1)
+        final_status = "dead" if retry_attempt >= _MAX_RETRIES else "failed"
+        flow_name = g.get("name", f"graph#{graph_id}") if g else f"graph#{graph_id}"
+        update_run(
+            task_id, final_status,
+            result={"error": str(exc)},
+            traces=traces,
+            retry_count=retry_attempt,
+        )
+        if publish:
+            publish({"type": "run_done", "status": final_status, "error": str(exc)})
         _send_run_alert(
             graph_id=graph_id,
-            flow_name=(g or {}).get("name", f"graph#{graph_id}") if "g" in dir() else f"graph#{graph_id}",
+            flow_name=flow_name,
             status="failed",
             task_id=task_id,
-            error=str(e),
+            error=str(exc),
         )
