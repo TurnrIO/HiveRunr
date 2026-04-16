@@ -43,6 +43,14 @@ body{font-family:'Inter',system-ui,sans-serif;background:#0f1117;color:#e2e8f0;m
 .badge-credential.ssh{background:#0f4c3a33;color:#34d399;border-color:#059669}
 .badge-credential.ftp{background:#1e3a5f33;color:#7dd3fc;border-color:#0284c7}
 .badge-credential.generic,.badge-credential.other{background:#2d2d2d33;color:#9ca3af;border-color:#4b5563}
+.badge-credential.github_oauth{background:#1a1f2e33;color:#e2e8f0;border-color:#374151}
+.badge-credential.google_oauth{background:#1a2a1a33;color:#86efac;border-color:#16a34a}
+.badge-credential.notion_oauth{background:#1e1a2e33;color:#c4b5fd;border-color:#7c3aed}
+.oauth-provider-btn{display:flex;align-items:center;gap:10px;padding:10px 16px;border-radius:8px;border:1px solid #2a2d3e;background:#13161f;cursor:pointer;transition:all .15s;font-size:13px;font-weight:500;color:#e2e8f0;width:100%}
+.oauth-provider-btn:hover:not(:disabled){border-color:#a78bfa;background:#1a1d2e;color:#a78bfa}
+.oauth-provider-btn:disabled{opacity:.45;cursor:not-allowed}
+.oauth-provider-icon{font-size:18px;width:24px;text-align:center;flex-shrink:0}
+.oauth-connected{display:inline-flex;align-items:center;gap:4px;font-size:11px;color:#4ade80;background:#0a1f1433;border:1px solid #16a34a33;border-radius:12px;padding:2px 8px}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.6}}
 table{width:100%;border-collapse:collapse;font-size:13px}
 th{text-align:left;color:#64748b;font-weight:500;padding:8px 12px;border-bottom:1px solid #2a2d3e;font-size:12px}
@@ -818,12 +826,18 @@ function Credentials({ showToast, user, encryptionOk }) {
   const [confirmState, setConfirmState] = useState(null);
   const [editingId, setEditingId] = useState(null);
   const [editForm, setEditForm] = useState({});
+  const [oauthProviders, setOauthProviders] = useState({});
+  const [oauthModal, setOauthModal] = useState(null); // provider key or null
 
   const load = useCallback(async () => {
     try { setCredentials(await api("GET","/api/credentials")); }
     catch(e) { showToast(e.message,"error"); }
     setLoading(false);
   }, []);
+
+  useEffect(()=>{
+    api("GET","/api/oauth/providers").then(setOauthProviders).catch(()=>{});
+  },[]);
 
   useEffect(()=>{ load(); },[]);
 
@@ -978,6 +992,30 @@ function Credentials({ showToast, user, encryptionOk }) {
           <button type="submit" className="btn btn-primary">+ Create</button>
         </form>
       </div>}
+
+      {/* OAuth one-click connect — only shown if ≥1 provider is configured */}
+      {!ro && Object.values(oauthProviders).some(Boolean) && (
+        <div className="card">
+          <div className="card-title">Connect via OAuth</div>
+          <div style={{fontSize:12,color:"#64748b",marginBottom:14}}>
+            Authorise HiveRunr directly with these providers — no API key copy/paste needed. Tokens are saved automatically as a workspace credential.
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))",gap:10}}>
+            {Object.entries(OAUTH_PROVIDER_META).map(([key, meta]) => {
+              if (!oauthProviders[key]) return null;
+              const alreadyConnected = credentials.some(c => c.type === `${key}_oauth`);
+              return (
+                <button key={key} className="oauth-provider-btn" onClick={()=>setOauthModal(key)}>
+                  <span className="oauth-provider-icon">{meta.icon}</span>
+                  <span style={{flex:1,textAlign:"left"}}>{meta.label}</span>
+                  {alreadyConnected && <span className="oauth-connected">✓ connected</span>}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       <div className="card">
         <div className="card-title">Your Credentials</div>
         {loading ? <div className="empty-state">Loading…</div> : credentials.length === 0 ? (
@@ -1036,6 +1074,56 @@ function Credentials({ showToast, user, encryptionOk }) {
         )}
       </div>
       {confirmState && <ConfirmModal message={confirmState.message} confirmLabel={confirmState.confirmLabel} onConfirm={()=>{confirmState.fn();setConfirmState(null);}} onCancel={()=>setConfirmState(null)}/>}
+      {oauthModal && <OAuthConnectModal provider={oauthModal} onClose={()=>setOauthModal(null)}/>}
+    </div>
+  );
+}
+
+// ── OAuthConnectModal ──────────────────────────────────────────────────────
+const OAUTH_PROVIDER_META = {
+  github: { icon: "🐙", label: "GitHub", hint: "Grants access to repositories (scope: repo, read:user). Use in action.github nodes.", defaultName: "github" },
+  google: { icon: "📊", label: "Google Sheets / Drive", hint: "Grants Sheets + Drive file access. Use in action.google_sheets nodes.", defaultName: "google-sheets" },
+  notion: { icon: "📝", label: "Notion", hint: "Grants workspace access. Use in action.notion nodes.", defaultName: "notion" },
+};
+
+function OAuthConnectModal({ provider, onClose }) {
+  const meta = OAUTH_PROVIDER_META[provider] || {};
+  const [name, setName] = useState(meta.defaultName || provider);
+  const ref = useRef(null);
+  useFocusTrap(ref, onClose);
+  function connect() {
+    if (!name.trim()) return;
+    window.location.href = `/api/oauth/${provider}/start?cred_name=${encodeURIComponent(name.trim())}`;
+  }
+  return (
+    <div className="modal-overlay" aria-hidden="true" onClick={e=>{ if(e.target.className==="modal-overlay") onClose(); }}>
+      <div className="modal" style={{maxWidth:440}} role="dialog" aria-modal="true" aria-label={`Connect ${meta.label}`} ref={ref}>
+        <div className="modal-header">
+          <h3 style={{margin:0,fontSize:15}}>{meta.icon} Connect {meta.label}</h3>
+          <button className="modal-close" aria-label="Close" onClick={onClose}>✕</button>
+        </div>
+        <div style={{padding:"16px 20px"}}>
+          <div style={{fontSize:12,color:"#94a3b8",marginBottom:16,lineHeight:1.6}}>{meta.hint}</div>
+          <div className="form-group" style={{marginBottom:16}}>
+            <label>Credential Name</label>
+            <input
+              autoFocus
+              value={name}
+              onChange={e=>setName(e.target.value)}
+              onKeyDown={e=>{ if(e.key==="Enter") connect(); }}
+              placeholder={meta.defaultName}
+            />
+            <div style={{fontSize:11,color:"#64748b",marginTop:4}}>Letters, numbers, hyphens, underscores only.</div>
+          </div>
+          <div style={{fontSize:11,color:"#475569",background:"#0f1117",border:"1px solid #1e2130",borderRadius:6,padding:"8px 12px",marginBottom:16}}>
+            You'll be redirected to {meta.label} to authorise HiveRunr. After approving, the token is saved as credential <strong style={{color:"#a78bfa"}}>"{name}"</strong> in your workspace.
+          </div>
+          <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
+            <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
+            <button className="btn btn-primary" onClick={connect} disabled={!name.trim()}>Authorise →</button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -3711,6 +3799,18 @@ function App() {
       const active = wid ? (list||[]).find(w=>String(w.id)===String(wid)) : null;
       setActiveWorkspace(active||(list&&list[0])||null);
     }).catch(()=>{});
+    // Handle OAuth callback result — ?oauth_success=github&cred=name or ?oauth_error=reason
+    const sp = new URLSearchParams(window.location.search);
+    if (sp.get("oauth_success")) {
+      const provider = sp.get("oauth_success");
+      const cred = sp.get("cred") || "credential";
+      showToast(`✓ ${provider} connected — credential "${cred}" saved`);
+      setPageState("credentials");
+      window.history.replaceState({}, "", window.location.pathname + window.location.hash);
+    } else if (sp.get("oauth_error")) {
+      showToast(`OAuth failed: ${sp.get("oauth_error").replace(/_/g," ")}`, "error");
+      window.history.replaceState({}, "", window.location.pathname + window.location.hash);
+    }
   },[]);
 
   const setPage = useCallback((id) => {

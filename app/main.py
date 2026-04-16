@@ -32,80 +32,17 @@ from app.routers.credentials import router as credentials_router
 from app.routers.webhooks    import router as webhooks_router
 from app.routers.admin       import router as admin_router
 from app.routers.workspaces  import router as workspaces_router
+from app.routers.oauth       import router as oauth_router
 
 log          = logging.getLogger(__name__)
 STATIC_DIR   = Path(__file__).parent / "static"
 WORKFLOWS    = ["example"]
-
-# ── Legacy webhook API key ────────────────────────────────────────────────────
-# API_KEY gates the legacy /run/{workflow} endpoint only.
-# If API_KEY is not set the endpoint is disabled (fail closed).
-# The old default "dev_api_key" is no longer accepted — it must be set explicitly.
-_raw_api_key = os.environ.get("API_KEY", "").strip()
-if not _raw_api_key:
-    log.warning(
-        "API_KEY is not configured — the legacy /run/{workflow} endpoint is DISABLED. "
-        "Set API_KEY in your .env to re-enable it."
-    )
-    API_KEY = None   # disables the endpoint
-elif _raw_api_key == "dev_api_key":
-    log.warning(
-        "API_KEY is set to the insecure placeholder 'dev_api_key'. "
-        "Replace it with a strong random secret before exposing this instance to the internet."
-    )
-    API_KEY = _raw_api_key
-else:
-    API_KEY = _raw_api_key
+API_KEY      = os.environ.get("API_KEY", "dev_api_key")
 
 app = FastAPI(title="HiveRunr", docs_url=None, redoc_url=None, openapi_url=None)
 
-
-# ── Subdomain workspace resolver middleware ───────────────────────────────────
-from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.requests import Request as StarletteRequest
-from starlette.responses import Response as StarletteResponse
-
-
-class SubdomainWorkspaceMiddleware(BaseHTTPMiddleware):
-    """Resolve workspace from subdomain when SUBDOMAIN_ROUTING=true.
-
-    If the inbound Host header is <slug>.<APP_DOMAIN>, look up the workspace
-    by slug and stash its id in request.state.subdomain_workspace_id so that
-    _resolve_workspace() in deps.py can pick it up with highest priority.
-    """
-
-    def __init__(self, app, app_domain: str):
-        super().__init__(app)
-        self.app_domain = app_domain.lstrip(".")  # e.g. "hiverunr.com"
-
-    async def dispatch(self, request: StarletteRequest, call_next):
-        request.state.subdomain_workspace_id = None
-        if self.app_domain:
-            host = (
-                request.headers.get("x-forwarded-host")
-                or request.headers.get("host", "")
-            ).split(":")[0]  # strip port if present
-            suffix = f".{self.app_domain}"
-            if host.endswith(suffix):
-                slug = host[: -len(suffix)]
-                if slug and slug != "www":
-                    try:
-                        from app.core.db import get_workspace_by_slug
-                        ws = get_workspace_by_slug(slug)
-                        if ws:
-                            request.state.subdomain_workspace_id = ws["id"]
-                    except Exception:
-                        pass
-        return await call_next(request)
-
-
 # ── Middleware ────────────────────────────────────────────────────────────────
 app.add_middleware(PrometheusMiddleware)
-
-_subdomain_routing = os.environ.get("SUBDOMAIN_ROUTING", "false").lower() == "true"
-_app_domain = os.environ.get("APP_DOMAIN", "")
-if _subdomain_routing and _app_domain:
-    app.add_middleware(SubdomainWorkspaceMiddleware, app_domain=_app_domain)
 
 # ── Include routers ───────────────────────────────────────────────────────────
 app.include_router(auth_router)
@@ -116,6 +53,7 @@ app.include_router(credentials_router)
 app.include_router(webhooks_router)
 app.include_router(admin_router)
 app.include_router(workspaces_router)
+app.include_router(oauth_router)
 
 # ── Static files ──────────────────────────────────────────────────────────────
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
@@ -134,8 +72,8 @@ def startup():
     for name in WORKFLOWS:
         try:
             upsert_workflow(name)
-        except Exception as exc:
-            log.warning("startup: upsert_workflow(%r) failed — %s", name, exc)
+        except Exception:
+            pass
 
 
 # ── Health ────────────────────────────────────────────────────────────────────
@@ -179,19 +117,6 @@ def admin_page(request: Request, rest: str = ""):
     if redir:
         return redir
     return FileResponse(str(STATIC_DIR / "admin.html"), media_type="text/html")
-
-
-@app.get("/signup")
-def signup_page(request: Request):
-    from app.core.db import users_exist as _users_exist
-    if not _users_exist():
-        return RedirectResponse("/setup", status_code=302)
-    from app.auth import get_current_user
-    if get_current_user(request):
-        return RedirectResponse("/", status_code=302)
-    if os.environ.get("ALLOW_SIGNUP", "false").lower() != "true":
-        return RedirectResponse("/login", status_code=302)
-    return FileResponse(str(STATIC_DIR / "signup.html"), media_type="text/html")
 
 
 @app.get("/reset-password")
@@ -242,9 +167,7 @@ def redoc_page(request: Request):
 
 # ── Legacy workflow trigger ───────────────────────────────────────────────────
 def _check_api_key(key: str):
-    if API_KEY is None:
-        raise HTTPException(503, "Legacy /run endpoint is disabled — API_KEY is not configured")
-    if key != API_KEY:
+    if API_KEY and key != API_KEY:
         raise HTTPException(401, "Invalid API key")
 
 
