@@ -64,9 +64,101 @@ def favicon():
     return RedirectResponse("/static/favicon.svg", status_code=302)
 
 
+# ── Startup validation ────────────────────────────────────────────────────────
+def _validate_config() -> None:
+    """Check critical env vars and dependencies at startup.
+
+    Logs a clear actionable WARNING for every problem found.
+    Raises RuntimeError for anything that will make the app non-functional
+    (missing DB or Redis).  All other issues are warnings only — the app
+    still starts so you can use the System page to diagnose them.
+    """
+    import sys
+
+    # ── Fatal: Database ───────────────────────────────────────────────────────
+    db_url = os.environ.get("DATABASE_URL", "")
+    if not db_url:
+        raise RuntimeError(
+            "DATABASE_URL is not set. "
+            "Add it to .env, e.g.: DATABASE_URL=postgresql://user:pass@db:5432/hiverunr"
+        )
+    try:
+        from app.core.db import get_conn
+        with get_conn() as conn:
+            conn.cursor().execute("SELECT 1")
+        log.info("startup: database connection OK")
+    except Exception as exc:
+        raise RuntimeError(
+            f"Cannot connect to the database: {exc}. "
+            "Check DATABASE_URL in .env and ensure the postgres container is running."
+        ) from exc
+
+    # ── Fatal: Redis ──────────────────────────────────────────────────────────
+    redis_url = os.environ.get("REDIS_URL", "")
+    if not redis_url:
+        raise RuntimeError(
+            "REDIS_URL is not set. "
+            "Add it to .env, e.g.: REDIS_URL=redis://redis:6379/0"
+        )
+    try:
+        import redis as _redis
+        _redis.from_url(redis_url, socket_connect_timeout=3).ping()
+        log.info("startup: Redis connection OK")
+    except Exception as exc:
+        raise RuntimeError(
+            f"Cannot connect to Redis: {exc}. "
+            "Check REDIS_URL in .env and ensure the redis container is running."
+        ) from exc
+
+    # ── Warning: SECRET_KEY ───────────────────────────────────────────────────
+    if not os.environ.get("SECRET_KEY", "").strip():
+        log.warning(
+            "startup: SECRET_KEY is not set — credentials are stored with a weak "
+            "fallback key. Generate one with: "
+            "python -c \"from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())\""
+            " then set SECRET_KEY in .env."
+        )
+
+    # ── Warning: API_KEY ──────────────────────────────────────────────────────
+    unsafe_keys = {"dev_api_key", "change-me-before-deployment", ""}
+    if os.environ.get("API_KEY", "dev_api_key") in unsafe_keys:
+        log.warning(
+            "startup: API_KEY is set to an unsafe default. "
+            "Set API_KEY to a random secret in .env before exposing this instance publicly."
+        )
+
+    # ── Warning: APP_URL ──────────────────────────────────────────────────────
+    app_url = os.environ.get("APP_URL", "http://localhost")
+    if not app_url.startswith("https://"):
+        log.warning(
+            "startup: APP_URL is '%s' (not https). "
+            "Session cookies will not be Secure-flagged. "
+            "Set APP_URL=https://yourdomain.com in .env for production use.", app_url
+        )
+
+    # ── Warning: Email ────────────────────────────────────────────────────────
+    if not os.environ.get("AGENTMAIL_API_KEY", "").strip():
+        log.warning(
+            "startup: AGENTMAIL_API_KEY is not set — email alerts and "
+            "password reset are disabled. Sign up at agentmail.to to enable them."
+        )
+
+    # ── Warning: OWNER_EMAIL ──────────────────────────────────────────────────
+    if not os.environ.get("OWNER_EMAIL", "").strip():
+        log.warning(
+            "startup: OWNER_EMAIL is not set — flow failure alerts will not be delivered. "
+            "Set OWNER_EMAIL in .env."
+        )
+
+
 # ── Startup ───────────────────────────────────────────────────────────────────
 @app.on_event("startup")
 def startup():
+    try:
+        _validate_config()
+    except RuntimeError as exc:
+        log.error("startup: FATAL — %s", exc)
+        import sys; sys.exit(1)
     init_db()
     seed_example_graphs()
     for name in WORKFLOWS:

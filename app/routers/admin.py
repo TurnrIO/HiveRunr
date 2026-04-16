@@ -25,50 +25,232 @@ def prometheus_metrics(request: Request):
 
 
 
-# ── System status ─────────────────────────────────────────────────────────────
+# ── System diagnostics ───────────────────────────────────────────────────────
 @router.get("/api/system/status")
 def api_system_status(request: Request):
-    """Rich system health + info for the Settings page."""
-    import os, sys, platform, socket
+    """Full system diagnostics for the System page.
+
+    Each subsystem returns:
+      status  : "ok" | "warning" | "error"
+      message : human-readable one-liner (always present)
+      fix     : what to do if status != "ok" (present when relevant)
+      + subsystem-specific fields
+    """
+    import os, sys, platform, socket, time
     _check_admin(request)
-    results = {}
+    results: dict = {}
+
+    # ── Database ──────────────────────────────────────────────────────────────
     try:
         from app.core.db import get_conn
+        t0 = time.monotonic()
         with get_conn() as conn:
             cur = conn.cursor()
-            cur.execute("SELECT COUNT(*) FROM runs")
-            run_count = cur.fetchone()[0]
-            cur.execute("SELECT COUNT(*) FROM graph_workflows")
-            flow_count = cur.fetchone()[0]
-            cur.execute("SELECT pg_size_pretty(pg_database_size(current_database())) AS sz")
-            db_size = cur.fetchone()[0]
-        results["db"] = {"status": "ok", "run_count": run_count, "flow_count": flow_count, "db_size": db_size}
-    except Exception as e:
-        results["db"] = {"status": "error", "error": str(e)}
+            # Use aliases so fetchone() works with both plain and RealDictCursor
+            cur.execute(
+                "SELECT "
+                "  (SELECT COUNT(*) FROM runs)            AS run_count,"
+                "  (SELECT COUNT(*) FROM graph_workflows) AS flow_count,"
+                "  pg_size_pretty(pg_database_size(current_database())) AS db_size"
+            )
+            row = cur.fetchone()
+            run_count  = row["run_count"]  if isinstance(row, dict) else row[0]
+            flow_count = row["flow_count"] if isinstance(row, dict) else row[1]
+            db_size    = row["db_size"]    if isinstance(row, dict) else row[2]
+            # Check Alembic migration head
+            cur.execute("SELECT version_num FROM alembic_version")
+            migration_row = cur.fetchone()
+            migration_current = (migration_row["version_num"] if isinstance(migration_row, dict)
+                                 else migration_row[0]) if migration_row else "unknown"
+        latency_ms = round((time.monotonic() - t0) * 1000)
+        results["db"] = {
+            "status": "ok",
+            "message": f"Connected · {run_count} runs · {flow_count} flows · {db_size}",
+            "run_count": run_count,
+            "flow_count": flow_count,
+            "db_size": db_size,
+            "migration": migration_current,
+            "latency_ms": latency_ms,
+        }
+    except Exception as exc:
+        results["db"] = {
+            "status": "error",
+            "message": str(exc),
+            "fix": "Check DATABASE_URL in .env and ensure the postgres container is running.",
+        }
+
+    # ── Redis ─────────────────────────────────────────────────────────────────
     try:
-        from app.worker import app as celery_app
-        redis_url = celery_app.conf.broker_url or ""
         import redis as _redis
+        redis_url = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
+        t0 = time.monotonic()
         r = _redis.from_url(redis_url, socket_connect_timeout=2)
         r.ping()
-        results["redis"] = {"status": "ok", "url": redis_url.split("@")[-1]}
-    except Exception as e:
-        results["redis"] = {"status": "error", "error": str(e)}
+        latency_ms = round((time.monotonic() - t0) * 1000)
+        display_url = redis_url.split("@")[-1]  # strip credentials if present
+        results["redis"] = {
+            "status": "ok",
+            "message": f"Reachable at {display_url}",
+            "latency_ms": latency_ms,
+        }
+    except Exception as exc:
+        results["redis"] = {
+            "status": "error",
+            "message": str(exc),
+            "fix": "Check REDIS_URL in .env and ensure the redis container is running.",
+        }
+
+    # ── Celery workers ────────────────────────────────────────────────────────
     try:
         from app.worker import app as celery_app
         pong = celery_app.control.ping(timeout=2)
-        worker_count = len(pong)
-        results["worker"] = {"status": "ok" if worker_count else "warning", "workers": worker_count}
-    except Exception as e:
-        results["worker"] = {"status": "error", "error": str(e)}
+        worker_names = [list(w.keys())[0] for w in pong]
+        count = len(worker_names)
+        if count == 0:
+            results["worker"] = {
+                "status": "warning",
+                "message": "No workers responding",
+                "fix": "Run `docker compose up -d worker` or check worker container logs.",
+                "workers": 0,
+                "worker_names": [],
+            }
+        else:
+            results["worker"] = {
+                "status": "ok",
+                "message": f"{count} worker{'s' if count != 1 else ''} online",
+                "workers": count,
+                "worker_names": worker_names,
+            }
+    except Exception as exc:
+        results["worker"] = {
+            "status": "error",
+            "message": str(exc),
+            "fix": "Check REDIS_URL (Celery broker) and restart the worker container.",
+        }
+
+    # ── Scheduler ─────────────────────────────────────────────────────────────
+    try:
+        import redis as _redis
+        redis_url = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
+        r = _redis.from_url(redis_url, socket_connect_timeout=2)
+        lock_val = r.get("hiverunr:scheduler:lock")
+        if lock_val:
+            results["scheduler"] = {
+                "status": "ok",
+                "message": f"Leader lock held by instance {lock_val.decode()[:16]}…",
+                "lock_held": True,
+            }
+        else:
+            results["scheduler"] = {
+                "status": "warning",
+                "message": "Scheduler leader lock not found — scheduler may not be running",
+                "fix": "Check that the scheduler container/process is running: `docker compose ps scheduler`.",
+                "lock_held": False,
+            }
+    except Exception as exc:
+        results["scheduler"] = {
+            "status": "warning",
+            "message": f"Could not check scheduler lock: {exc}",
+            "lock_held": False,
+        }
+
+    # ── Email (AgentMail) ─────────────────────────────────────────────────────
+    api_key  = os.environ.get("AGENTMAIL_API_KEY", "").strip()
+    from_addr = os.environ.get("AGENTMAIL_FROM", "").strip()
+    owner_email = os.environ.get("OWNER_EMAIL", "").strip()
+    if api_key and from_addr and owner_email:
+        results["email"] = {
+            "status": "ok",
+            "message": f"Configured · sending from {from_addr} · alerts to {owner_email}",
+            "configured": True,
+        }
+    elif api_key and from_addr:
+        results["email"] = {
+            "status": "warning",
+            "message": "AGENTMAIL_API_KEY and AGENTMAIL_FROM are set, but OWNER_EMAIL is missing",
+            "fix": "Set OWNER_EMAIL in .env to receive flow failure alerts.",
+            "configured": True,
+        }
+    else:
+        missing = [v for v, k in [("AGENTMAIL_API_KEY", api_key), ("AGENTMAIL_FROM", from_addr)] if not k]
+        results["email"] = {
+            "status": "warning",
+            "message": f"Email not configured ({', '.join(missing)} not set) — alerts and password reset are disabled",
+            "fix": "Sign up at agentmail.to, create an inbox, then set AGENTMAIL_API_KEY and AGENTMAIL_FROM in .env.",
+            "configured": False,
+        }
+
+    # ── Credential encryption ─────────────────────────────────────────────────
+    secret_key = os.environ.get("SECRET_KEY", "").strip()
+    if not secret_key:
+        results["encryption"] = {
+            "status": "warning",
+            "message": "SECRET_KEY not set — credentials stored with weak fallback key",
+            "fix": (
+                "Generate a key: python -c \"from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())\""
+                " then set SECRET_KEY in .env and restart."
+            ),
+            "configured": False,
+        }
+    else:
+        results["encryption"] = {
+            "status": "ok",
+            "message": "Credentials encrypted at rest (Fernet / AES-128-CBC)",
+            "configured": True,
+        }
+
+    # ── OAuth providers ───────────────────────────────────────────────────────
+    oauth_configured = {
+        "github":  bool(os.environ.get("GITHUB_CLIENT_ID", "").strip()),
+        "google":  bool(os.environ.get("GOOGLE_CLIENT_ID", "").strip()),
+        "notion":  bool(os.environ.get("NOTION_CLIENT_ID", "").strip()),
+    }
+    any_oauth = any(oauth_configured.values())
+    results["oauth"] = {
+        "status": "ok" if any_oauth else "warning",
+        "message": (
+            "Providers: " + ", ".join(k for k, v in oauth_configured.items() if v)
+            if any_oauth else "No OAuth providers configured"
+        ),
+        "fix": "Set GITHUB/GOOGLE/NOTION _CLIENT_ID and _CLIENT_SECRET in .env to enable one-click credential connect." if not any_oauth else None,
+        "providers": oauth_configured,
+    }
+
+    # ── Security posture ──────────────────────────────────────────────────────
+    app_url = os.environ.get("APP_URL", "http://localhost")
+    api_key_raw = os.environ.get("API_KEY", "")
+    security_issues = []
+    if not app_url.startswith("https://"):
+        security_issues.append("APP_URL is not https — session cookies will not be Secure-flagged")
+    if api_key_raw in ("dev_api_key", "change-me-before-deployment", ""):
+        security_issues.append("API_KEY is set to an unsafe default or is blank")
+    if security_issues:
+        results["security"] = {
+            "status": "warning",
+            "message": "; ".join(security_issues),
+            "fix": "Set APP_URL=https://yourdomain.com and change API_KEY to a random secret in .env.",
+            "issues": security_issues,
+        }
+    else:
+        results["security"] = {
+            "status": "ok",
+            "message": "HTTPS enabled · API key is non-default",
+        }
+
+    # ── Platform info ─────────────────────────────────────────────────────────
     results["system"] = {
-        "app_version":  "8",
+        "status": "ok",
+        "message": f"Python {sys.version.split()[0]} · {platform.system()} · PID {os.getpid()}",
+        "app_version":  "0.1.0",
         "python":       sys.version.split()[0],
         "platform":     platform.system() + " " + platform.release(),
         "hostname":     socket.gethostname(),
         "pid":          os.getpid(),
         "app_timezone": os.environ.get("APP_TIMEZONE", "UTC"),
+        "app_url":      app_url,
+        "allow_signup": os.environ.get("ALLOW_SIGNUP", "false").lower() == "true",
     }
+
     return results
 
 
