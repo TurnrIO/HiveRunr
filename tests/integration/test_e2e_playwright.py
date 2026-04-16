@@ -215,7 +215,6 @@ class TestRunLogs:
         logged_in_page.wait_for_timeout(1000)
 
         # The run log table / list should be present
-        table = logged_in_page.locator("table, [role='table'], .run-list, [data-testid='runs']")
         # May be empty but the container should exist
         assert logged_in_page.title() != ""
 

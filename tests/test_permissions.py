@@ -282,7 +282,7 @@ class TestCheckFlowAccess:
              patch(_TOKDB, return_value={"name": "ci", "scope": "manage"}), \
              patch(_TOUCH), \
              patch("app.deps.get_flow_permission") as mock_fp:
-            user = _check_flow_access(req, self.GRAPH_ID, "editor")
+            _check_flow_access(req, self.GRAPH_ID, "editor")
         mock_fp.assert_not_called()
 
 

@@ -123,7 +123,7 @@ class TestNodeFailureContinue:
             edges=[{"source": "n1", "target": "n2"}],
         )
         with patch("app.core.executor._run_node", side_effect=_mock):
-            result = run_graph(graph)
+            run_graph(graph)
 
         assert "n2" in call_log
 
@@ -339,5 +339,5 @@ class TestExecutorEdgeCases:
         node["data"]["disabled"] = True
         graph = _g([node])
         with patch("app.core.executor._run_node") as mock_run:
-            result = run_graph(graph)
+            run_graph(graph)
         mock_run.assert_not_called()
