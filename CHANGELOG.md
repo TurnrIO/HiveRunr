@@ -4,6 +4,50 @@ All notable changes are documented here, newest first.
 
 ---
 
+## [0.1.0] — 2026-04-15 — First versioned release
+
+This release consolidates all work from the initial commit through the P1 sprint series into the first tagged version of HiveRunr.
+
+### Workspace multi-tenancy (W-series)
+- **Workspace foundation** — `workspaces` + `workspace_members` tables; full CRUD API; default workspace seeded for existing installs
+- **Scoped graphs + runs** — `workspace_id` FK on `graph_workflows` + `runs`; `_resolve_workspace()` helper (header → cookie → first workspace → default); canvas sends `X-Workspace-Id` header
+- **Scoped credentials, schedules, tokens** — `workspace_id` FK on `credentials`, `schedules`, `api_tokens`; executor only loads the correct workspace's secrets at run time
+- **Workspace management UI** — `WorkspacesPage` in admin.html: rename, member table with role dropdowns, super-admin all-workspaces view with create + delete
+- **Self-serve onboarding** — `ALLOW_SIGNUP` gate; `POST /api/auth/signup` + `signup.html`; subdomain routing (`SUBDOMAIN_ROUTING` + `APP_DOMAIN`); plan limits + usage endpoint + progress bars in UI
+
+### Security & reliability hardening (P0)
+- API key fail-closed: disabled when unset, loud warning for `dev_api_key` default
+- `is_secure_context()` drives `secure=True` on all session cookies when `APP_URL` starts with `https://`
+- Startup exceptions logged instead of silently swallowed
+- `GET /api/runs/stats` server-side aggregates replace fragile `?page_size=200` calls on Dashboard and Metrics pages
+
+### Canvas improvements (P1-editor)
+- **Dirty-state indicator + autosave** — amber "● Unsaved" badge; 30 s autosave timer resets on each edit; "✓ Saved" timestamp tooltip; node IDs upgraded to RFC 4122 v4 UUIDs
+- **Node test button** — `POST /api/graphs/{id}/nodes/{node_id}/test`; collapsible Test panel with JSON input + pin-output; workspace credential isolation fixed
+- **Version diff / restore** — `HistoryModal` two-pane layout; colour-coded `+`/`−`/`~`/`=` diff vs current; defaults to Diff tab; restore reloads canvas in-place
+- **Flow import / export** — `GET /api/graphs/{id}/export` returns self-contained JSON bundle (credential slot names only, no secrets); `POST /api/graphs/import` creates graph in workspace with audit log entry
+
+### New node types (P1-nodes)
+- **`trigger.email`** — IMAP poller using stdlib `imaplib`; configurable search criteria, Python filter expression, mark-as-read; outputs `emails[]` list + first-email shortcuts
+- **`action.postgres`** — SQL Query node; PostgreSQL (psycopg2), MySQL (pymysql), SQLite (stdlib); supports DSN string or individual host/port fields; parameterised queries; outputs `rows[]`, `count`, `row`, `columns`, `affected`
+- **`action.s3`** — S3 Storage node via boto3; operations: get/put/list/delete/presigned_url/head/copy; compatible with AWS S3, MinIO, Cloudflare R2, Backblaze B4
+- **`trigger.file_watch`** — polls local filesystem or SFTP for recently-modified files; glob pattern, `lookback_minutes` sliding window, `min_age_seconds` write-guard, recursive scan
+
+### Credential UX (P1-credentials)
+- **Test connection button** — `POST /api/credentials/{id}/test`; auto-detects type (SMTP, SFTP, SSH, IMAP, PostgreSQL/MySQL/SQLite, S3/AWS, Telegram, OpenAI); returns `{ok, message, type, latency_ms}`; inline green/red pill result in admin UI
+
+### Upgrade notes
+- Run `docker compose pull && docker compose up -d --build` to get the new image
+- Apply pending Alembic migrations: `docker compose exec api alembic upgrade head`
+  - Migrations `0008` through `0010` add workspace tables and scope FKs; they include default-workspace backfills so existing data is preserved
+- New env vars (all optional, safe to omit):
+  - `ALLOW_SIGNUP` — enable public self-serve signup (default: off)
+  - `SUBDOMAIN_ROUTING` + `APP_DOMAIN` — map `<slug>.domain` to workspaces
+  - `APP_TIMEZONE` — server timezone for scheduler display (auto-detected if unset)
+- boto3 is now a required dependency (previously commented out in `requirements.txt`); the Docker image build handles this automatically
+
+---
+
 ## [Unreleased] — 2026-04-07 — Sprint 4: UX polish — duplicate flow, version preview, cron validation
 
 ### Duplicate/clone flow (#7)
