@@ -115,6 +115,30 @@ input:focus,select:focus,textarea:focus{outline:none;border-color:#7c3aed}
 .editor-wrap{flex:1;display:flex;flex-direction:column;overflow:hidden}
 .editor-toolbar{padding:8px 14px;background:#1a1d2e;border-bottom:1px solid #2a2d3e;display:flex;align-items:center;gap:8px}
 .editor-container{flex:1}
+/* ── Hamburger / mobile sidebar toggle ─────────────────────────────────── */
+.hamburger{display:none;position:fixed;top:14px;left:14px;z-index:200;background:#1a1d2e;border:1px solid #2a2d3e;border-radius:7px;padding:6px 9px;cursor:pointer;color:#a78bfa;font-size:18px;line-height:1;transition:background .15s}
+.hamburger:hover{background:#252840}
+.sidebar-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:15;backdrop-filter:blur(2px)}
+/* ── Responsive breakpoints ≤1024px ───────────────────────────────────── */
+@media(max-width:1024px){
+  .hamburger{display:flex;align-items:center;justify-content:center}
+  .sidebar{transform:translateX(-240px);transition:transform .25s ease;z-index:20}
+  .sidebar.sidebar-open{transform:translateX(0)}
+  .sidebar-overlay.sidebar-open{display:block}
+  .main{margin-left:0;padding:20px 16px 16px;padding-top:58px}
+  .stat-grid{grid-template-columns:repeat(2,1fr)}
+  .stat-cards{grid-template-columns:repeat(2,1fr)}
+  .form-row{grid-template-columns:1fr}
+  .modal{min-width:0;width:92vw;max-height:88vh}
+  .script-list{width:100%;height:auto;max-height:160px;flex-direction:row;flex-wrap:wrap;border-right:none;border-bottom:1px solid #2a2d3e}
+}
+@media(max-width:600px){
+  .stat-grid{grid-template-columns:1fr 1fr}
+  .stat-cards{grid-template-columns:1fr 1fr}
+  .actions-row{flex-direction:column}
+  .modal{width:98vw;padding:14px}
+  table th:nth-child(n+4),table td:nth-child(n+4){display:none}
+}
 </style>
 </head>
 <body>
@@ -144,19 +168,41 @@ async function api(method, path, body) {
 
 function Toast({ msg, type, onDone }) {
   useEffect(()=>{ const t=setTimeout(onDone,3000); return ()=>clearTimeout(t); },[]);
-  return <div className={`toast ${type==="error"?"err":"ok"}`}>{type==="error"?"✗":"✓"} {msg}</div>;
+  return <div className={`toast ${type==="error"?"err":"ok"}`} role="status" aria-live="polite">{type==="error"?"✗":"✓"} {msg}</div>;
+}
+
+// ── Focus-trap hook: keeps keyboard focus inside a modal dialog ────────────
+function useFocusTrap(ref, onEscape) {
+  useEffect(()=>{
+    const el = ref?.current;
+    if (!el) return;
+    const focusable = 'button:not([disabled]),a[href],input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])';
+    const first = ()=>el.querySelectorAll(focusable)[0];
+    const last  = ()=>{ const all=el.querySelectorAll(focusable); return all[all.length-1]; };
+    // Auto-focus first focusable element
+    const prev = document.activeElement;
+    requestAnimationFrame(()=>{ const f=first(); if(f) f.focus(); });
+    const trap = e => {
+      if (e.key==="Escape") { onEscape?.(); return; }
+      if (e.key!=="Tab") return;
+      const f=first(), l=last();
+      if (!f) return;
+      if (e.shiftKey) { if(document.activeElement===f){ e.preventDefault(); l?.focus(); } }
+      else            { if(document.activeElement===l){ e.preventDefault(); f?.focus(); } }
+    };
+    el.addEventListener("keydown", trap);
+    return ()=>{ el.removeEventListener("keydown", trap); prev?.focus?.(); };
+  }, []);
 }
 
 // ── ConfirmModal ───────────────────────────────────────────────────────────
 function ConfirmModal({ message, confirmLabel="Confirm", onConfirm, onCancel }) {
-  useEffect(()=>{
-    const h = e => { if(e.key==="Escape") onCancel(); };
-    document.addEventListener("keydown",h);
-    return ()=>document.removeEventListener("keydown",h);
-  },[]);
+  const ref = useRef(null);
+  useFocusTrap(ref, onCancel);
   return (
-    <div className="modal-overlay" onClick={onCancel}>
-      <div className="modal" style={{maxWidth:420}} onClick={e=>e.stopPropagation()}>
+    <div className="modal-overlay" onClick={onCancel} aria-hidden="true">
+      <div className="modal" style={{maxWidth:420}} onClick={e=>e.stopPropagation()}
+        role="dialog" aria-modal="true" aria-label={message} ref={ref}>
         <p style={{margin:"0 0 20px",color:"#e2e8f0",fontSize:14,lineHeight:1.6}}>{message}</p>
         <div className="modal-btns">
           <button className="btn btn-ghost" onClick={onCancel}>Cancel</button>
@@ -188,27 +234,19 @@ function Dashboard({ showToast, user }) {
 
   const load = useCallback(async () => {
     try {
-      const [statsResp, w, g] = await Promise.all([
-        api("GET", "/api/runs/stats"),
-        api("GET", "/api/workflows"),
-        api("GET", "/api/graphs"),
-      ]);
-      setRuns(statsResp?.recent ?? []);
-      setWfs(w);
-      setGraphs(g);
-      _setRunStats(statsResp?.counts ?? {});
+      const [r, w, g] = await Promise.all([api("GET","/api/runs?page_size=200"), api("GET","/api/workflows"), api("GET","/api/graphs")]);
+      setRuns(r.runs ?? r); setWfs(w); setGraphs(g);
     } catch(e) { showToast(e.message,"error"); }
     setLoading(false);
   }, []);
 
-  const [_runStats, _setRunStats] = useState({});
   useEffect(() => { load(); const t=setInterval(load,5000); return ()=>clearInterval(t); }, []);
 
   const stats = {
-    total:  _runStats.total  ?? 0,
-    active: (_runStats.running ?? 0) + (_runStats.queued ?? 0),
-    ok:     _runStats.succeeded ?? 0,
-    failed: _runStats.failed ?? 0,
+    total: runs.length,
+    active: runs.filter(r=>r.status==="running"||r.status==="queued").length,
+    ok: runs.filter(r=>r.status==="succeeded").length,
+    failed: runs.filter(r=>r.status==="failed").length
   };
 
   async function toggleWf(name) {
@@ -306,7 +344,7 @@ function Dashboard({ showToast, user }) {
                           {r.graph_id && <button className="btn btn-ghost" onClick={(e)=>{e.stopPropagation();replayRun(r.id)}}>▶ Replay</button>}
                           {(r.status==="queued"||r.status==="running") &&
                             <button className="btn btn-warning" onClick={(e)=>{e.stopPropagation();cancelRun(r.id)}}>Cancel</button>}
-                          <button className="btn btn-danger" title="Delete run" onClick={(e)=>{e.stopPropagation();deleteRun(r.id)}}>✕</button>
+                          <button className="btn btn-danger" title="Delete run" aria-label="Delete run" onClick={(e)=>{e.stopPropagation();deleteRun(r.id)}}>✕</button>
                         </div>
                       </td>
                     </tr>
@@ -399,14 +437,21 @@ function Metrics({ showToast }) {
 
   const load = useCallback(async () => {
     try {
-      const [m, statsResp] = await Promise.all([
-        api("GET", "/api/metrics"),
-        api("GET", "/api/runs/stats"),
-      ]);
+      const m = await api("GET", "/api/metrics");
       setMetrics(m);
-      // top_failing is [{flow_name, failed_count}] from server
-      setFailingFlows((statsResp?.top_failing ?? []).map(f => [f.flow_name, f.failed_count]));
-      setRecentRuns(statsResp?.recent ?? []);
+
+      const runsResp = await api("GET", "/api/runs?page_size=200");
+      const runs = runsResp.runs ?? runsResp;
+      const failMap = {};
+      runs.forEach(r => {
+        if (r.status === "failed") {
+          const wf = r.flow_name || "unknown";
+          failMap[wf] = (failMap[wf] || 0) + 1;
+        }
+      });
+      const failing = Object.entries(failMap).sort((a, b) => b[1] - a[1]).slice(0, 5);
+      setFailingFlows(failing);
+      setRecentRuns(runs.slice(0, 10));
     } catch(e) { showToast(e.message, "error"); }
     setLoading(false);
   }, []);
@@ -773,23 +818,12 @@ function Credentials({ showToast, user, encryptionOk }) {
   const [confirmState, setConfirmState] = useState(null);
   const [editingId, setEditingId] = useState(null);
   const [editForm, setEditForm] = useState({});
-  const [testResults, setTestResults] = useState({});
 
   const load = useCallback(async () => {
     try { setCredentials(await api("GET","/api/credentials")); }
     catch(e) { showToast(e.message,"error"); }
     setLoading(false);
   }, []);
-
-  async function testCred(id) {
-    setTestResults(r => ({...r, [id]: {loading: true}}));
-    try {
-      const res = await api("POST", `/api/credentials/${id}/test`);
-      setTestResults(r => ({...r, [id]: {ok: res.ok, message: res.message, type: res.type, ms: res.latency_ms}}));
-    } catch(err) {
-      setTestResults(r => ({...r, [id]: {ok: false, message: err.message}}));
-    }
-  }
 
   useEffect(()=>{ load(); },[]);
 
@@ -960,35 +994,11 @@ function Credentials({ showToast, user, encryptionOk }) {
                     <td style={{color:"#475569",fontSize:11}}>{credFieldSummary(c.type) || <span style={{color:"#334155"}}>••••••••</span>}</td>
                     <td style={{color:"#64748b",fontSize:12}}>{c.note||"—"}</td>
                     <td style={{color:"#64748b",fontSize:12}}>{new Date(c.created_at).toLocaleString()}</td>
-                    {!ro && <td><div style={{display:"flex",gap:6,alignItems:"center"}}>
-                      <button className="btn btn-ghost" onClick={()=>testCred(c.id)} title="Test connection" disabled={testResults[c.id]?.loading}>
-                        {testResults[c.id]?.loading ? "…" : "🔌 Test"}
-                      </button>
+                    {!ro && <td><div style={{display:"flex",gap:6}}>
                       <button className="btn btn-ghost" onClick={()=>startEdit(c)}>✏️ Edit</button>
-                      <button className="btn btn-danger" onClick={()=>del(c.id)}>✕</button>
+                      <button className="btn btn-danger" aria-label="Delete credential" onClick={()=>del(c.id)}>✕</button>
                     </div></td>}
                   </tr>
-                  {testResults[c.id] && !testResults[c.id].loading && (
-                    <tr style={{background:"#0a0d16"}}>
-                      <td colSpan="99" style={{padding:"6px 16px"}}>
-                        <div style={{display:"flex",alignItems:"center",gap:8,fontSize:12}}>
-                          <span style={{
-                            display:"inline-flex",alignItems:"center",gap:4,
-                            padding:"2px 10px",borderRadius:99,fontWeight:600,
-                            background: testResults[c.id].ok ? "#052e16" : "#2d0a0a",
-                            color:      testResults[c.id].ok ? "#4ade80"  : "#f87171",
-                            border:     `1px solid ${testResults[c.id].ok ? "#16a34a" : "#7f1d1d"}`,
-                          }}>
-                            {testResults[c.id].ok ? "✓ Connected" : "✗ Failed"}
-                          </span>
-                          <span style={{color:"#94a3b8"}}>{testResults[c.id].message}</span>
-                          {testResults[c.id].ms != null && (
-                            <span style={{color:"#475569",marginLeft:"auto"}}>{testResults[c.id].ms}ms</span>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  )}
                   {editingId === c.id && (
                     <tr style={{background:"#0f1117"}}>
                       <td colSpan="99" style={{padding:"12px 16px"}}>
@@ -1722,11 +1732,11 @@ function Schedules({ showToast, user }) {
                               {runningNow[s.id] ? "…" : "▶"}
                             </button>
                           )}
-                          <button className="btn btn-ghost" onClick={()=>startEdit(s)} title="Edit schedule">✏️</button>
+                          <button className="btn btn-ghost" onClick={()=>startEdit(s)} title="Edit schedule" aria-label="Edit schedule">✏️</button>
                           {!s.run_at && (
                             <button className="btn btn-ghost" onClick={()=>toggle(s.id)}>{s.enabled?"Pause":"Resume"}</button>
                           )}
-                          <button className="btn btn-danger btn-sm" onClick={()=>confirmDel(s.id,s.name)} title="Delete schedule">✕</button>
+                          <button className="btn btn-danger btn-sm" onClick={()=>confirmDel(s.id,s.name)} title="Delete schedule" aria-label="Delete schedule">✕</button>
                         </div>
                       </td>
                     )}
@@ -1879,7 +1889,7 @@ function Logs({ showToast }) {
           <option value="queued">Queued</option>
           <option value="cancelled">Cancelled</option>
         </select>
-        <button className="btn btn-ghost" onClick={()=>load(page, statusFilter, search)}>↻ Refresh</button>
+        <button className="btn btn-ghost" aria-label="Refresh run logs" onClick={()=>load(page, statusFilter, search)}>↻ Refresh</button>
         <span style={{marginLeft:"auto",fontSize:12,color:"#64748b"}}>{total} run{total!==1?"s":""}</span>
       </div>
 
@@ -2885,8 +2895,9 @@ function GraphRow({ g, running, onRun, onToggle, onDuplicate, onDelete, onRename
       </div>
 
       {showVersions && (
-        <div className="modal-overlay" onClick={e=>{ if(e.target.className==="modal-overlay"){ setShowVersions(false); setPreviewVersion(null); }}}>
-          <div className="modal" style={{width: previewVersion ? 700 : 480, maxWidth:"95vw"}}>
+        <div className="modal-overlay" aria-hidden="true" onClick={e=>{ if(e.target.className==="modal-overlay"){ setShowVersions(false); setPreviewVersion(null); }}}>
+          <div className="modal" style={{width: previewVersion ? 700 : 480, maxWidth:"95vw"}}
+            role="dialog" aria-modal="true" aria-label="Version History">
             <h2>📜 Version History — {g.name}</h2>
             <div style={{display:"grid", gridTemplateColumns: previewVersion ? "220px 1fr" : "1fr", gap:16, marginTop:12}}>
               {/* Version list */}
@@ -2962,8 +2973,8 @@ function GraphRow({ g, running, onRun, onToggle, onDuplicate, onDelete, onRename
       {confirmState && <ConfirmModal message={confirmState.message} confirmLabel={confirmState.confirmLabel} onConfirm={()=>{confirmState.fn();setConfirmState(null);}} onCancel={()=>setConfirmState(null)}/>}
 
       {showAlerts && (
-        <div className="modal-overlay" onClick={e=>{ if(e.target.className==="modal-overlay") setShowAlerts(false); }}>
-          <div className="modal" style={{maxWidth:480}}>
+        <div className="modal-overlay" aria-hidden="true" onClick={e=>{ if(e.target.className==="modal-overlay") setShowAlerts(false); }}>
+          <div className="modal" style={{maxWidth:480}} role="dialog" aria-modal="true" aria-label="Alert Settings">
             <h2>🔔 Alert Settings — {g.name}</h2>
             <p style={{fontSize:13,color:"#64748b",marginBottom:20}}>
               Notifications are sent when this flow fails. Enable "also on success" to alert on every run.
@@ -3334,9 +3345,6 @@ function WorkspacesPage({showToast, user}) {
   const [createName, setCreateName] = useState("");
   const [createBusy, setCreateBusy] = useState(false);
 
-  // Plan + usage
-  const [usage, setUsage] = useState(null);
-
   const [confirmState, setConfirmState] = useState(null);
 
   const wsId = _getWorkspaceId();
@@ -3361,12 +3369,8 @@ function WorkspacesPage({showToast, user}) {
         setWs(active);
         setNewName(active.name);
         setEditingName(false);
-        const [mem, usageData] = await Promise.all([
-          api("GET", `/api/workspaces/${active.id}/members`),
-          api("GET", `/api/workspaces/${active.id}/usage`).catch(() => null),
-        ]);
+        const mem = await api("GET", `/api/workspaces/${active.id}/members`);
         setMembers(mem || []);
-        setUsage(usageData || null);
       }
     } catch(e) { showToast(e.message, "error"); }
     setLoading(false);
@@ -3509,55 +3513,6 @@ function WorkspacesPage({showToast, user}) {
               <button type="button" className="btn btn-ghost"
                 onClick={()=>setEditingName(false)}>Cancel</button>
             </form>
-          )}
-        </div>
-      )}
-
-      {/* ── Plan & Usage ─────────────────────────────────────────────────────── */}
-      {ws && usage && (
-        <div className="card">
-          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
-            <div className="card-title" style={{marginBottom:0}}>Plan &amp; Usage</div>
-            <span style={{fontSize:12,fontWeight:600,padding:"2px 10px",borderRadius:20,
-              background:"#7c3aed22",color:"#a78bfa",border:"1px solid #7c3aed44",
-              textTransform:"capitalize"}}>{usage.plan}</span>
-          </div>
-          <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:12}}>
-            {[
-              {label:"Flows", used: usage.usage.flows, limit: usage.limits.flows},
-              {label:"Members", used: usage.usage.members, limit: usage.limits.members},
-              {label:"Runs today", used: usage.usage.runs_today, limit: usage.limits.runs_per_day},
-            ].map(({label, used, limit}) => {
-              const pct = limit ? Math.min(100, Math.round(used / limit * 100)) : 0;
-              const isUnlimited = limit === null;
-              const isWarn = !isUnlimited && pct >= 80;
-              const barColor = isWarn ? "#f59e0b" : "#7c3aed";
-              return (
-                <div key={label} style={{background:"#0d0f1a",borderRadius:10,padding:"14px 16px",
-                  border:"1px solid #1e2130"}}>
-                  <div style={{fontSize:11,color:"#64748b",fontWeight:600,textTransform:"uppercase",
-                    letterSpacing:".04em",marginBottom:6}}>{label}</div>
-                  <div style={{fontSize:22,fontWeight:700,color:"#e2e8f0",marginBottom:4}}>
-                    {used}
-                    {!isUnlimited && <span style={{fontSize:13,color:"#475569",fontWeight:400}}>
-                      &nbsp;/ {limit}
-                    </span>}
-                    {isUnlimited && <span style={{fontSize:13,color:"#475569",fontWeight:400}}>&nbsp;/ ∞</span>}
-                  </div>
-                  {!isUnlimited && (
-                    <div style={{height:4,borderRadius:2,background:"#1e2130",overflow:"hidden"}}>
-                      <div style={{width:`${pct}%`,height:"100%",borderRadius:2,
-                        background:barColor,transition:"width .3s"}}/>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-          {usage.plan === "free" && isAdmin && (
-            <div style={{marginTop:14,fontSize:12,color:"#475569",borderTop:"1px solid #1e2130",paddingTop:12}}>
-              Need more capacity? Contact your administrator to upgrade to a Pro or Enterprise plan.
-            </div>
           )}
         </div>
       )}
@@ -3741,6 +3696,7 @@ function App() {
   const [page, setPageState]               = useState(hashPage);
   const [toast, setToast]                  = useState(null);
   const [currentUser, setCurrentUser]      = useState(null);
+  const [sidebarOpen, setSidebarOpen]      = useState(false);
   const [encryptionOk, setEncryptionOk]   = useState(true);
   const [workspaces, setWorkspaces]        = useState([]);
   const [activeWorkspace, setActiveWorkspace] = useState(null);
@@ -3775,7 +3731,11 @@ function App() {
 
   return (
     <>
-      <div className="sidebar">
+      <button className="hamburger" aria-label="Open navigation menu" aria-expanded={sidebarOpen}
+        onClick={()=>setSidebarOpen(o=>!o)}>☰</button>
+      <div className={`sidebar-overlay${sidebarOpen?" sidebar-open":""}`}
+        onClick={()=>setSidebarOpen(false)} aria-hidden="true"/>
+      <div className={`sidebar${sidebarOpen?" sidebar-open":""}`} role="navigation" aria-label="Main navigation">
         <div className="logo">⚡ HiveRunr</div>
         {/* Workspace selector — only shown when the user belongs to multiple workspaces */}
         {workspaces.length > 1 && (
@@ -3822,8 +3782,11 @@ function App() {
           </div>
         )}
         {PAGES.map(p=>(
-          <div key={p.id} className={`nav-item${page===p.id?" active":""}`} onClick={()=>setPage(p.id)}>
-            <span className="nav-icon">{p.icon}</span>{p.label}
+          <div key={p.id} className={`nav-item${page===p.id?" active":""}`}
+            onClick={()=>{ setPage(p.id); setSidebarOpen(false); }}
+            role="menuitem" tabIndex={0}
+            onKeyDown={e=>{ if(e.key==="Enter"||e.key===" "){ setPage(p.id); setSidebarOpen(false); } }}>
+            <span className="nav-icon" aria-hidden="true">{p.icon}</span>{p.label}
           </div>
         ))}
         <div className="sidebar-footer">

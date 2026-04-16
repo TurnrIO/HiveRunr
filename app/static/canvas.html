@@ -266,6 +266,27 @@ select.field-input{appearance:none;cursor:pointer;background-image:url("data:ima
 .version-num{font-weight:600;color:#e2e8f0;margin-bottom:2px}
 .version-date{font-size:11px;color:#64748b}
 .version-note{font-size:11px;color:#94a3b8;margin-top:2px}
+/* ── Responsive breakpoints ≤1024px ───────────────────────────────────── */
+@media(max-width:1024px){
+  .topbar input.name-input{width:120px}
+  .sidebar{width:160px}
+  .config-panel{width:240px}
+  .nio-modal{width:min(600px,96vw)}
+}
+@media(max-width:768px){
+  /* Stack sidebar below topbar; canvas takes full width */
+  .canvas-layout{flex-direction:column}
+  .sidebar{width:100%;height:auto;max-height:160px;border-right:none;border-bottom:1px solid #2a2d3e;flex-direction:row;flex-wrap:wrap;overflow-y:auto}
+  .sidebar-search{width:100%;border-bottom:none;border-right:1px solid #2a2d3e}
+  .sidebar-scroll{display:flex;flex-wrap:wrap;overflow-x:auto}
+  .sidebar-title{display:none}
+  /* Config panel becomes bottom sheet */
+  .config-panel{position:fixed;bottom:0;left:0;right:0;width:100%;height:50vh;border-top:2px solid #7c3aed;border-right:none;z-index:50;border-radius:12px 12px 0 0}
+  .topbar input.name-input{width:90px}
+  /* Modals go near-fullscreen */
+  .nio-modal,.modal-overlay .modal{width:98vw;max-height:94vh;border-radius:8px}
+  .nem-overlay{align-items:flex-end}
+}
 </style>
 </head>
 <body>
@@ -287,10 +308,6 @@ const NODE_DEFS = {
   "trigger.manual":      { label:"Manual Trigger",    icon:"▶",  color:"#059669", group:"trigger",   fields:[] },
   "trigger.webhook":     { label:"Webhook Trigger",   icon:"🔗", color:"#0284c7", group:"trigger",   fields:[{k:"description",l:"Description",ph:"What this webhook receives…"}] },
   "trigger.cron":        { label:"Cron Schedule",     icon:"⏰", color:"#7c3aed", group:"trigger",   fields:[{k:"cron",l:"Cron expression",ph:"0 9 * * 1-5"},{k:"timezone",l:"Timezone",ph:"UTC"},{k:"description",l:"Description (optional)",ph:"Weekdays at 9am"}] },
-  "trigger.file_watch":  { label:"File Watch",           icon:"📂", color:"#b45309", group:"trigger",  fields:[{k:"path",l:"Directory path",ph:"/data/inbox"},{k:"pattern",l:"Filename pattern",ph:"*.csv"},{k:"lookback_minutes",l:"Lookback window (minutes)",ph:"60"},{k:"min_age_seconds",l:"Min file age (seconds, write-guard)",ph:"5"},{k:"min_size_bytes",l:"Min file size (bytes)",ph:"0"},{k:"recursive",l:"Recursive",ph:"false",type:"select",options:["false","true"]},{k:"sftp_credential",l:"SFTP Credential (blank = local)",ph:"my-sftp-server"}] },
-  "trigger.email":       { label:"Email Trigger (IMAP)", icon:"📧", color:"#0891b2", group:"trigger", fields:[{k:"credential",l:"IMAP Credential (name)",ph:"my-imap-cred"},{k:"folder",l:"Folder",ph:"INBOX"},{k:"search_criteria",l:"IMAP search criteria",ph:"UNSEEN"},{k:"filter_expression",l:"Filter expression (Python, use 'email')",ph:"'invoice' in email['subject'].lower()",mono:true},{k:"max_messages",l:"Max messages",ph:"10"},{k:"mark_read",l:"Mark as read",ph:"false",type:"select",options:["false","true"]}] },
-  "action.s3":           { label:"S3 Storage",           icon:"☁",  color:"#ea580c", group:"action",    fields:[{k:"credential",l:"S3 Credential (name)",ph:"my-s3-cred"},{k:"operation",l:"Operation",ph:"get",type:"select",options:["get","put","list","delete","presigned_url","head","copy"]},{k:"bucket",l:"Bucket",ph:"my-bucket"},{k:"key",l:"Object key",ph:"path/to/file.csv"},{k:"content",l:"Content (put only)",ph:"{{input.body}}",textarea:true},{k:"content_type",l:"Content-Type (put only)",ph:"text/csv"},{k:"prefix",l:"Prefix (list only)",ph:"reports/"},{k:"source_key",l:"Source key (copy only)",ph:"original/file.csv"},{k:"dest_key",l:"Destination key (copy only)",ph:"archive/file.csv"},{k:"expires_in",l:"Expires (presigned, seconds)",ph:"3600"},{k:"max_keys",l:"Max keys (list only)",ph:"1000"}] },
-  "action.postgres":     { label:"SQL Query",           icon:"🗄",  color:"#0369a1", group:"action",    fields:[{k:"credential",l:"DB Credential (name)",ph:"my-postgres"},{k:"query",l:"SQL Query",ph:"SELECT * FROM users WHERE id = %s",mono:true,textarea:true},{k:"params",l:"Params (JSON array)",ph:'["{{input.user_id}}"]',mono:true},{k:"row_limit",l:"Row limit",ph:"1000"}] },
   "action.http_request": { label:"HTTP Request",      icon:"🌐", color:"#0891b2", group:"action",    fields:[{k:"url",l:"URL",ph:"https://api.example.com/data"},{k:"method",l:"Method",ph:"GET",type:"select",options:["GET","POST","PUT","PATCH","DELETE","HEAD"]},{k:"credential",l:"Bearer Credential (name)",ph:"my-api-credential"},{k:"headers_json",l:"Headers (JSON)",ph:'{"Authorization":"Bearer {{token}}"}',mono:true},{k:"body_json",l:"Body (JSON)",ph:'{"key":"{{value}}"}',mono:true,textarea:true},{k:"form_json",l:"Form data (JSON)",ph:'{"field":"value"}',mono:true},{k:"timeout",l:"Timeout (seconds)",ph:"30"},{k:"ignore_errors",l:"Ignore HTTP errors",ph:"false",type:"select",options:["false","true"]}] },
   "action.transform":    { label:"Transform",         icon:"⚙",  color:"#7c3aed", group:"action",    fields:[{k:"expression",l:"Python expression",ph:"{'out': input['value'] * 2}",mono:true,textarea:true}] },
   "action.condition":    { label:"Condition",         icon:"◈",  color:"#d97706", group:"action",    fields:[{k:"expression",l:"Condition (Python bool)",ph:"input.get('status') == 'ok'",mono:true}] },
@@ -385,14 +402,7 @@ const GROUPS = [
 ];
 
 // ── helpers ───────────────────────────────────────────────────────────────────
-function uid(){
-  // RFC 4122 v4 UUID — collision-safe node identifiers
-  if (typeof crypto !== "undefined" && crypto.randomUUID) return crypto.randomUUID();
-  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, c => {
-    const r = Math.random() * 16 | 0;
-    return (c === "x" ? r : (r & 0x3 | 0x8)).toString(16);
-  });
-}
+function uid(){ return Math.random().toString(36).slice(2,9) }
 
 // Active workspace id — read from the hr_workspace cookie set by /api/workspaces/{id}/switch.
 // _getWorkspaceId() is used by the api() helper to stamp every request with X-Workspace-Id.
@@ -705,11 +715,11 @@ function NodeIOPanel({ runInput, runOutput, runStatus, runDurationMs, runAttempt
 
       {/* Expanded modal overlay */}
       {expanded && (
-        <div className="nio-modal-overlay" onClick={e=>{ if(e.target===e.currentTarget) setExpanded(false); }}>
-          <div className="nio-modal">
+        <div className="nio-modal-overlay" aria-hidden="true" onClick={e=>{ if(e.target===e.currentTarget) setExpanded(false); }}>
+          <div className="nio-modal" role="dialog" aria-modal="true" aria-label="I/O Inspector">
             <div className="nio-modal-hdr">
               <div className="nio-side-tabs"><Tabs/></div>
-              <button className="nio-modal-close" onClick={()=>setExpanded(false)}>✕</button>
+              <button className="nio-modal-close" aria-label="Close" onClick={()=>setExpanded(false)}>✕</button>
             </div>
             <ViewTabs/>
             <div className="nio-modal-body">
@@ -924,38 +934,6 @@ function ConfigPanel({ node, onChange, onDelete, edges }){
             </div>
           </div>
         )}
-        {node.data.type === "action.s3" && (
-          <div style={{background:"#0f1117",border:"1px solid #2a2d3e",borderRadius:6,padding:"8px 10px",fontSize:10,color:"#94a3b8",marginTop:6,lineHeight:1.8}}>
-            <div style={{color:"#ea580c",fontWeight:600,marginBottom:4}}>☁ Output by operation</div>
-            <div style={{display:"grid",gridTemplateColumns:"auto 1fr",gap:"0 10px"}}>
-              <code style={{color:"#4ade80"}}>get</code><span>body · content_type · size · last_modified · metadata</span>
-              <code style={{color:"#4ade80"}}>put</code><span>ok · etag · version_id</span>
-              <code style={{color:"#4ade80"}}>list</code><span>objects[] · count · truncated</span>
-              <code style={{color:"#94a3b8"}}>delete</code><span>ok</span>
-              <code style={{color:"#94a3b8"}}>presigned_url</code><span>url · expires_in</span>
-              <code style={{color:"#94a3b8"}}>head</code><span>exists · size · content_type</span>
-              <code style={{color:"#94a3b8"}}>copy</code><span>ok · source_key · dest_key · etag</span>
-            </div>
-            <div style={{color:"#64748b",marginTop:4}}>Credential JSON: <code>access_key · secret_key · region · endpoint_url</code></div>
-          </div>
-        )}
-        {node.data.type === "action.postgres" && (
-          <div style={{background:"#0f1117",border:"1px solid #2a2d3e",borderRadius:6,padding:"8px 10px",fontSize:10,color:"#94a3b8",marginTop:6,lineHeight:1.8}}>
-            <div style={{color:"#0ea5e9",fontWeight:600,marginBottom:4}}>🗄 Output fields</div>
-            <div style={{display:"grid",gridTemplateColumns:"auto 1fr",gap:"0 10px"}}>
-              <code style={{color:"#4ade80"}}>rows</code><span>all result rows as list of dicts</span>
-              <code style={{color:"#4ade80"}}>count</code><span>number of rows returned</span>
-              <code style={{color:"#4ade80"}}>row</code><span>first row shortcut (or {"{}"})</span>
-              <code style={{color:"#94a3b8"}}>columns</code><span>list of column names</span>
-              <code style={{color:"#94a3b8"}}>affected</code><span>rowcount for INSERT/UPDATE/DELETE</span>
-            </div>
-            <div style={{color:"#64748b",marginTop:4}}>
-              Credential JSON: <code>{'"dsn":"postgresql://user:pass@host/db"'}</code><br/>
-              Or fields: <code>host · port · username · password · database</code><br/>
-              Drivers: <code>postgresql</code> (built-in) · <code>mysql</code> (needs pymysql) · <code>sqlite</code>
-            </div>
-          </div>
-        )}
         {node.data.type === "action.send_email" && (
           <div style={{background:"#0f1117",border:"1px solid #2a2d3e",borderRadius:6,padding:"8px 10px",fontSize:10,color:"#94a3b8",marginTop:6,lineHeight:1.9}}>
             <div style={{color:"#a78bfa",fontWeight:600,marginBottom:4}}>💡 Credential shortcut</div>
@@ -1044,34 +1022,6 @@ function ConfigPanel({ node, onChange, onDelete, edges }){
               <span style={{color:"#64748b"}}>Every 15 min</span><code>*/15 * * * *</code>
               <span style={{color:"#64748b"}}>1st of month</span><code>0 0 1 * *</code>
             </div>
-          </div>
-        )}
-        {node.data.type === "trigger.file_watch" && (
-          <div style={{background:"#0f1117",border:"1px solid #2a2d3e",borderRadius:6,padding:"8px 10px",fontSize:10,color:"#94a3b8",marginTop:6,lineHeight:1.8}}>
-            <div style={{color:"#b45309",fontWeight:600,marginBottom:4}}>📂 Output fields</div>
-            <div style={{display:"grid",gridTemplateColumns:"auto 1fr",gap:"0 10px"}}>
-              <code style={{color:"#4ade80"}}>files</code><span>list of matched file objects</span>
-              <code style={{color:"#4ade80"}}>count</code><span>number of files found</span>
-              <code style={{color:"#94a3b8"}}>path</code><span>first file path (shortcut)</span>
-              <code style={{color:"#94a3b8"}}>name</code><span>first file name (shortcut)</span>
-            </div>
-            <div style={{color:"#64748b",marginTop:4}}>Each file: <code>path · name · size · modified · modified_ts</code><br/>
-            Leave <strong>SFTP Credential</strong> blank for local paths. Pair with a <strong>Cron</strong> trigger and set <code>lookback_minutes</code> to match the schedule interval.</div>
-          </div>
-        )}
-        {node.data.type === "trigger.email" && (
-          <div style={{background:"#0f1117",border:"1px solid #2a2d3e",borderRadius:6,padding:"8px 10px",fontSize:10,color:"#94a3b8",marginTop:6,lineHeight:1.8}}>
-            <div style={{color:"#0ea5e9",fontWeight:600,marginBottom:4}}>📧 Output fields</div>
-            <div style={{display:"grid",gridTemplateColumns:"auto 1fr",gap:"0 10px"}}>
-              <code style={{color:"#4ade80"}}>emails</code><span>list of all fetched messages</span>
-              <code style={{color:"#4ade80"}}>count</code><span>number of messages returned</span>
-              <code style={{color:"#94a3b8"}}>subject</code><span>first email subject</span>
-              <code style={{color:"#94a3b8"}}>from</code><span>sender address</span>
-              <code style={{color:"#94a3b8"}}>body</code><span>plain-text body</span>
-              <code style={{color:"#94a3b8"}}>html_body</code><span>HTML body</span>
-              <code style={{color:"#94a3b8"}}>attachment_names</code><span>list of filenames</span>
-            </div>
-            <div style={{color:"#64748b",marginTop:4}}>Credential keys: <code>host</code> · <code>port</code> · <code>username</code> · <code>password</code> · <code>use_ssl</code></div>
           </div>
         )}
 
@@ -1270,8 +1220,9 @@ function ConfirmModal({ message, confirmLabel="Confirm", onConfirm, onCancel }) 
     return ()=>document.removeEventListener("keydown",h);
   },[]);
   return (
-    <div className="modal-overlay" onClick={onCancel}>
-      <div className="modal" style={{maxWidth:400}} onClick={e=>e.stopPropagation()}>
+    <div className="modal-overlay" aria-hidden="true" onClick={onCancel}>
+      <div className="modal" style={{maxWidth:400}} onClick={e=>e.stopPropagation()}
+        role="dialog" aria-modal="true" aria-label={message}>
         <p style={{margin:"0 0 20px",color:"#e2e8f0",fontSize:14,lineHeight:1.6,whiteSpace:"pre-line"}}>{message}</p>
         <div className="modal-btns">
           <button className="btn btn-ghost" onClick={onCancel}>Cancel</button>
@@ -1340,9 +1291,9 @@ function OpenModal({ graphs, onClose, onSelect, onNew, onDuplicate, onDelete, on
           {g.enabled?"●":"○"}
         </span>
         <div className="graph-row-actions">
-          <button className="btn-icon" title="Rename" disabled={busy} onClick={e=>handleRename(e,g)}>✏</button>
-          <button className="btn-icon" title="Duplicate" disabled={busy} onClick={e=>handleDuplicate(e,g)}>📋</button>
-          <button className="btn-icon danger" title="Delete" disabled={busy} onClick={e=>handleDelete(e,g)}>🗑</button>
+          <button className="btn-icon" title="Rename" aria-label="Rename flow" disabled={busy} onClick={e=>handleRename(e,g)}>✏</button>
+          <button className="btn-icon" title="Duplicate" aria-label="Duplicate flow" disabled={busy} onClick={e=>handleDuplicate(e,g)}>📋</button>
+          <button className="btn-icon danger" title="Delete" aria-label="Delete flow" disabled={busy} onClick={e=>handleDelete(e,g)}>🗑</button>
         </div>
       </div>
     );
@@ -1350,8 +1301,8 @@ function OpenModal({ graphs, onClose, onSelect, onNew, onDuplicate, onDelete, on
 
   return (
     <>
-    <div className="modal-overlay" onClick={e=>{ if(e.target.className==="modal-overlay") onClose() }}>
-      <div className="modal">
+    <div className="modal-overlay" aria-hidden="true" onClick={e=>{ if(e.target.className==="modal-overlay") onClose() }}>
+      <div className="modal" role="dialog" aria-modal="true" aria-label="Flows">
         <h2>📂 Flows</h2>
 
         {/* ── Create new ── */}
@@ -1401,8 +1352,8 @@ function OpenModal({ graphs, onClose, onSelect, onNew, onDuplicate, onDelete, on
 function TestPayloadModal({ isOpen, onClose, onRun, testPayload, onPayloadChange }) {
   if (!isOpen) return null;
   return (
-    <div className="modal-overlay" onClick={e=>{ if(e.target.className==="modal-overlay") onClose() }}>
-      <div className="modal">
+    <div className="modal-overlay" aria-hidden="true" onClick={e=>{ if(e.target.className==="modal-overlay") onClose() }}>
+      <div className="modal" role="dialog" aria-modal="true" aria-label="Test Payload">
         <h2>🧪 Test Payload</h2>
         <div className="field-group">
           <label style={{fontSize:11,color:"#94a3b8",fontWeight:500,marginBottom:4}}>JSON</label>
@@ -1419,57 +1370,30 @@ function TestPayloadModal({ isOpen, onClose, onRun, testPayload, onPayloadChange
 
 // ── History Modal ──────────────────────────────────────────────────────────────
 function HistoryModal({ isOpen, onClose, graphId, showToast, onRestored }) {
-  const [versions, setVersions]         = useState([]);
-  const [loading, setLoading]           = useState(false);
-  const [selected, setSelected]         = useState(null);   // version object
-  const [preview, setPreview]           = useState(null);   // {nodes, edges} from version detail
-  const [currentPreview, setCurrentPreview] = useState(null); // {nodes, edges} of latest saved version
-  const [restoring, setRestoring]       = useState(false);
+  const [versions, setVersions]     = useState([]);
+  const [loading, setLoading]       = useState(false);
+  const [selected, setSelected]     = useState(null);   // version object
+  const [preview, setPreview]       = useState(null);   // {nodes, edges} from version detail
+  const [restoring, setRestoring]   = useState(false);
   const [confirmState, setConfirmState] = useState(null);
-  const [previewTab, setPreviewTab]     = useState("diff");  // "diff" | "nodes"
 
   useEffect(() => {
     if (!isOpen || !graphId) return;
-    setSelected(null); setPreview(null); setCurrentPreview(null);
+    setSelected(null); setPreview(null);
     async function load() {
       setLoading(true);
       try {
         const v = await api("GET", `/api/graphs/${graphId}/versions`);
         setVersions(v || []);
-        // Pre-load the latest version so we can diff against it
-        if (v && v.length > 0) {
-          const latest = await api("GET", `/api/graphs/${graphId}/versions/${v[0].version}`);
-          const gd = latest.graph_data || {};
-          setCurrentPreview({ nodes: gd.nodes || [], edges: gd.edges || [] });
-        }
       } catch (e) { showToast(e.message, "error"); }
       setLoading(false);
     }
     load();
   }, [isOpen, graphId]);
 
-  function computeDiff(selNodes, curNodes) {
-    const selMap = new Map((selNodes||[]).filter(n=>n.type!=="note").map(n=>[n.id,n]));
-    const curMap = new Map((curNodes||[]).filter(n=>n.type!=="note").map(n=>[n.id,n]));
-    const added=[], removed=[], changed=[], same=[];
-    for (const [id, sn] of selMap) {
-      if (!curMap.has(id)) { added.push(sn); }
-      else {
-        const cn = curMap.get(id);
-        const sLabel = sn.data?.label || sn.type;
-        const cLabel = cn.data?.label || cn.type;
-        if (sLabel !== cLabel || sn.type !== cn.type) changed.push({sel:sn, cur:cn});
-        else same.push(sn);
-      }
-    }
-    for (const [id, cn] of curMap) { if (!selMap.has(id)) removed.push(cn); }
-    return { added, removed, changed, same };
-  }
-
   async function selectVersion(v) {
     setSelected(v);
     setPreview(null);
-    setPreviewTab("diff");
     try {
       const detail = await api("GET", `/api/graphs/${graphId}/versions/${v.version}`);
       const gd = detail.graph_data || {};
@@ -1501,16 +1425,13 @@ function HistoryModal({ isOpen, onClose, graphId, showToast, onRestored }) {
   }
 
   const nonNoteNodes = (preview?.nodes || []).filter(n => n.type !== "note");
-  const isCurrentVersion = versions.length > 0 && selected?.version === versions[0]?.version;
-  const diff = (!isCurrentVersion && preview && currentPreview)
-    ? computeDiff(preview.nodes, currentPreview.nodes)
-    : null;
 
   if (!isOpen) return null;
   return (
     <>
-    <div className="modal-overlay" onClick={e=>{ if(e.target.className==="modal-overlay") onClose() }}>
-      <div className="modal" style={{maxWidth:700,width:"95vw",padding:0,overflow:"hidden"}}>
+    <div className="modal-overlay" aria-hidden="true" onClick={e=>{ if(e.target.className==="modal-overlay") onClose() }}>
+      <div className="modal" style={{maxWidth:700,width:"95vw",padding:0,overflow:"hidden"}}
+        role="dialog" aria-modal="true" aria-label="Version History">
         <div style={{display:"flex",height:480}}>
 
           {/* ── Left: version list ── */}
@@ -1568,93 +1489,9 @@ function HistoryModal({ isOpen, onClose, graphId, showToast, onRestored }) {
                   {selected.note && <div style={{fontSize:12,color:"#94a3b8",marginTop:4}}>{selected.note}</div>}
                 </div>
 
-                {/* Tab bar — only show Diff tab when comparing against a non-current version */}
-                {!isCurrentVersion && preview && currentPreview && (
-                  <div style={{display:"flex",borderBottom:"1px solid #1e2130",padding:"0 18px"}}>
-                    {["diff","nodes"].map(tab => (
-                      <button key={tab} onClick={()=>setPreviewTab(tab)}
-                        style={{padding:"7px 14px",fontSize:12,fontWeight:600,border:"none",
-                          background:"transparent",cursor:"pointer",borderBottom:"2px solid",
-                          borderBottomColor: previewTab===tab ? "#7c3aed" : "transparent",
-                          color: previewTab===tab ? "#a78bfa" : "#475569"}}>
-                        {tab === "diff" ? "⚡ Diff vs current" : "📋 All nodes"}
-                      </button>
-                    ))}
-                  </div>
-                )}
-
                 <div style={{flex:1,overflowY:"auto",padding:"12px 18px"}}>
                   {!preview ? (
                     <div style={{color:"#64748b",fontSize:12}}>Loading preview…</div>
-                  ) : previewTab === "diff" && diff ? (
-                    <>
-                      {/* Summary chips */}
-                      <div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:14}}>
-                        {diff.added.length > 0 && (
-                          <span style={{fontSize:11,fontWeight:600,padding:"3px 9px",borderRadius:4,
-                            background:"#14532d44",color:"#4ade80",border:"1px solid #14532d"}}>
-                            +{diff.added.length} restored
-                          </span>
-                        )}
-                        {diff.removed.length > 0 && (
-                          <span style={{fontSize:11,fontWeight:600,padding:"3px 9px",borderRadius:4,
-                            background:"#7f1d1d44",color:"#f87171",border:"1px solid #7f1d1d"}}>
-                            −{diff.removed.length} removed
-                          </span>
-                        )}
-                        {diff.changed.length > 0 && (
-                          <span style={{fontSize:11,fontWeight:600,padding:"3px 9px",borderRadius:4,
-                            background:"#78350f44",color:"#fbbf24",border:"1px solid #78350f"}}>
-                            ~{diff.changed.length} reverted
-                          </span>
-                        )}
-                        {diff.same.length > 0 && (
-                          <span style={{fontSize:11,fontWeight:600,padding:"3px 9px",borderRadius:4,
-                            background:"#0f1117",color:"#475569",border:"1px solid #1e2130"}}>
-                            {diff.same.length} unchanged
-                          </span>
-                        )}
-                        {diff.added.length===0 && diff.removed.length===0 && diff.changed.length===0 && (
-                          <span style={{fontSize:12,color:"#64748b"}}>No structural changes vs current version.</span>
-                        )}
-                      </div>
-                      <div style={{display:"flex",flexDirection:"column",gap:3}}>
-                        {diff.added.map(n => (
-                          <div key={n.id} style={{display:"flex",alignItems:"center",gap:8,padding:"5px 8px",
-                            background:"#14532d22",border:"1px solid #14532d55",borderRadius:5}}>
-                            <span style={{fontSize:11,color:"#4ade80",fontWeight:700,flexShrink:0}}>+</span>
-                            <span style={{fontSize:11,color:"#86efac",minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{n.data?.label || n.type}</span>
-                            <span style={{fontSize:10,color:"#166534",marginLeft:"auto",whiteSpace:"nowrap"}}>{n.type}</span>
-                          </div>
-                        ))}
-                        {diff.removed.map(n => (
-                          <div key={n.id} style={{display:"flex",alignItems:"center",gap:8,padding:"5px 8px",
-                            background:"#7f1d1d22",border:"1px solid #7f1d1d55",borderRadius:5}}>
-                            <span style={{fontSize:11,color:"#f87171",fontWeight:700,flexShrink:0}}>−</span>
-                            <span style={{fontSize:11,color:"#fca5a5",minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{n.data?.label || n.type}</span>
-                            <span style={{fontSize:10,color:"#991b1b",marginLeft:"auto",whiteSpace:"nowrap"}}>{n.type}</span>
-                          </div>
-                        ))}
-                        {diff.changed.map(({sel,cur}) => (
-                          <div key={sel.id} style={{display:"flex",alignItems:"center",gap:8,padding:"5px 8px",
-                            background:"#78350f22",border:"1px solid #78350f55",borderRadius:5}}>
-                            <span style={{fontSize:11,color:"#fbbf24",fontWeight:700,flexShrink:0}}>~</span>
-                            <span style={{fontSize:11,color:"#fde68a",minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
-                              {sel.data?.label || sel.type}
-                              <span style={{color:"#92400e"}}> ← {cur.data?.label || cur.type}</span>
-                            </span>
-                          </div>
-                        ))}
-                        {diff.same.map(n => (
-                          <div key={n.id} style={{display:"flex",alignItems:"center",gap:8,padding:"5px 8px",
-                            background:"#0f1117",borderRadius:5,opacity:0.5}}>
-                            <span style={{fontSize:11,color:"#475569",fontWeight:700,flexShrink:0}}>=</span>
-                            <span style={{fontSize:11,color:"#64748b",minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{n.data?.label || n.type}</span>
-                            <span style={{fontSize:10,color:"#334155",marginLeft:"auto",whiteSpace:"nowrap"}}>{n.type}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </>
                   ) : (
                     <>
                       <div style={{display:"flex",gap:16,marginBottom:12}}>
@@ -1712,8 +1549,8 @@ function HistoryModal({ isOpen, onClose, graphId, showToast, onRestored }) {
 function EdgeLabelModal({ edge, value, onChange, onConfirm, onClose }) {
   if (!edge) return null;
   return (
-    <div className="modal-overlay" onClick={e=>{ if(e.target.className==="modal-overlay") onClose() }}>
-      <div className="modal" style={{minWidth:300}}>
+    <div className="modal-overlay" aria-hidden="true" onClick={e=>{ if(e.target.className==="modal-overlay") onClose() }}>
+      <div className="modal" style={{minWidth:300}} role="dialog" aria-modal="true" aria-label="Edge Label">
         <h2>✏ Edge Label</h2>
         <div className="field-group">
           <input className="field-input" placeholder="Label (leave blank to remove)"
@@ -1737,8 +1574,8 @@ function ValidationModal({ issues, onClose, onRunAnyway }) {
   const errors = issues.filter(i=>i.level==="error");
   const warnings = issues.filter(i=>i.level==="warning");
   return (
-    <div className="modal-overlay" onClick={e=>{ if(e.target.className==="modal-overlay") onClose() }}>
-      <div className="modal" style={{minWidth:420}}>
+    <div className="modal-overlay" aria-hidden="true" onClick={e=>{ if(e.target.className==="modal-overlay") onClose() }}>
+      <div className="modal" style={{minWidth:420}} role="dialog" aria-modal="true" aria-label="Flow Validation">
         <h2>{issues.length===0 ? "✅ Flow looks good" : errors.length?"❌ Validation errors":"⚠ Validation warnings"}</h2>
         {issues.length===0 ? (
           <p style={{color:"#94a3b8",fontSize:13,marginBottom:12}}>No issues found. The flow is ready to run.</p>
@@ -2294,27 +2131,6 @@ function NodeEditorModal({ node, onChange, onDelete, onClose, edges, allNodes, c
                 </div>
               </div>
             )}
-            {node.data.type==="action.s3"&&(
-              <div style={{background:"#0f1117",border:"1px solid #2a2d3e",borderRadius:6,padding:"8px 10px",fontSize:10,color:"#94a3b8",marginTop:6,lineHeight:1.8}}>
-                <div style={{color:"#ea580c",fontWeight:600,marginBottom:4}}>☁ Output by operation</div>
-                <div style={{display:"grid",gridTemplateColumns:"auto 1fr",gap:"0 10px"}}>
-                  <code style={{color:"#4ade80"}}>get</code><span>body · content_type · size</span>
-                  <code style={{color:"#4ade80"}}>put</code><span>ok · etag · version_id</span>
-                  <code style={{color:"#4ade80"}}>list</code><span>objects[] · count · truncated</span>
-                  <code style={{color:"#94a3b8"}}>presigned_url</code><span>url · expires_in</span>
-                </div>
-              </div>
-            )}
-            {node.data.type==="action.postgres"&&(
-              <div style={{background:"#0f1117",border:"1px solid #2a2d3e",borderRadius:6,padding:"8px 10px",fontSize:10,color:"#94a3b8",marginTop:6,lineHeight:1.8}}>
-                <div style={{color:"#0ea5e9",fontWeight:600,marginBottom:4}}>🗄 Output</div>
-                <div style={{display:"grid",gridTemplateColumns:"auto 1fr",gap:"0 10px"}}>
-                  <code style={{color:"#4ade80"}}>rows</code><span>result rows as list of dicts</span>
-                  <code style={{color:"#4ade80"}}>row</code><span>first row shortcut</span>
-                  <code style={{color:"#94a3b8"}}>count / columns / affected</code><span>metadata</span>
-                </div>
-              </div>
-            )}
             {node.data.type==="action.send_email"&&(
               <div style={{background:"#0f1117",border:"1px solid #2a2d3e",borderRadius:6,padding:"8px 10px",fontSize:10,color:"#94a3b8",marginTop:6,lineHeight:1.9}}>
                 <div style={{color:"#a78bfa",fontWeight:600,marginBottom:4}}>💡 Credential shortcut</div>
@@ -2393,27 +2209,6 @@ function NodeEditorModal({ node, onChange, onDelete, onClose, edges, allNodes, c
                   <span style={{color:"#64748b"}}>Daily at 9am</span><code>0 9 * * *</code>
                   <span style={{color:"#64748b"}}>Weekdays 9am</span><code>0 9 * * 1-5</code>
                   <span style={{color:"#64748b"}}>Every 15 min</span><code>*/15 * * * *</code>
-                </div>
-              </div>
-            )}
-            {node.data.type==="trigger.file_watch"&&(
-              <div style={{background:"#0f1117",border:"1px solid #2a2d3e",borderRadius:6,padding:"8px 10px",fontSize:10,color:"#94a3b8",marginTop:6,lineHeight:1.8}}>
-                <div style={{color:"#b45309",fontWeight:600,marginBottom:4}}>📂 Output</div>
-                <div style={{display:"grid",gridTemplateColumns:"auto 1fr",gap:"0 10px"}}>
-                  <code style={{color:"#4ade80"}}>files</code><span>matched file objects</span>
-                  <code style={{color:"#4ade80"}}>count</code><span>number of files</span>
-                  <code style={{color:"#94a3b8"}}>path / name</code><span>first-file shortcuts</span>
-                </div>
-              </div>
-            )}
-            {node.data.type==="trigger.email"&&(
-              <div style={{background:"#0f1117",border:"1px solid #2a2d3e",borderRadius:6,padding:"8px 10px",fontSize:10,color:"#94a3b8",marginTop:6,lineHeight:1.8}}>
-                <div style={{color:"#0ea5e9",fontWeight:600,marginBottom:4}}>📧 Output fields</div>
-                <div style={{display:"grid",gridTemplateColumns:"auto 1fr",gap:"0 10px"}}>
-                  <code style={{color:"#4ade80"}}>emails</code><span>list of all fetched messages</span>
-                  <code style={{color:"#4ade80"}}>count</code><span>number of messages returned</span>
-                  <code style={{color:"#94a3b8"}}>subject / from / body</code><span>top-level first-email shortcut</span>
-                  <code style={{color:"#94a3b8"}}>attachment_names</code><span>list of filenames</span>
                 </div>
               </div>
             )}
@@ -2660,11 +2455,11 @@ function PermissionsModal({ isOpen, onClose, graphId, showToast }) {
   const availUsers  = users.filter(u => !permUserIds.has(u.id));
 
   return (
-    <div className="modal-overlay" onClick={e=>{ if(e.target.className==="modal-overlay") onClose(); }}>
-      <div className="modal" style={{minWidth:520,maxWidth:600,maxHeight:"80vh",overflowY:"auto"}}>
+    <div className="modal-overlay" aria-hidden="true" onClick={e=>{ if(e.target.className==="modal-overlay") onClose(); }}>
+      <div className="modal" style={{minWidth:520,maxWidth:600,maxHeight:"80vh",overflowY:"auto"}} role="dialog" aria-modal="true" aria-label="Flow Permissions">
         <div className="modal-header">
           <h3 style={{margin:0,fontSize:15}}>🔐 Flow Permissions</h3>
-          <button className="modal-close" onClick={onClose}>✕</button>
+          <button className="modal-close" aria-label="Close" onClick={onClose}>✕</button>
         </div>
 
         {loading ? (
@@ -2833,7 +2628,6 @@ function App(){
   const [toast, setToast]                = useState(null);
   const [saving, setSaving]              = useState(false);
   const [isDirty, setIsDirty]            = useState(false);
-  const [lastSaved, setLastSaved]        = useState(null);  // Date of last successful save
   const [running, setRunning]            = useState(false);
   const [runError, setRunError]          = useState(null);  // {msg, nodeName}
   const [showMap, setShowMap]            = useState(true);
@@ -2893,14 +2687,6 @@ function App(){
     window.addEventListener("beforeunload", h);
     return ()=>window.removeEventListener("beforeunload", h);
   }, [isDirty]);
-
-  // Autosave: 30 s after the most recent change (timer resets on each new change).
-  // Only fires when an existing graph is open and is not already saving.
-  useEffect(()=>{
-    if (!isDirty || !currentGraph || saving) return;
-    const timer = setTimeout(()=>{ saveGraph(); }, 30_000);
-    return ()=>clearTimeout(timer);
-  }, [isDirty, currentGraph, saving]);
 
   function saveSnap(ns, es){
     if(restoring.current) return;
@@ -3117,14 +2903,12 @@ function App(){
       if(currentGraph){
         await api("PUT",`/api/graphs/${currentGraph.id}`,{ name:graphName, graph_data:gd });
         setIsDirty(false);
-        setLastSaved(new Date());
         showToast("Graph saved!");
         await loadGraphList();
       } else {
         const g = await api("POST","/api/graphs",{ name:graphName, description:"", graph_data:gd });
         setCurrentGraph(g);
         setIsDirty(false);
-        setLastSaved(new Date());
         showToast("Graph created!");
         await loadGraphList();
       }
@@ -3158,13 +2942,9 @@ function App(){
     try {
       const text = await file.text();
       const data = JSON.parse(text);
-      // Support both full export bundles and raw graph_data objects
-      const bundle = {
-        name:        data.name || file.name.replace(/\.flow\.json$/i,"").replace(/_/g," "),
-        description: data.description || "",
-        graph_data:  data.graph_data || data,
-      };
-      const created = await api("POST", "/api/graphs/import", bundle);
+      const name   = (data.name || file.name.replace(/\.flow\.json$/i,"").replace(/_/g," ")) + " (imported)";
+      const gd     = data.graph_data || data; // support raw graph_data too
+      const created = await api("POST","/api/graphs",{name, description: data.description||"", graph_data: gd});
       showToast(`Imported as "${created.name}"`);
       await loadGraphList();
       onSelectGraph(created);
@@ -3512,20 +3292,6 @@ function App(){
             #{currentGraph.id}
           </span>
         )}
-        {/* Dirty / saved indicator */}
-        {isDirty && !saving && (
-          <span style={{fontSize:11,color:"#f59e0b",whiteSpace:"nowrap",
-            background:"#f59e0b15",border:"1px solid #f59e0b44",
-            borderRadius:4,padding:"1px 7px",marginLeft:2}}>
-            ● Unsaved
-          </span>
-        )}
-        {!isDirty && lastSaved && (
-          <span style={{fontSize:11,color:"#475569",whiteSpace:"nowrap",marginLeft:4}}
-            title={`Last saved: ${lastSaved.toLocaleTimeString()}`}>
-            ✓ Saved
-          </span>
-        )}
         <div className="topbar-spacer"/>
         {/* Undo / Redo */}
         <button className="btn btn-ghost btn-sm" onClick={doUndo}
@@ -3587,10 +3353,8 @@ function App(){
         )}
         <a href="/admin" className="btn btn-ghost btn-sm">← Admin</a>
         <button className="btn btn-ghost btn-sm" onClick={()=>setShowTestModal(true)} disabled={!currentGraph}>🧪 Test</button>
-        <button className="btn btn-ghost btn-sm" onClick={saveGraph} disabled={saving}
-          title="Save (Ctrl+S)"
-          style={isDirty && !saving ? {color:"#f59e0b",borderColor:"#f59e0b55"} : {}}>
-          {saving ? <><span style={{animation:"spin .8s linear infinite",display:"inline-block"}}>⟳</span> Saving…</> : "💾 Save"}
+        <button className="btn btn-ghost btn-sm" onClick={saveGraph} disabled={saving} title="Save (Ctrl+S)">
+          {saving ? <><span style={{animation:"spin .8s linear infinite",display:"inline-block"}}>⟳</span> Saving…</> : isDirty ? "💾 Save ●" : "💾 Save"}
         </button>
         <button className="btn btn-success btn-sm" onClick={()=>runGraph()} disabled={running||!currentGraph}>
           {running ? <><span style={{animation:"spin .8s linear infinite",display:"inline-block"}}>⟳</span> Running…</> : "▶ Run"}

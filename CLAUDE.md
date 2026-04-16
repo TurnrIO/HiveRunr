@@ -166,6 +166,7 @@ OWNER_EMAIL=
 | P1-17 | Credential test connection — `POST /api/credentials/{id}/test` in `credentials.py`; auto-detects credential type (SMTP, SFTP, SSH, IMAP, PostgreSQL/MySQL/SQLite, S3/AWS, Telegram, OpenAI) from `type` column then field-based heuristics; runs lightweight probe with 10s timeout; returns `{ok, message, type, latency_ms}`; admin.html Credentials page gains "🔌 Test" button per row; result shown inline as green/red pill with message and latency |
 | P2-19 | Versioned releases — `[0.1.0]` CHANGELOG entry covering all W-series + P0 + P1 sprints with upgrade notes (migrations, new env vars, boto3 dep); `v0.1.0` git tag created |
 | P2-20 | Test coverage expansion — `tests/test_permissions.py` (26 tests: `_check_admin`, token scope hierarchy, role guards, per-flow access, workspace resolution); `tests/test_executor_failures.py` (26 tests: abort/continue/retry failure modes, condition branching, scheduler lock Lua helpers, edge cases); `tests/test_webhook_ratelimit.py` (12 tests: webhook rate-limit pipeline logic, Redis fail-open, login brute-force lockout/clear); `tests/integration/test_e2e_playwright.py` (Playwright E2E: login flow, dashboard, canvas, logout — auto-skipped unless `HIVERUNR_BASE_URL` set); total unit suite 117 tests, all green |
+| P2-21 | Responsive / accessibility pass — `admin.html`: hamburger toggle + sidebar slide-in overlay (`@media ≤1024px`), `useFocusTrap` hook, ConfirmModal/Toast/HistoryModal/AlertSettingsModal all get `role="dialog" aria-modal="true"`; `canvas.html`: `@media ≤1024px` + `@media ≤768px` breakpoints (sidebar/config-panel collapse), ConfirmModal + FlowsModal + TestPayloadModal + HistoryModal + EdgeLabelModal + ValidationModal + NioModal + PermissionsModal all get `role="dialog" aria-modal="true" aria-label="..."`, overlay wrappers `aria-hidden="true"`; icon-only buttons across both pages get descriptive `aria-label`; sidebar nav gets `role="navigation" aria-label="Main navigation"` + keyboard navigation |
 
 ---
 
@@ -230,7 +231,7 @@ Pick the next item off the top. Cross it off and add a "Completed sprints" row w
 
 20. ~~**Test coverage expansion**~~ ✓ Done — added `tests/test_permissions.py` (26 tests: `_check_admin`, `_require_scope`, role guards, `_check_flow_access`, `_resolve_workspace`); `tests/test_executor_failures.py` (26 tests: abort/continue failure modes, retry logic, condition branching, scheduler lock helpers, edge cases); `tests/test_webhook_ratelimit.py` (12 tests: webhook rate-limit counter logic, Redis fail-open, login brute-force lockout/clear); `tests/integration/test_e2e_playwright.py` (Playwright E2E: login flow, dashboard, canvas create/save/run, logout — auto-skipped unless `HIVERUNR_BASE_URL` set). Total unit suite: 117 tests, all passing.
 
-21. **Responsive / accessibility pass** — both admin.html and canvas.html are built for full-height desktop only; add media-query breakpoints for ≤1024 px, `role="dialog"` + focus-trap on modals, and `aria-label` on icon-only buttons.
+21. ~~**Responsive / accessibility pass**~~ ✓ Done
 
 ---
 
