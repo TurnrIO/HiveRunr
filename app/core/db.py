@@ -1343,3 +1343,56 @@ def list_user_workspaces(user_id: int) -> list:
 def get_default_workspace() -> dict | None:
     """Return the 'default' workspace (always exists after migration 0008)."""
     return get_workspace_by_slug("default")
+
+
+# ── Plan limits + workspace usage ─────────────────────────────────────────────
+PLAN_LIMITS: dict = {
+    "free": {
+        "flows":       5,
+        "members":     3,
+        "runs_per_day": 100,
+    },
+    "pro": {
+        "flows":       50,
+        "members":     20,
+        "runs_per_day": 5_000,
+    },
+    "enterprise": {
+        "flows":       None,   # None = unlimited
+        "members":     None,
+        "runs_per_day": None,
+    },
+}
+
+
+def get_workspace_usage(workspace_id: int) -> dict:
+    """Return current usage counts for a workspace (flows, members, runs today)."""
+    with get_conn() as conn:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur.execute(
+            "SELECT COUNT(*) AS n FROM graph_workflows WHERE workspace_id=%s",
+            (workspace_id,),
+        )
+        flows = (cur.fetchone() or {}).get("n", 0)
+
+        cur.execute(
+            "SELECT COUNT(*) AS n FROM workspace_members WHERE workspace_id=%s",
+            (workspace_id,),
+        )
+        members = (cur.fetchone() or {}).get("n", 0)
+
+        cur.execute(
+            """
+            SELECT COUNT(*) AS n FROM runs
+            WHERE workspace_id=%s
+              AND created_at >= NOW() - INTERVAL '1 day'
+            """,
+            (workspace_id,),
+        )
+        runs_today = (cur.fetchone() or {}).get("n", 0)
+
+    return {
+        "flows":      int(flows),
+        "members":    int(members),
+        "runs_today": int(runs_today),
+    }
