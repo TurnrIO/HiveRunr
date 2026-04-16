@@ -14,9 +14,10 @@ Prometheus /metrics endpoint (in app/routers/admin.py):
 """
 import logging
 import time
-from starlette.middleware.base import BaseHTTPMiddleware
+from typing import Callable
 from starlette.requests import Request
 from starlette.responses import Response
+from starlette.types import ASGIApp, Receive, Scope, Send
 from prometheus_client import (
     Counter, Histogram, REGISTRY,
     generate_latest, CONTENT_TYPE_LATEST,
@@ -69,30 +70,55 @@ class _RunMetricsCollector:
 REGISTRY.register(_RunMetricsCollector())
 
 
-class PrometheusMiddleware(BaseHTTPMiddleware):
-    """Count and time every HTTP request; attach to FastAPI via add_middleware."""
+class PrometheusMiddleware:
+    """Count and time every HTTP request; attach to FastAPI via add_middleware.
 
-    async def dispatch(self, request: Request, call_next):
-        start    = time.perf_counter()
-        response = await call_next(request)
-        duration = time.perf_counter() - start
+    Implemented as a *pure ASGI middleware* (not BaseHTTPMiddleware) so that
+    exceptions raised by route handlers propagate transparently to uvicorn's
+    error logger.  BaseHTTPMiddleware wraps call_next in a TaskGroup which
+    catches and re-wraps exceptions — that caused silent 500s with no log trace.
+    """
 
-        # Use the matched route template to avoid per-ID cardinality explosion:
-        # /api/graphs/123  →  /api/graphs/{graph_id}
-        route = request.scope.get("route")
-        path  = route.path if route else request.url.path
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
 
-        http_requests_total.labels(
-            method=request.method,
-            path=path,
-            status_code=str(response.status_code),
-        ).inc()
-        http_request_duration_seconds.labels(
-            method=request.method,
-            path=path,
-        ).observe(duration)
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        # Only instrument HTTP requests; pass WebSocket / lifespan through unchanged.
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
 
-        return response
+        start       = time.perf_counter()
+        status_code = 500  # default if handler raises before sending a response
+
+        async def send_wrapper(message):
+            nonlocal status_code
+            if message["type"] == "http.response.start":
+                status_code = message["status"]
+            await send(message)
+
+        try:
+            await self.app(scope, receive, send_wrapper)
+        finally:
+            # Record metrics even when the handler raises — the finally block
+            # runs before the exception propagates to uvicorn.
+            duration = time.perf_counter() - start
+
+            # Use the matched route template to avoid per-ID label cardinality:
+            #   /api/graphs/123  →  /api/graphs/{graph_id}
+            request = Request(scope)
+            route   = scope.get("route")
+            path    = route.path if route else request.url.path
+
+            http_requests_total.labels(
+                method=request.method,
+                path=path,
+                status_code=str(status_code),
+            ).inc()
+            http_request_duration_seconds.labels(
+                method=request.method,
+                path=path,
+            ).observe(duration)
 
 
 def metrics_response() -> Response:

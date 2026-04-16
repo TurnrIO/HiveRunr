@@ -1,6 +1,14 @@
-"""Database layer — v12
-New: credentials vault, graph version history, node traces + initial_payload in runs.
-Schema management is now handled by Alembic (see migrations/).
+"""Database layer.
+
+Schema management is handled by Alembic (see migrations/).
+
+IMPORTANT — RealDictCursor:
+  Most queries use cursor_factory=psycopg2.extras.RealDictCursor so rows are
+  returned as dicts.  Always access columns by name: row["id"], not row[0].
+  When you need a scalar (e.g. COUNT), use an alias and fetch by name:
+      cur.execute("SELECT COUNT(*) AS n FROM runs")
+      n = cur.fetchone()["n"]   # correct
+      n = cur.fetchone()[0]     # WRONG — raises TypeError with RealDictCursor
 """
 import os, json, logging
 from contextlib import contextmanager
@@ -12,6 +20,9 @@ DSN = os.environ.get("DATABASE_URL", "postgresql://hiverunr:hiverunr@db:5432/hiv
 
 @contextmanager
 def get_conn():
+    # NOTE: autocommit=True means every statement is its own transaction.
+    # For multi-statement operations that must be atomic, set conn.autocommit=False
+    # and call conn.commit() / conn.rollback() explicitly.
     conn = psycopg2.connect(DSN)
     conn.autocommit = True
     try:
@@ -915,6 +926,9 @@ def consume_password_reset_token(token_hash: str):
         )
 
 # ── App settings (KV store) ────────────────────────────────────────────────────
+# NOTE: Use get_setting / set_setting for any new scalar config value —
+# do NOT add new columns to app_settings or other tables for simple on/off flags.
+# All values are strings; cast to int/bool at the call site.
 def get_setting(key: str, default: str = "") -> str:
     with get_conn() as conn:
         cur = conn.cursor()
@@ -1318,56 +1332,3 @@ def list_user_workspaces(user_id: int) -> list:
 def get_default_workspace() -> dict | None:
     """Return the 'default' workspace (always exists after migration 0008)."""
     return get_workspace_by_slug("default")
-
-
-# ── Plan limits ───────────────────────────────────────────────────────────────
-PLAN_LIMITS = {
-    "free": {
-        "flows":   5,
-        "members": 3,
-        "runs_per_day": 100,
-    },
-    "pro": {
-        "flows":   50,
-        "members": 20,
-        "runs_per_day": 5_000,
-    },
-    "enterprise": {
-        "flows":   None,   # unlimited
-        "members": None,
-        "runs_per_day": None,
-    },
-}
-
-
-def get_workspace_usage(workspace_id: int) -> dict:
-    """Return current usage counts for a workspace."""
-    with get_conn() as conn:
-        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-        cur.execute(
-            "SELECT COUNT(*) AS n FROM graph_workflows WHERE workspace_id=%s",
-            (workspace_id,),
-        )
-        flows = (cur.fetchone() or {}).get("n", 0)
-
-        cur.execute(
-            "SELECT COUNT(*) AS n FROM workspace_members WHERE workspace_id=%s",
-            (workspace_id,),
-        )
-        members = (cur.fetchone() or {}).get("n", 0)
-
-        cur.execute(
-            """
-            SELECT COUNT(*) AS n FROM runs
-            WHERE workspace_id=%s
-              AND created_at >= NOW() - INTERVAL '1 day'
-            """,
-            (workspace_id,),
-        )
-        runs_today = (cur.fetchone() or {}).get("n", 0)
-
-    return {
-        "flows":        int(flows),
-        "members":      int(members),
-        "runs_today":   int(runs_today),
-    }

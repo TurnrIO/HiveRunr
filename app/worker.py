@@ -42,6 +42,10 @@ def _send_run_alert(
 
     Reads per-flow alert config from the DB; also honours the global
     OWNER_EMAIL env var for system-level failure notifications.
+
+    NOTE: ALL alert sending must go through this function.
+    Do not call app.email.send_* directly from routers or other tasks —
+    it bypasses the per-flow enable/disable settings and the webhook dispatch.
     """
     from app.email import send_run_alert, _is_configured
 

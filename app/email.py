@@ -11,7 +11,9 @@ AgentMail API: https://docs.agentmail.to/api-reference/inboxes/messages/send
   Authorization: Bearer {AGENTMAIL_API_KEY}
   Body: { "to": ["addr"], "subject": "...", "html": "...", "text": "..." }
 
-The inbox_id is the full AGENTMAIL_FROM address (e.g. alerts@agentmail.to).
+IMPORTANT — inbox_id is the FULL from-address (e.g. "alerts@agentmail.to"),
+NOT just the local part.  The /messages/send suffix is also required.
+Using /messages (no /send) or just the local-part inbox_id returns 404/401.
 """
 import os
 import logging
@@ -44,8 +46,9 @@ def send_email(to: "str | list[str]", subject: str, html: str, text: str = "") -
         log.warning("email: AGENTMAIL_API_KEY / AGENTMAIL_FROM not configured — skipping")
         return False
 
-    # inbox_id is the full AGENTMAIL_FROM address (e.g. alerts@agentmail.to)
-    inbox_id = from_addr.strip()
+    # NOTE: inbox_id must be the FULL from-address, not just the local-part.
+    # e.g. "alerts@agentmail.to" not "alerts".  See module docstring.
+    inbox_id = from_addr
 
     if isinstance(to, str):
         to = [t.strip() for t in to.split(",") if t.strip()]
