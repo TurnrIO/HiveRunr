@@ -133,7 +133,7 @@ def api_system_status(request: Request):
         import redis as _redis
         redis_url = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
         r = _redis.from_url(redis_url, socket_connect_timeout=2)
-        lock_val = r.get("hiverunr:scheduler:lock")
+        lock_val = r.get("hiverunr:scheduler:leader")
         if lock_val:
             results["scheduler"] = {
                 "status": "ok",
