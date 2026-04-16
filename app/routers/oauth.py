@@ -181,7 +181,7 @@ def api_oauth_providers(request: Request):
 def oauth_start(provider: str, cred_name: str, request: Request):
     """Kick off the OAuth authorization code flow for the given provider."""
     if provider not in PROVIDERS:
-        return RedirectResponse(_admin_url(f"?oauth_error=unknown_provider"))
+        return RedirectResponse(_admin_url("?oauth_error=unknown_provider"))
 
     user = _check_admin(request)
     workspace_id = _resolve_workspace(request, user)
