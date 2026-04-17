@@ -267,6 +267,7 @@ function Dashboard({ showToast, user }) {
   const [graphs, setGraphs]   = useState([]);
   const [loading, setLoading] = useState(true);
   const [expandedRunId, setExpandedRunId] = useState(null);
+  const [replayEdit, setReplayEdit] = useState(null); // {runId, payload}
 
   const load = useCallback(async () => {
     try {
@@ -304,6 +305,20 @@ function Dashboard({ showToast, user }) {
   async function replayRun(id) {
     try { await api("POST",`/api/runs/${id}/replay`); load(); showToast("Queued for replay"); }
     catch(e) { showToast(e.message,"error"); }
+  }
+  async function openReplayEdit(id) {
+    try {
+      const data = await api("GET", `/api/runs/${id}/payload`);
+      setReplayEdit({ runId: id, payload: JSON.stringify(data.payload || {}, null, 2) });
+    } catch(e) { showToast(e.message, "error"); }
+  }
+  async function submitReplayEdit(runId, payloadStr) {
+    try {
+      let payload;
+      try { payload = JSON.parse(payloadStr); } catch { showToast("Invalid JSON payload", "error"); return; }
+      await api("POST", `/api/runs/${runId}/replay`, { payload });
+      load(); showToast("Queued for replay with custom payload"); setReplayEdit(null);
+    } catch(e) { showToast(e.message, "error"); }
   }
 
   const ro = user?.role === "viewer";
@@ -377,7 +392,10 @@ function Dashboard({ showToast, user }) {
                       <td style={{color:"#64748b",fontVariantNumeric:"tabular-nums"}}>{r.status==="queued"||r.status==="running"?"—":r.updated_at&&r.created_at?((d=>(d<1000?d+"ms":(d/1000).toFixed(1)+"s"))(new Date(r.updated_at)-new Date(r.created_at))):"—"}</td>
                       <td>
                         <div style={{display:"flex",gap:6}}>
-                          {r.graph_id && <button className="btn btn-ghost" onClick={(e)=>{e.stopPropagation();replayRun(r.id)}}>▶ Replay</button>}
+                          {r.graph_id && <>
+                            <button className="btn btn-ghost" onClick={(e)=>{e.stopPropagation();replayRun(r.id)}} title="Replay with original payload">▶ Replay</button>
+                            <button className="btn btn-ghost" onClick={(e)=>{e.stopPropagation();openReplayEdit(r.id)}} title="Replay with custom payload">✏ Replay…</button>
+                          </>}
                           {(r.status==="queued"||r.status==="running") &&
                             <button className="btn btn-warning" onClick={(e)=>{e.stopPropagation();cancelRun(r.id)}}>Cancel</button>}
                           <button className="btn btn-danger" title="Delete run" aria-label="Delete run" onClick={(e)=>{e.stopPropagation();deleteRun(r.id)}}>✕</button>
@@ -451,6 +469,49 @@ function Dashboard({ showToast, user }) {
             </table>
           </>
         )}
+      </div>
+      {replayEdit && (
+        <ReplayEditModal
+          runId={replayEdit.runId}
+          payload={replayEdit.payload}
+          onClose={()=>setReplayEdit(null)}
+          onSubmit={submitReplayEdit}
+        />
+      )}
+    </div>
+  );
+}
+
+// ── Replay-with-edits modal ────────────────────────────────────────────────
+function ReplayEditModal({ runId, payload: initPayload, onClose, onSubmit }) {
+  const [payload, setPayload] = useState(initPayload || "{}");
+  const ref = useRef(null);
+  useFocusTrap(ref, onClose);
+  return (
+    <div className="modal-overlay" onClick={e=>{if(e.target===e.currentTarget)onClose();}} aria-hidden="true">
+      <div className="modal" ref={ref} style={{maxWidth:480,padding:"20px 24px"}}
+        role="dialog" aria-modal="true" aria-label="Replay with custom payload">
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
+          <span style={{fontWeight:700,fontSize:14,color:"#e2e8f0"}}>✏ Replay Run #{runId} with Custom Payload</span>
+          <button className="btn btn-ghost btn-sm" onClick={onClose} aria-label="Close">✕</button>
+        </div>
+        <p style={{color:"#94a3b8",fontSize:12,marginBottom:12}}>
+          Edit the trigger payload below. The run will be re-enqueued with this data instead of the original.
+        </p>
+        <textarea
+          value={payload}
+          onChange={e=>setPayload(e.target.value)}
+          rows={10}
+          style={{width:"100%",boxSizing:"border-box",background:"#0f1117",border:"1px solid #374151",
+            borderRadius:6,padding:"8px 10px",color:"#e2e8f0",fontFamily:"monospace",fontSize:12,
+            resize:"vertical",outline:"none"}}
+          aria-label="Payload JSON"
+          spellCheck={false}
+        />
+        <div style={{display:"flex",gap:8,marginTop:14,justifyContent:"flex-end"}}>
+          <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
+          <button className="btn btn-success" onClick={()=>onSubmit(runId, payload)}>▶ Run with this payload</button>
+        </div>
       </div>
     </div>
   );
@@ -1936,6 +1997,7 @@ function Logs({ showToast }) {
   const [search, setSearch]           = useState("");
   const [searchInput, setSearchInput] = useState("");
   const [statusFilter, setStatus]     = useState("all");
+  const [replayEdit, setReplayEdit]   = useState(null); // {runId, payload}
 
   const load = async (pg, st, sq) => {
     setLoading(true);
@@ -1991,6 +2053,27 @@ function Logs({ showToast }) {
     } catch(e) { showToast(e.message, "error"); }
     setBulkDeleting(false);
   };
+
+  async function replayRun(id) {
+    try { await api("POST", `/api/runs/${id}/replay`); load(page, statusFilter, search); showToast("Queued for replay"); }
+    catch(e) { showToast(e.message, "error"); }
+  }
+  async function openReplayEdit(id) {
+    try {
+      const data = await api("GET", `/api/runs/${id}/payload`);
+      setReplayEdit({ runId: id, payload: JSON.stringify(data.payload || {}, null, 2) });
+    } catch(e) { showToast(e.message, "error"); }
+  }
+  async function submitReplayEdit(runId, payloadStr) {
+    try {
+      let payload;
+      try { payload = JSON.parse(payloadStr); } catch { showToast("Invalid JSON payload", "error"); return; }
+      await api("POST", `/api/runs/${runId}/replay`, { payload });
+      load(page, statusFilter, search);
+      showToast("Queued for replay with custom payload");
+      setReplayEdit(null);
+    } catch(e) { showToast(e.message, "error"); }
+  }
 
   const STATUS_COLOR = {succeeded:"#4ade80",failed:"#f87171",dead:"#ef4444",retrying:"#fb923c",running:"#34d399",queued:"#60a5fa",cancelled:"#9ca3af"};
   const TRACE_DOT    = {ok:"#4ade80",error:"#f87171",skipped:"#64748b"};
@@ -2128,11 +2211,19 @@ function Logs({ showToast }) {
                         {selRun.updated_at && selRun.status !== "running" && selRun.status !== "queued" && <> · Finished: {fmtTs(selRun.updated_at)}</>}
                       </div>
                     </div>
-                    <span style={{fontSize:12,fontWeight:700,padding:"4px 10px",borderRadius:20,
-                      background:selRun.status==="succeeded"?"#14532d":selRun.status==="dead"?"#2d0a0a":selRun.status==="failed"?"#3f1111":"#1e3a5f",
-                      color:STATUS_COLOR[selRun.status]||"#94a3b8"}}>
-                      {selRun.status}
-                    </span>
+                    <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
+                      {selRun.graph_id && <>
+                        <button className="btn btn-ghost btn-sm" style={{fontSize:11}}
+                          onClick={()=>replayRun(selRun.id)} title="Re-run with original payload">▶ Replay</button>
+                        <button className="btn btn-ghost btn-sm" style={{fontSize:11}}
+                          onClick={()=>openReplayEdit(selRun.id)} title="Re-run with custom payload">✏ Replay…</button>
+                      </>}
+                      <span style={{fontSize:12,fontWeight:700,padding:"4px 10px",borderRadius:20,
+                        background:selRun.status==="succeeded"?"#14532d":selRun.status==="dead"?"#2d0a0a":selRun.status==="failed"?"#3f1111":"#1e3a5f",
+                        color:STATUS_COLOR[selRun.status]||"#94a3b8"}}>
+                        {selRun.status}
+                      </span>
+                    </div>
                   </div>
                   {selRun.retry_count > 0 && (
                     <div style={{marginTop:8,fontSize:12,color:"#94a3b8"}}>
@@ -2177,6 +2268,14 @@ function Logs({ showToast }) {
           }
         </div>
       </div>
+      {replayEdit && (
+        <ReplayEditModal
+          runId={replayEdit.runId}
+          payload={replayEdit.payload}
+          onClose={()=>setReplayEdit(null)}
+          onSubmit={submitReplayEdit}
+        />
+      )}
     </div>
   );
 }

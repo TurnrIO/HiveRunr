@@ -2730,6 +2730,47 @@ function NodeSearchBar({ nodes, onJump, onClose }) {
   );
 }
 
+// ── Replay-with-edits modal (canvas) ─────────────────────────────────────────
+function ReplayEditModal({ runId, payload: initPayload, onClose, onSubmit }) {
+  const [payload, setPayload] = useState(initPayload || "{}");
+  // Escape handler
+  useEffect(()=>{
+    const h = e => { if(e.key==="Escape") onClose(); };
+    document.addEventListener("keydown", h);
+    return ()=>document.removeEventListener("keydown", h);
+  },[onClose]);
+  return (
+    <div className="modal-overlay" aria-hidden="true"
+      onClick={e=>{ if(e.target===e.currentTarget) onClose(); }}>
+      <div className="modal" style={{maxWidth:480,padding:"20px 24px"}}
+        role="dialog" aria-modal="true" aria-label="Replay with custom payload">
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
+          <span style={{fontWeight:700,fontSize:14,color:"#e2e8f0"}}>✏ Replay Run #{runId} with Custom Payload</span>
+          <button className="btn btn-ghost btn-sm" onClick={onClose} aria-label="Close">✕</button>
+        </div>
+        <p style={{color:"#94a3b8",fontSize:12,marginBottom:12}}>
+          Edit the trigger payload below. The run will be re-enqueued with this data instead of the original.
+        </p>
+        <textarea
+          value={payload}
+          onChange={e=>setPayload(e.target.value)}
+          rows={10}
+          autoFocus
+          style={{width:"100%",boxSizing:"border-box",background:"#0f1117",border:"1px solid #374151",
+            borderRadius:6,padding:"8px 10px",color:"#e2e8f0",fontFamily:"monospace",fontSize:12,
+            resize:"vertical",outline:"none"}}
+          aria-label="Payload JSON"
+          spellCheck={false}
+        />
+        <div style={{display:"flex",gap:8,marginTop:14,justifyContent:"flex-end"}}>
+          <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
+          <button className="btn btn-success" onClick={()=>onSubmit(runId, payload)}>▶ Run with this payload</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 const CANVAS_SHORTCUTS = [
   { section:"Flow management" },
   { key:"Ctrl + S",           desc:"Save flow" },
@@ -2874,6 +2915,7 @@ function App(){
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false); // mobile palette drawer
   const [showShortcuts, setShowShortcuts]         = useState(false); // keyboard cheatsheet
   const [showSearch,   setShowSearch]             = useState(false); // Ctrl+F node search
+  const [replayEdit,   setReplayEdit]             = useState(null);  // {runId, payload}
 
   // undo/redo
   const histRef = useRef([]);
@@ -3383,6 +3425,36 @@ function App(){
     showToast(output ? "Output pinned 📌" : "Output unpinned", "success");
   }
 
+  // ── Run replay helpers ────────────────────────────────────────────────────
+  function _getInspectorRunDbId() {
+    if (!inspectorRunId) return null;
+    const run = inspectorRuns.find(r => String(r.id) === inspectorRunId || r.task_id === inspectorRunId);
+    return run?.id || null;
+  }
+  async function replayInspectorRun() {
+    const dbId = _getInspectorRunDbId();
+    if (!dbId) return;
+    try { await api("POST", `/api/runs/${dbId}/replay`); showToast("Queued for replay"); }
+    catch(e) { showToast(e.message, "error"); }
+  }
+  async function openReplayEditCanvas() {
+    const dbId = _getInspectorRunDbId();
+    if (!dbId) return;
+    try {
+      const data = await api("GET", `/api/runs/${dbId}/payload`);
+      setReplayEdit({ runId: dbId, payload: JSON.stringify(data.payload || {}, null, 2) });
+    } catch(e) { showToast(e.message, "error"); }
+  }
+  async function submitReplayEditCanvas(runId, payloadStr) {
+    try {
+      let payload;
+      try { payload = JSON.parse(payloadStr); } catch { showToast("Invalid JSON", "error"); return; }
+      await api("POST", `/api/runs/${runId}/replay`, { payload });
+      showToast("Queued for replay with custom payload");
+      setReplayEdit(null);
+    } catch(e) { showToast(e.message, "error"); }
+  }
+
   // ── Live Data Inspector ────────────────────────────────────────────────────
   async function refreshInspectorRuns() {
     if (!currentGraph) { setInspectorRuns([]); return; }
@@ -3610,9 +3682,11 @@ function App(){
               </option>
             ))}
           </select>
-          {inspectorRunId && (
+          {inspectorRunId && (<>
+            <button className="btn btn-ghost btn-sm" style={{fontSize:11}} onClick={replayInspectorRun} title="Replay with original payload">▶</button>
+            <button className="btn btn-ghost btn-sm" style={{fontSize:11}} onClick={openReplayEditCanvas} title="Replay with custom payload">✏</button>
             <button className="btn btn-ghost btn-sm" style={{color:"#f87171"}} onClick={()=>loadInspectorRun(null)} title="Clear run overlay">✕</button>
-          )}
+          </>)}
           <div className="tb-divider"/>
           {workspaces.length > 1 && (
             <select
@@ -3800,6 +3874,14 @@ function App(){
           nodes={nodes}
           onJump={jumpToNode}
           onClose={()=>setShowSearch(false)}
+        />
+      )}
+      {replayEdit && (
+        <ReplayEditModal
+          runId={replayEdit.runId}
+          payload={replayEdit.payload}
+          onClose={()=>setReplayEdit(null)}
+          onSubmit={submitReplayEditCanvas}
         />
       )}
       {toast && <Toast key={toast.key} msg={toast.msg} type={toast.type} onDone={()=>setToast(null)}/>}

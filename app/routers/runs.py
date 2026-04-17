@@ -216,9 +216,35 @@ def api_cancel_run(run_id: int, request: Request):
     return {"cancelled": True, "run_id": run_id, "task_id": task_id}
 
 
+class _ReplayBody(BaseModel):
+    payload: Optional[dict] = None  # if provided, overrides stored initial_payload
+
+
+@router.get("/api/runs/{run_id}/payload")
+def api_get_run_payload(run_id: int, request: Request):
+    """Return the initial_payload stored for a run (used to pre-fill replay modal)."""
+    _require_run_scope(request)
+    from app.core.db import get_conn
+    with get_conn() as conn:
+        cur = conn.cursor()
+        cur.execute("SELECT initial_payload FROM runs WHERE id=%s", (run_id,))
+        row = cur.fetchone()
+    if not row:
+        raise HTTPException(404, f"Run {run_id} not found")
+    try:
+        payload = json.loads(row["initial_payload"]) if row["initial_payload"] else {}
+    except Exception:
+        payload = {}
+    return {"run_id": run_id, "payload": payload}
+
+
 @router.post("/api/runs/{run_id}/replay")
-def api_replay_run(run_id: int, request: Request):
-    """Re-enqueue a past run using its stored initial_payload."""
+def api_replay_run(run_id: int, request: Request, body: _ReplayBody = None):
+    """Re-enqueue a past run.
+
+    If body.payload is provided it overrides the stored initial_payload,
+    allowing callers to tweak the trigger data before re-running.
+    """
     user = _require_run_scope(request)
     from app.core.db import get_conn
     from app.worker import enqueue_graph
@@ -228,16 +254,22 @@ def api_replay_run(run_id: int, request: Request):
         row = cur.fetchone()
     if not row:
         raise HTTPException(404, f"Run {run_id} not found")
-    graph_id, initial_payload = row
+    graph_id, initial_payload = row["graph_id"], row["initial_payload"]
     if not graph_id:
         raise HTTPException(400, "Run is not associated with a graph (script run?)")
     g = get_graph(graph_id)
     if not g:
         raise HTTPException(404, f"Graph {graph_id} not found")
-    try:
-        payload = json.loads(initial_payload) if initial_payload else {}
-    except Exception:
-        payload = {}
+
+    # Payload resolution: caller override > stored initial_payload > {}
+    if body and body.payload is not None:
+        payload = body.payload
+    else:
+        try:
+            payload = json.loads(initial_payload) if initial_payload else {}
+        except Exception:
+            payload = {}
+
     task = enqueue_graph.delay(graph_id, payload)
     with get_conn() as conn:
         conn.cursor().execute(
@@ -245,7 +277,8 @@ def api_replay_run(run_id: int, request: Request):
             (task.id, graph_id, json.dumps(payload))
         )
     log_audit(user["username"], "run.replay", "graph", graph_id,
-              {"replayed_run_id": run_id, "task_id": task.id, "graph": g["name"]},
+              {"replayed_run_id": run_id, "task_id": task.id, "graph": g["name"],
+               "payload_overridden": body is not None and body.payload is not None},
               request.client.host if request.client else None)
     return {"queued": True, "task_id": task.id, "graph": g["name"], "replayed_run_id": run_id}
 
