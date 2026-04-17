@@ -168,6 +168,11 @@ OWNER_EMAIL=
 | P2-20 | Test coverage expansion — `tests/test_permissions.py` (26 tests: `_check_admin`, token scope hierarchy, role guards, per-flow access, workspace resolution); `tests/test_executor_failures.py` (26 tests: abort/continue/retry failure modes, condition branching, scheduler lock Lua helpers, edge cases); `tests/test_webhook_ratelimit.py` (12 tests: webhook rate-limit pipeline logic, Redis fail-open, login brute-force lockout/clear); `tests/integration/test_e2e_playwright.py` (Playwright E2E: login flow, dashboard, canvas, logout — auto-skipped unless `HIVERUNR_BASE_URL` set); total unit suite 117 tests, all green |
 | P2-21 | Responsive / accessibility pass — `admin.html`: hamburger toggle + sidebar slide-in overlay (`@media ≤1024px`), `useFocusTrap` hook, ConfirmModal/Toast/HistoryModal/AlertSettingsModal all get `role="dialog" aria-modal="true"`; `canvas.html`: `@media ≤1024px` + `@media ≤768px` breakpoints (sidebar/config-panel collapse), ConfirmModal + FlowsModal + TestPayloadModal + HistoryModal + EdgeLabelModal + ValidationModal + NioModal + PermissionsModal all get `role="dialog" aria-modal="true" aria-label="..."`, overlay wrappers `aria-hidden="true"`; icon-only buttons across both pages get descriptive `aria-label`; sidebar nav gets `role="navigation" aria-label="Main navigation"` + keyboard navigation |
 | 18 | Credential OAuth flows — `app/routers/oauth.py`: `GET /api/oauth/providers` (which providers have client_id set), `GET /api/oauth/{provider}/start?cred_name=` (stores state in Redis, redirects to provider), `GET /api/oauth/{provider}/callback` (exchanges code, saves credential, redirects to /admin); supports GitHub (repo/read:user), Google (Sheets + Drive, offline access + refresh token), Notion (Basic-auth token exchange); credential secret stored as provider-typed JSON; `OAuthConnectModal` component in admin.html with credential-name input + redirect flow; "Connect via OAuth" card shown when ≥1 provider env var is set; `?oauth_success`/`?oauth_error` URL params handled on App mount with toast + auto-navigate to credentials page; `.env.example` + CLAUDE.md updated |
+| S-A | System diagnostics page — `GET /api/system/status` returns 9 subsystem checks (DB, Redis, Celery, scheduler leader, email, secrets, API key security, HTTPS, disk); each check returns `{status, message, fix?}`; new **System** nav page in admin.html with colour-coded `Check` components, inline fix guidance, auto-refresh every 30 s |
+| S-B | Startup validation — `_validate_config()` in `main.py` called on startup; fatal checks (DB + Redis connectivity) call `sys.exit(1)` on failure with clear error; warning checks (SECRET_KEY, API_KEY, APP_URL, AGENTMAIL) log actionable messages; errors surfaced loudly rather than swallowed |
+| S-C | Ops hardening — `OPERATIONS.md` runbook (health check, start/stop/restart, DB ops, worker/scheduler ops, common errors table, env vars reference); inline NOTE comments in `db.py`, `worker.py`, `email.py`; `PrometheusMiddleware` rewritten as pure ASGI (no `BaseHTTPMiddleware`) so exceptions propagate correctly to uvicorn; email.py two bug fixes: `inbox_id` = full address, endpoint `/messages/send` |
+| S-D | DB performance + retry resilience — migration `0011_performance_indexes.py`: `runs.retry_count INT DEFAULT 0`, indexes on `(workspace_id, created_at DESC)`, `status`, `(graph_id, created_at DESC)`, audit_log indexes, schedules index; `enqueue_graph` Celery task gets `max_retries=3` + exponential backoff (30/60/120 s) for `_TRANSIENT_EXCEPTIONS`; run status lifecycle adds `retrying` + `dead`; admin.html Runs page shows DEAD/RETRY N badges, status filter adds Dead/Retrying options |
+| Polish | Runs page bulk-delete — checkbox per row, select-all header checkbox, "Delete selected (N)" button using `POST /api/runs/bulk-delete`; checked rows highlighted purple; ruff --fix: removed unused imports across 8 files; `secrets.py` unused `ClientError` import removed |
 
 ---
 
@@ -233,6 +238,18 @@ Pick the next item off the top. Cross it off and add a "Completed sprints" row w
 20. ~~**Test coverage expansion**~~ ✓ Done — added `tests/test_permissions.py` (26 tests: `_check_admin`, `_require_scope`, role guards, `_check_flow_access`, `_resolve_workspace`); `tests/test_executor_failures.py` (26 tests: abort/continue failure modes, retry logic, condition branching, scheduler lock helpers, edge cases); `tests/test_webhook_ratelimit.py` (12 tests: webhook rate-limit counter logic, Redis fail-open, login brute-force lockout/clear); `tests/integration/test_e2e_playwright.py` (Playwright E2E: login flow, dashboard, canvas create/save/run, logout — auto-skipped unless `HIVERUNR_BASE_URL` set). Total unit suite: 117 tests, all passing.
 
 21. ~~**Responsive / accessibility pass**~~ ✓ Done
+
+---
+
+### 🟢 P3 — Polish / UX
+
+22. **Mobile layout — canvas** — canvas topbar collapses to icon-only on `≤768px`; node sidebar + config panel collapse to bottom sheets or toggleable drawers; run status ribbon stays legible on small screens.
+
+23. **Mobile layout — admin pages** — Runs page two-column grid stacks to single column on `≤768px`; Schedules, Credentials, Audit Log tables become card lists on mobile; sidebar hamburger already in place (P2-21).
+
+24. **Keyboard shortcuts** — global shortcuts in canvas: `Ctrl+S` save, `Ctrl+Z` undo (version restore), `Escape` close open modals/panels, `Del`/`Backspace` delete selected node; admin: `?` opens shortcut cheatsheet modal.
+
+25. **Canvas minimap** — optional minimap panel (bottom-right corner) showing all nodes as coloured dots with a viewport rect; toggle via toolbar button; useful for large flows.
 
 ---
 
