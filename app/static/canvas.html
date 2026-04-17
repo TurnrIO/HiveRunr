@@ -410,6 +410,18 @@ const NODE_DEFS = {
     {k:"username",l:"Bot display name (optional)",ph:"HiveRunr"},
     {k:"avatar_url",l:"Avatar URL (optional)",ph:"https://…/icon.png"},
   ]},
+  "action.redis":        { label:"Redis",              icon:"🟥", color:"#dc2626", group:"integration", fields:[
+    {k:"credential",l:"Redis Credential (name)",ph:"my-redis"},
+    {k:"url",l:"Redis URL (overrides credential)",ph:"redis://localhost:6379/0",mono:true},
+    {k:"operation",l:"Operation",type:"select",options:["get","set","del","exists","incr","decr","expire","ttl","lpush","rpush","lpop","rpop","llen","lrange","sadd","smembers","hset","hget","hgetall","ping"]},
+    {k:"key",l:"Key",ph:"myapp:counter",mono:true},
+    {k:"value",l:"Value (set / push / sadd / hset)",ph:"{{upstream.result}}"},
+    {k:"field",l:"Hash field (hset / hget)",ph:"fieldname"},
+    {k:"ttl",l:"TTL seconds (set / expire)",ph:"3600"},
+    {k:"count",l:"Amount (incr / decr)",ph:"1"},
+    {k:"start",l:"Start index (lrange)",ph:"0"},
+    {k:"stop",l:"Stop index (lrange, -1 = end)",ph:"-1"},
+  ]},
   "action.csv":          { label:"CSV",                icon:"📄", color:"#16a34a", group:"action", fields:[
     {k:"operation",l:"Operation",ph:"parse",type:"select",options:["parse","generate"]},
     {k:"content",l:"CSV content (parse — blank = use input)",ph:"{{upstream.body}}",textarea:true,mono:true},
@@ -963,6 +975,20 @@ function ConfigPanel({ node, onChange, onDelete, edges }){
             Runs another flow as a sub-routine.<br/>
             Output: the sub-flow's final context dict.<br/>
             Max nesting depth: <code style={{color:"#a78bfa"}}>5</code> levels.
+          </div>
+        )}
+        {node.data.type === "action.redis" && (
+          <div style={{background:"#0f1117",border:"1px solid #2a2d3e",borderRadius:6,padding:"8px 10px",fontSize:10,color:"#94a3b8",marginTop:6,lineHeight:1.8}}>
+            <div style={{color:"#dc2626",fontWeight:600,marginBottom:4}}>🟥 Redis Operations</div>
+            Create a <strong>Redis</strong> credential (url field = <code style={{color:"#a78bfa"}}>redis://host:6379/0</code>) → set <strong>Redis Credential</strong> to its name.<br/>
+            <div style={{display:"grid",gridTemplateColumns:"auto 1fr",gap:"0 10px",marginTop:6}}>
+              <code style={{color:"#4ade80"}}>get/set/del</code><span>→ string key ops</span>
+              <code style={{color:"#60a5fa"}}>incr/decr</code><span>→ atomic counters</span>
+              <code style={{color:"#a78bfa"}}>lpush/rpop</code><span>→ queue (list head/tail)</span>
+              <code style={{color:"#f59e0b"}}>sadd/smembers</code><span>→ set ops</span>
+              <code style={{color:"#94a3b8"}}>hset/hget/hgetall</code><span>→ hash ops</span>
+              <code style={{color:"#64748b"}}>expire/ttl/exists</code><span>→ key metadata</span>
+            </div>
           </div>
         )}
         {node.data.type === "action.run_script" && (
@@ -2431,6 +2457,21 @@ function NodeEditorModal({ node, onChange, onDelete, onClose, edges, allNodes, c
             {node.data.type==="action.http_request"&&(
               <div style={{background:"#0f1117",border:"1px solid #2a2d3e",borderRadius:6,padding:"8px 10px",fontSize:10,color:"#94a3b8",marginTop:6}}>
                 Output: <code style={{color:"#a78bfa"}}>{"{ status, ok, body, headers }"}</code>
+              </div>
+            )}
+            {node.data.type==="action.redis"&&(
+              <div style={{background:"#0f1117",border:"1px solid #2a2d3e",borderRadius:6,padding:"8px 10px",fontSize:10,color:"#94a3b8",marginTop:6,lineHeight:1.8}}>
+                <div style={{color:"#dc2626",fontWeight:600,marginBottom:4}}>🟥 Redis</div>
+                Credential url: <code style={{color:"#a78bfa"}}>redis://[:pass@]host:6379/0</code><br/>
+                <div style={{display:"grid",gridTemplateColumns:"auto 1fr",gap:"0 10px",marginTop:4}}>
+                  <code style={{color:"#4ade80"}}>get</code><span>→ {"{ value, key, exists }"}</span>
+                  <code style={{color:"#4ade80"}}>set</code><span>→ {"{ ok, key, value }"} (set ttl for expiry)</span>
+                  <code style={{color:"#60a5fa"}}>incr/decr</code><span>→ {"{ value, key }"}</span>
+                  <code style={{color:"#a78bfa"}}>lpush/rpop</code><span>→ {"{ length/value, key }"}</span>
+                  <code style={{color:"#f59e0b"}}>smembers</code><span>→ {"{ members[], count }"}</span>
+                  <code style={{color:"#94a3b8"}}>hgetall</code><span>→ {"{ data{}, count }"}</span>
+                  <code style={{color:"#64748b"}}>lrange</code><span>→ {"{ items[], count }"}</span>
+                </div>
               </div>
             )}
 
