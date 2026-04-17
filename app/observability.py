@@ -14,7 +14,6 @@ Prometheus /metrics endpoint (in app/routers/admin.py):
 """
 import logging
 import time
-from typing import Callable
 from starlette.requests import Request
 from starlette.responses import Response
 from starlette.types import ASGIApp, Receive, Scope, Send

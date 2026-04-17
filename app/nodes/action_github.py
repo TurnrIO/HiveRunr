@@ -1,5 +1,4 @@
 """GitHub API action node."""
-import os
 import json
 from app.nodes._utils import _render, _resolve_cred_raw
 

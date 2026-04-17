@@ -14,16 +14,13 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 from typing import Optional
 
-from app.deps import _check_admin, _require_owner, ROLE_LEVELS
+from app.deps import _check_admin, _require_owner
 from app.core.db import (
     create_workspace, get_workspace, get_workspace_by_slug,
     list_workspaces, update_workspace, delete_workspace,
     list_workspace_members, get_workspace_member,
     set_workspace_member, remove_workspace_member,
-    list_user_workspaces, get_default_workspace,
-    get_user_by_id, list_users,
-    log_audit, WORKSPACE_ROLE_LEVELS, _slugify,
-    get_workspace_usage, PLAN_LIMITS,
+    list_user_workspaces, get_user_by_id, log_audit, WORKSPACE_ROLE_LEVELS, _slugify,
 )
 
 log = logging.getLogger(__name__)
@@ -214,24 +211,6 @@ def api_remove_member(workspace_id: int, user_id: int, request: Request):
               {"user_id": user_id},
               request.client.host if request.client else None)
     return {"ok": True}
-
-
-# ── Usage + plan limits ────────────────────────────────────────────────────────
-@router.get("/api/workspaces/{workspace_id}/usage")
-def api_workspace_usage(workspace_id: int, request: Request):
-    """Return usage stats + plan limits for a workspace."""
-    user = _check_admin(request)
-    ws = get_workspace(workspace_id)
-    if not ws:
-        raise HTTPException(404, "Workspace not found")
-    if user.get("role") != "owner":
-        member = get_workspace_member(workspace_id, user.get("id", -1))
-        if not member:
-            raise HTTPException(403, "You are not a member of this workspace")
-    usage = get_workspace_usage(workspace_id)
-    plan = ws.get("plan", "free")
-    limits = PLAN_LIMITS.get(plan, PLAN_LIMITS["free"])
-    return {"plan": plan, "usage": usage, "limits": limits}
 
 
 # ── Current user's workspace context ──────────────────────────────────────────

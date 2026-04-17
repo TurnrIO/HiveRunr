@@ -9,11 +9,9 @@ New in v12:
   - _run_one_node() extracted for use by the single-node test endpoint
 """
 import os
-import re
 import json
 import time
 import logging
-import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any
 

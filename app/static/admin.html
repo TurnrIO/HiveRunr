@@ -1896,16 +1896,18 @@ function Schedules({ showToast, user }) {
 
 // ── Logs ──────────────────────────────────────────────────────────────────
 function Logs({ showToast }) {
-  const [runs, setRuns]           = useState([]);
-  const [total, setTotal]         = useState(0);
-  const [page, setPage]           = useState(1);
-  const [pages, setPages]         = useState(1);
-  const PAGE_SIZE                 = 50;
-  const [loading, setLoading]     = useState(true);
-  const [selected, setSelected]   = useState(null);
-  const [search, setSearch]       = useState("");
+  const [runs, setRuns]               = useState([]);
+  const [total, setTotal]             = useState(0);
+  const [page, setPage]               = useState(1);
+  const [pages, setPages]             = useState(1);
+  const PAGE_SIZE                     = 50;
+  const [loading, setLoading]         = useState(true);
+  const [selected, setSelected]       = useState(null);      // detail-pane run id
+  const [checked, setChecked]         = useState(new Set()); // bulk-select ids
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [search, setSearch]           = useState("");
   const [searchInput, setSearchInput] = useState("");
-  const [statusFilter, setStatus] = useState("all");
+  const [statusFilter, setStatus]     = useState("all");
 
   const load = async (pg, st, sq) => {
     setLoading(true);
@@ -1925,16 +1927,41 @@ function Logs({ showToast }) {
   useEffect(()=>{ load(1, statusFilter, search); },[]);
 
   const handleStatusChange = (val) => {
-    setStatus(val); setPage(1); setSelected(null);
+    setStatus(val); setPage(1); setSelected(null); setChecked(new Set());
     load(1, val, search);
   };
   const handleSearch = (val) => {
-    setSearch(val); setPage(1); setSelected(null);
+    setSearch(val); setPage(1); setSelected(null); setChecked(new Set());
     load(1, statusFilter, val);
   };
   const goToPage = (pg) => {
-    setPage(pg); setSelected(null);
+    setPage(pg); setSelected(null); setChecked(new Set());
     load(pg, statusFilter, search);
+  };
+
+  // Bulk selection helpers
+  const toggleCheck = (id, e) => {
+    e.stopPropagation();
+    setChecked(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  };
+  const allChecked = runs.length > 0 && runs.every(r => checked.has(r.id));
+  const toggleAll  = () => setChecked(allChecked ? new Set() : new Set(runs.map(r => r.id)));
+
+  const bulkDelete = async () => {
+    if (!checked.size) return;
+    setBulkDeleting(true);
+    try {
+      const res = await api("POST", "/api/runs/bulk-delete", {ids: [...checked]});
+      showToast(`Deleted ${res.deleted} run${res.deleted !== 1 ? "s" : ""}`);
+      setChecked(new Set());
+      if (selected && checked.has(selected)) setSelected(null);
+      load(page, statusFilter, search);
+    } catch(e) { showToast(e.message, "error"); }
+    setBulkDeleting(false);
   };
 
   const STATUS_COLOR = {succeeded:"#4ade80",failed:"#f87171",dead:"#ef4444",retrying:"#fb923c",running:"#34d399",queued:"#60a5fa",cancelled:"#9ca3af"};
@@ -1980,23 +2007,43 @@ function Logs({ showToast }) {
           <option value="cancelled">Cancelled</option>
         </select>
         <button className="btn btn-ghost" aria-label="Refresh run logs" onClick={()=>load(page, statusFilter, search)}>↻ Refresh</button>
+        {checked.size > 0 && (
+          <button className="btn btn-danger" style={{marginLeft:4}} disabled={bulkDeleting}
+            onClick={bulkDelete}>
+            {bulkDeleting ? "Deleting…" : `Delete selected (${checked.size})`}
+          </button>
+        )}
         <span style={{marginLeft:"auto",fontSize:12,color:"#64748b"}}>{total} run{total!==1?"s":""}</span>
       </div>
 
-      <div style={{display:"grid",gridTemplateColumns:"340px 1fr",gap:16,alignItems:"start"}}>
+      <div style={{display:"grid",gridTemplateColumns:"minmax(260px,340px) 1fr",gap:16,alignItems:"start"}}>
         {/* Run list + pagination */}
         <div>
           <div style={{background:"#1a1d2e",border:"1px solid #2a2d3e",borderRadius:10,overflow:"hidden"}}>
+            {/* Select-all header row */}
+            {!loading && runs.length > 0 && (
+              <div style={{padding:"6px 14px",borderBottom:"1px solid #2a2d3e",display:"flex",alignItems:"center",gap:8,background:"#13161f"}}>
+                <input type="checkbox" checked={allChecked} onChange={toggleAll}
+                  style={{width:14,height:14,cursor:"pointer",accentColor:"#7c3aed"}}
+                  title={allChecked ? "Deselect all" : "Select all on this page"}/>
+                <span style={{fontSize:11,color:"#64748b"}}>{allChecked ? "Deselect all" : "Select all"}</span>
+                {checked.size > 0 && <span style={{fontSize:11,color:"#a78bfa",marginLeft:4}}>{checked.size} selected</span>}
+              </div>
+            )}
             {loading && <div className="empty-state" style={{padding:"30px 0"}}>Loading…</div>}
             {!loading && runs.length===0 && <div className="empty-state" style={{padding:"30px 0"}}>No runs match.</div>}
             {runs.map(r=>(
               <div key={r.id} onClick={()=>setSelected(r.id===selected?null:r.id)}
                 style={{padding:"10px 14px",borderBottom:"1px solid #1e2235",cursor:"pointer",
-                  background:selected===r.id?"#252840":"transparent",
-                  borderLeft:`3px solid ${selected===r.id?"#7c3aed":"transparent"}`,
-                  transition:"background .12s"}}>
+                  background:checked.has(r.id)?"#1e1a35":selected===r.id?"#252840":"transparent",
+                  borderLeft:`3px solid ${checked.has(r.id)?"#7c3aed":selected===r.id?"#7c3aed":"transparent"}`,
+                  transition:"background .12s",display:"flex",gap:10,alignItems:"flex-start"}}>
+                <input type="checkbox" checked={checked.has(r.id)}
+                  onClick={e=>toggleCheck(r.id,e)} onChange={()=>{}}
+                  style={{marginTop:3,flexShrink:0,width:14,height:14,cursor:"pointer",accentColor:"#7c3aed"}}/>
+                <div style={{flex:1,minWidth:0}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:3}}>
-                  <span style={{fontWeight:600,fontSize:13,color:"#e2e8f0"}}>
+                  <span style={{fontWeight:600,fontSize:13,color:"#e2e8f0",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
                     {r.flow_name || `run #${r.id}`}
                   </span>
                   <div style={{display:"flex",gap:5,alignItems:"center"}}>
@@ -2019,6 +2066,7 @@ function Logs({ showToast }) {
                   {(r.traces||[]).length > 0 &&
                     <span style={{marginLeft:6}}>{r.traces.length} node{r.traces.length!==1?"s":""}</span>}
                 </div>
+                </div>{/* end flex:1 wrapper */}
               </div>
             ))}
           </div>

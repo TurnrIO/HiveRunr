@@ -12,8 +12,6 @@ Output (mode=list):    { items: [...], count: N }
 Output (mode=dict):    { result: {...}, count: N }  (dicts merged, last wins)
 Output (mode=concat):  { result: "...", count: N }
 """
-import json
-from app.nodes._utils import _render
 
 NODE_TYPE = "action.aggregate"
 LABEL = "Aggregate"

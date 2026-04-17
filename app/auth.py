@@ -1,5 +1,5 @@
 """Authentication helpers — session-cookie based auth (v12)."""
-import hashlib, os, secrets
+import hashlib, secrets
 import bcrypt
 from fastapi import Request
 
@@ -11,15 +11,6 @@ from app.core.db import (
 
 SESSION_COOKIE = "hr_session"
 SESSION_DAYS   = 30
-
-
-def is_secure_context() -> bool:
-    """Return True when the app is served over HTTPS.
-
-    Used to set ``secure=True`` on session cookies so they are never sent
-    over plain HTTP when running in production.
-    """
-    return os.environ.get("APP_URL", "http://localhost").startswith("https://")
 
 
 def hash_password(password: str) -> str:

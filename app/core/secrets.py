@@ -103,8 +103,7 @@ def _load_aws() -> None:
         return
 
     try:
-        import boto3
-        from botocore.exceptions import ClientError
+        import boto3  # noqa: F401 (used below via boto3.client)
     except ImportError:
         log.error(
             "boto3 is not installed — run 'pip install boto3' to use the AWS provider"

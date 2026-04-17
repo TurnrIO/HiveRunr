@@ -1,11 +1,9 @@
 """Auth, user management, and API token routers."""
 import logging
-import os
 import secrets as _sec
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse, Response, RedirectResponse
 from pydantic import BaseModel
-from typing import Optional
 
 from app.deps import _check_admin, _require_writer, _require_owner, _resolve_workspace
 
@@ -75,7 +73,6 @@ from app.core.db import (
     consume_password_reset_token,
     log_audit,
     get_invite_by_hash, consume_invite_token, set_flow_permission, get_user_by_email,
-    create_workspace, set_workspace_member,
 )
 
 router = APIRouter()
@@ -107,12 +104,10 @@ def auth_status(request: Request):
     from app.crypto import encryption_configured
     setup_needed = not users_exist()
     user = get_current_user(request)
-    allow_signup = os.environ.get("ALLOW_SIGNUP", "false").lower() == "true"
     return {
         "setup_needed": setup_needed,
         "logged_in": user is not None,
         "encryption_configured": encryption_configured(),
-        "allow_signup": allow_signup,
         "user": {"id": user["id"], "username": user["username"],
                  "email": user["email"], "role": user["role"]} if user else None,
     }
@@ -126,7 +121,7 @@ class SetupBody(BaseModel):
 
 @router.post("/api/auth/setup")
 def auth_setup(body: SetupBody):
-    from app.auth import hash_password, hash_token, generate_token, SESSION_COOKIE, SESSION_DAYS, is_secure_context
+    from app.auth import hash_password, hash_token, generate_token, SESSION_COOKIE, SESSION_DAYS
     if users_exist():
         raise HTTPException(400, "Setup already completed — an owner account already exists")
     if len(body.password) < 8:
@@ -138,7 +133,7 @@ def auth_setup(body: SetupBody):
     resp = JSONResponse({"ok": True, "user": {"id": user["id"],
                          "username": user["username"], "role": user["role"]}})
     resp.set_cookie(SESSION_COOKIE, token, httponly=True, samesite="lax",
-                    max_age=SESSION_DAYS * 86400, secure=is_secure_context())
+                    max_age=SESSION_DAYS * 86400)
     return resp
 
 
@@ -149,7 +144,7 @@ class LoginBody(BaseModel):
 
 @router.post("/api/auth/login")
 def auth_login(body: LoginBody, request: Request):
-    from app.auth import verify_password, hash_token, generate_token, SESSION_COOKIE, SESSION_DAYS, is_secure_context
+    from app.auth import verify_password, hash_token, generate_token, SESSION_COOKIE, SESSION_DAYS
     # Prefer X-Forwarded-For (set by Caddy/nginx) so we rate-limit the real client
     ip = (request.headers.get("x-forwarded-for", "").split(",")[0].strip()
           or request.client.host
@@ -165,7 +160,7 @@ def auth_login(body: LoginBody, request: Request):
     resp = JSONResponse({"ok": True, "user": {"id": user["id"],
                          "username": user["username"], "role": user["role"]}})
     resp.set_cookie(SESSION_COOKIE, token, httponly=True, samesite="lax",
-                    max_age=SESSION_DAYS * 86400, secure=is_secure_context())
+                    max_age=SESSION_DAYS * 86400)
     return resp
 
 
@@ -396,23 +391,13 @@ def auth_forgot_password(body: ForgotPasswordBody):
             create_password_reset_token(owner["id"], token_hash, expires_at)
             app_url   = os.environ.get("APP_URL", "http://localhost").rstrip("/")
             reset_url = f"{app_url}/reset-password?token={raw_token}"
-            sent = send_password_reset(
+            send_password_reset(
                 to=owner["email"],
                 reset_url=reset_url,
                 username=owner["username"],
             )
-            if not sent:
-                log.error("forgot-password: email delivery failed for owner %s", owner["id"])
-                raise HTTPException(
-                    503,
-                    "Email delivery failed. Check that AGENTMAIL_API_KEY and AGENTMAIL_FROM "
-                    "are correctly configured, then try again."
-                )
-        except HTTPException:
-            raise
         except Exception as exc:
             log.error("forgot-password: %s", exc)
-            raise HTTPException(500, "An error occurred while sending the reset email.")
 
     return {"ok": True, "message": "If that email matches the owner account, a reset link has been sent."}
 
@@ -451,7 +436,7 @@ def invite_accept(token: str, request: Request):
     3. Otherwise → return 200 with {needs_signup: true, token, email, role, graph_name}
        so the frontend can redirect to a pre-filled registration form.
     """
-    from app.auth import hash_token, generate_token, SESSION_COOKIE, SESSION_DAYS, is_secure_context
+    from app.auth import hash_token, generate_token, SESSION_COOKIE, SESSION_DAYS
 
     token_hash = hash_token(token)
     invite     = get_invite_by_hash(token_hash)
@@ -481,7 +466,7 @@ def invite_accept(token: str, request: Request):
             "graph_name": graph_name,
         })
         resp.set_cookie(SESSION_COOKIE, sess_token, httponly=True, samesite="lax",
-                        max_age=SESSION_DAYS * 86400, secure=is_secure_context())
+                        max_age=SESSION_DAYS * 86400)
         return resp
 
     # New user — return info so the frontend can show a signup form
@@ -509,7 +494,7 @@ def invite_signup(body: InviteSignupBody, request: Request):
     Validates the invite token, creates the account (viewer global role),
     grants the per-flow permission, consumes the token, and logs the user in.
     """
-    from app.auth import hash_token, hash_password, generate_token, SESSION_COOKIE, SESSION_DAYS, is_secure_context
+    from app.auth import hash_token, hash_password, generate_token, SESSION_COOKIE, SESSION_DAYS
     from fastapi.responses import JSONResponse
 
     if len(body.password) < 8:
@@ -558,75 +543,5 @@ def invite_signup(body: InviteSignupBody, request: Request):
         "role": role,
     })
     resp.set_cookie(SESSION_COOKIE, sess_token, httponly=True, samesite="lax",
-                    max_age=SESSION_DAYS * 86400, secure=is_secure_context())
-    return resp
-
-
-# ── Self-serve signup (SaaS) ──────────────────────────────────────────────────
-class SignupBody(BaseModel):
-    username: str
-    email: str
-    password: str
-    workspace_name: Optional[str] = None
-
-
-@router.post("/api/auth/signup")
-def auth_signup(body: SignupBody, request: Request):
-    """Self-serve signup: create an account + a new workspace.
-
-    Only available when ALLOW_SIGNUP=true is set in the environment.
-    The new user gets global role 'viewer' and is the 'owner' of their
-    own workspace.
-    """
-    from app.auth import hash_password, hash_token, generate_token, SESSION_COOKIE, SESSION_DAYS, is_secure_context
-    from app.deps import WORKSPACE_COOKIE
-
-    if os.environ.get("ALLOW_SIGNUP", "false").lower() != "true":
-        raise HTTPException(403, "Self-serve signup is not enabled on this instance")
-
-    if len(body.password) < 8:
-        raise HTTPException(422, "Password must be at least 8 characters")
-    if not body.username.strip():
-        raise HTTPException(422, "Username is required")
-    if not body.email.strip():
-        raise HTTPException(422, "Email is required")
-
-    # Create user (global viewer)
-    try:
-        new_user = create_user(
-            body.username.strip(),
-            body.email.strip().lower(),
-            hash_password(body.password),
-            role="viewer",
-        )
-    except Exception as exc:
-        raise HTTPException(400, str(exc))
-
-    # Create a personal workspace
-    ws_name = (body.workspace_name or "").strip() or f"{body.username.strip()}'s Workspace"
-    try:
-        ws = create_workspace(ws_name, plan="free")
-        set_workspace_member(ws["id"], new_user["id"], "owner")
-    except Exception as exc:
-        log.warning("Could not create workspace for new user %s: %s", new_user["id"], exc)
-        ws = None
-
-    log_audit(new_user["username"], "user.signup", "user", new_user["id"],
-              {"username": new_user["username"], "workspace": ws_name if ws else None},
-              request.client.host if request.client else None)
-
-    sess_token = generate_token()
-    create_session(new_user["id"], hash_token(sess_token))
-
-    resp = JSONResponse({
-        "ok": True,
-        "user": {"id": new_user["id"], "username": new_user["username"], "role": new_user["role"]},
-        "workspace": {"id": ws["id"], "name": ws["name"]} if ws else None,
-    })
-    _secure = is_secure_context()
-    resp.set_cookie(SESSION_COOKIE, sess_token, httponly=True, samesite="lax",
-                    max_age=SESSION_DAYS * 86400, secure=_secure)
-    if ws:
-        resp.set_cookie(WORKSPACE_COOKIE, str(ws["id"]), httponly=True, samesite="lax",
-                        max_age=SESSION_DAYS * 86400, secure=_secure)
+                    max_age=SESSION_DAYS * 86400)
     return resp

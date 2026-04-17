@@ -7,7 +7,7 @@ import os
 import logging
 from pathlib import Path
 from fastapi import FastAPI, Header, HTTPException, Request
-from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -73,7 +73,6 @@ def _validate_config() -> None:
     (missing DB or Redis).  All other issues are warnings only — the app
     still starts so you can use the System page to diagnose them.
     """
-    import sys
 
     # ── Fatal: Database ───────────────────────────────────────────────────────
     db_url = os.environ.get("DATABASE_URL", "")

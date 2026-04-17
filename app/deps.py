@@ -1,14 +1,13 @@
 """Shared FastAPI dependencies — auth guards used across all routers."""
 import logging
-import os
 from fastapi import HTTPException, Request
 from fastapi.responses import RedirectResponse
 
 from app.core.db import (
     users_exist, get_api_token_by_hash, touch_api_token,
     get_flow_permission, FLOW_ROLE_LEVELS,
-    get_workspace, get_workspace_by_slug, get_workspace_member,
-    list_user_workspaces, get_default_workspace, WORKSPACE_ROLE_LEVELS,
+    get_workspace, get_workspace_member,
+    list_user_workspaces, get_default_workspace,
 )
 
 ROLE_LEVELS = {"viewer": 0, "admin": 1, "owner": 2}
@@ -182,13 +181,6 @@ def _resolve_workspace(request: Request, user: dict) -> int | None:
             return ws_id
         member = get_workspace_member(ws_id, uid)
         return ws_id if member else None
-
-    # 0. Subdomain-resolved workspace (highest priority — set by SubdomainWorkspaceMiddleware)
-    subdomain_ws_id = getattr(request.state, "subdomain_workspace_id", None)
-    if subdomain_ws_id:
-        result = _validate(subdomain_ws_id)
-        if result:
-            return result
 
     # 1. Explicit header
     header_val = request.headers.get("X-Workspace-Id", "").strip()

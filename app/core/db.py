@@ -314,6 +314,18 @@ def delete_run(run_id):
     with get_conn() as conn:
         conn.cursor().execute("DELETE FROM runs WHERE id=%s", (run_id,))
 
+def bulk_delete_runs(ids: list) -> int:
+    """Delete multiple runs by ID list. Returns the number actually deleted."""
+    if not ids:
+        return 0
+    with get_conn() as conn:
+        cur = conn.cursor()
+        cur.execute(
+            "DELETE FROM runs WHERE id = ANY(%s)",
+            (list(ids),),
+        )
+        return cur.rowcount
+
 def clear_runs():
     with get_conn() as conn:
         conn.cursor().execute("DELETE FROM runs")

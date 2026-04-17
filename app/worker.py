@@ -6,8 +6,8 @@ from celery import Celery
 from app.core.secrets import load_secrets
 load_secrets()
 from app.core.db import (
-    get_run_by_task, update_run,
-    list_workflows, get_graph
+    update_run,
+    get_graph
 )
 
 SCRIPTS_DIR = Path(__file__).parent / 'workflows'

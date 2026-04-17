@@ -8,15 +8,15 @@ from typing import Optional
 from app.deps import _check_admin, _check_flow_access, _resolve_workspace, ROLE_LEVELS
 from app.core.db import (
     list_graphs, create_graph, get_graph, update_graph, delete_graph,
-    get_graph_by_slug, get_graph_by_name, duplicate_graph,
+    get_graph_by_slug, duplicate_graph,
     list_graph_versions, save_graph_version, get_graph_version,
     sync_graph_schedules,
     get_graph_alerts, update_graph_alerts,
     log_audit,
-    get_user_by_id, get_user_by_username, list_users,
+    get_user_by_id, list_users,
     list_flow_permissions, set_flow_permission, delete_flow_permission,
     get_permitted_graph_ids, FLOW_ROLE_LEVELS,
-    create_invite_token, get_invite_by_hash,
+    create_invite_token,
 )
 from app.worker import enqueue_graph
 
@@ -153,44 +153,6 @@ def api_graphs_reseed(request: Request):
     return {"seeded": n, "message": f"Re-seeded {n} missing example flow(s)"}
 
 
-# ── Flow import ───────────────────────────────────────────────────────────────
-class ImportBody(BaseModel):
-    name: Optional[str] = None
-    description: Optional[str] = None
-    graph_data: dict = {}
-
-    class Config:
-        extra = "allow"   # accept full bundle JSON without rejecting unknown keys
-
-
-@router.post("/api/graphs/import")
-def api_import_graph(body: ImportBody, request: Request):
-    """Create a new flow from an exported bundle.
-
-    Accepts the full export bundle (``hiverunr_export``, ``schema_version``,
-    ``credential_slots``, etc.) or a minimal ``{name, description, graph_data}``
-    dict.  Unknown fields are silently ignored.
-    """
-    user = _check_admin(request)
-    if not _is_admin_or_owner(user):
-        raise HTTPException(403, "Importing flows requires admin or owner role")
-    workspace_id = _resolve_workspace(request, user)
-
-    name = (body.name or "Imported flow").strip()
-    if not name.endswith("(imported)"):
-        name = f"{name} (imported)"
-    description = (body.description or "").strip()
-    graph_data  = body.graph_data or {}
-
-    g = create_graph(name, description, json.dumps(graph_data), workspace_id=workspace_id)
-    _sync_cron_triggers(g['id'], graph_data)
-    save_graph_version(g['id'], name, json.dumps(graph_data), note="Imported")
-    log_audit(user["username"], "graph.import", "graph", g["id"],
-              {"name": name},
-              request.client.host if request.client else None)
-    return _graph_with_data(g)
-
-
 # ── Single-node test ─────────────────────────────────────────────────────────
 class NodeTestBody(BaseModel):
     input: dict = {}
@@ -228,9 +190,7 @@ def api_test_node(graph_id: int, node_id: str, body: NodeTestBody, request: Requ
 
     try:
         from app.core.db import load_all_credentials
-        from app.deps import _resolve_workspace
-        workspace_id = _resolve_workspace(request, user)
-        creds = load_all_credentials(workspace_id=workspace_id)
+        creds = load_all_credentials()
     except Exception:
         creds = {}
 
@@ -350,66 +310,6 @@ def api_restore_version(graph_id: int, version_id: int, request: Request):
               {"name": g["name"], "version_id": version_id, "version": v.get("version")},
               request.client.host if request.client else None)
     return _graph_with_data(get_graph(graph_id))
-
-
-# ── Flow export ───────────────────────────────────────────────────────────────
-@router.get("/api/graphs/{graph_id}/export")
-def api_export_graph(graph_id: int, request: Request):
-    """Return a self-contained JSON bundle suitable for backup, sharing, or
-    dev→prod promotion.
-
-    The bundle includes ``graph_data`` (nodes + edges), ``credential_slots``
-    (credential names referenced by nodes — values are never included), and
-    metadata.  The response carries a ``Content-Disposition: attachment`` header
-    so browsers treat it as a file download.
-    """
-    import datetime
-    from fastapi.responses import JSONResponse
-
-    user = _check_admin(request)
-    g = get_graph(graph_id)
-    if not g:
-        raise HTTPException(404, "Graph not found")
-    if not _is_admin_or_owner(user) and user.get("id", 0) != 0:
-        _check_flow_access(request, graph_id, "viewer")
-
-    try:
-        graph_data = json.loads(g.get('graph_json') or '{}')
-    except Exception:
-        graph_data = {}
-
-    # Collect credential slot names (names only — secrets are never exported)
-    cred_slots: set[str] = set()
-    for node in graph_data.get('nodes', []):
-        cfg = node.get('data', {}).get('config', {})
-        cred = cfg.get('credential', '')
-        if isinstance(cred, str) and cred.strip():
-            cred_slots.add(cred.strip())
-
-    bundle = {
-        "hiverunr_export": True,
-        "schema_version": 1,
-        "name": g['name'],
-        "description": g.get('description', ''),
-        "graph_data": graph_data,
-        "credential_slots": sorted(cred_slots),
-        "exported_at": datetime.datetime.utcnow().isoformat() + "Z",
-        "exported_by": user.get('username', 'unknown'),
-    }
-
-    safe_name = "".join(
-        c if c.isalnum() or c in "-_ " else "_" for c in g['name']
-    ).strip().replace(" ", "_")
-    filename = f"{safe_name}.flow.json"
-
-    log_audit(user["username"], "graph.export", "graph", graph_id,
-              {"name": g["name"]},
-              request.client.host if request.client else None)
-
-    return JSONResponse(
-        content=bundle,
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
-    )
 
 
 # ── Per-flow alert configuration ──────────────────────────────────────────────
