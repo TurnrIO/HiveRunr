@@ -324,7 +324,7 @@ const {
 
 // ReactFlow UMD exposes library as window.ReactFlow; alias component to FlowCanvas
 const {
-  ReactFlow: FlowCanvas, ReactFlowProvider, addEdge, Background, Controls, MiniMap, Panel,
+  ReactFlow: FlowCanvas, ReactFlowProvider, addEdge, Background, Controls, MiniMap,
   Handle, Position, useNodesState, useEdgesState, useReactFlow,
   MarkerType, BackgroundVariant
 } = ReactFlow;
@@ -2603,39 +2603,65 @@ function PermissionsModal({ isOpen, onClose, graphId, showToast }) {
 }
 
 // ── Keyboard Shortcuts cheatsheet ─────────────────────────────────────────────
+// Shortcuts are grouped: {section} entries render a header row, {key,desc} entries render a shortcut
 const CANVAS_SHORTCUTS = [
-  { key:"Ctrl + S",        desc:"Save flow" },
-  { key:"Ctrl + Z",        desc:"Undo" },
-  { key:"Ctrl + Y",        desc:"Redo" },
-  { key:"Escape",          desc:"Deselect node / close panel" },
-  { key:"Delete",          desc:"Delete selected node" },
-  { key:"?",               desc:"Toggle this cheatsheet" },
+  { section:"Flow management" },
+  { key:"Ctrl + S",           desc:"Save flow" },
+  { key:"Ctrl + Z",           desc:"Undo" },
+  { key:"Ctrl + Y",           desc:"Redo  (Mac: Ctrl + Shift + Z)" },
+  { section:"Nodes" },
+  { key:"Click node",         desc:"Select & open config panel" },
+  { key:"Double-click node",  desc:"Open node editor" },
+  { key:"Right-click node",   desc:"Context menu (copy ID, rename, duplicate, delete)" },
+  { key:"Delete",             desc:"Delete selected node" },
+  { key:"Drag from sidebar",  desc:"Drop a new node onto the canvas" },
+  { section:"Canvas" },
+  { key:"Escape",             desc:"Deselect / close open panel" },
+  { key:"Scroll / Pinch",     desc:"Zoom in and out" },
+  { key:"Click + drag",       desc:"Pan the canvas" },
+  { key:"Ctrl + drag node",   desc:"Move node without snapping" },
+  { section:"Other" },
+  { key:"🗺  (topbar / ⋯)",  desc:"Toggle minimap" },
+  { key:"?",                  desc:"Toggle this cheatsheet" },
 ];
+const KBD = ({children}) => (
+  <kbd style={{background:"#0f1117",border:"1px solid #374151",borderRadius:5,
+    padding:"2px 7px",fontSize:10,color:"#a78bfa",fontFamily:"monospace",
+    whiteSpace:"nowrap",boxShadow:"0 1px 0 #374151",display:"inline-block"}}>
+    {children}
+  </kbd>
+);
 function ShortcutsModal({ onClose }) {
-  const ref = useRef(null);
-  useFocusTrap(ref, onClose);
+  // Escape handler — no useFocusTrap (not defined in canvas), wire manually
+  useEffect(()=>{
+    const h = e => { if(e.key==="Escape") onClose(); };
+    document.addEventListener("keydown", h);
+    return ()=>document.removeEventListener("keydown", h);
+  },[]);
   return (
-    <div className="modal-overlay" aria-hidden="true" onClick={onClose}>
-      <div className="modal" style={{maxWidth:380,padding:"18px 20px"}} ref={ref}
-        role="dialog" aria-modal="true" aria-label="Keyboard shortcuts" onClick={e=>e.stopPropagation()}>
+    <div className="modal-overlay" aria-hidden="true"
+      onClick={e=>{ if(e.target===e.currentTarget) onClose(); }}>
+      <div className="modal" style={{maxWidth:420,padding:"18px 20px",maxHeight:"80vh",overflowY:"auto"}}
+        role="dialog" aria-modal="true" aria-label="Keyboard shortcuts">
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
           <span style={{fontWeight:700,fontSize:14,color:"#e2e8f0"}}>⌨️ Keyboard Shortcuts</span>
           <button className="btn btn-ghost btn-sm" onClick={onClose} aria-label="Close">✕</button>
         </div>
-        <div style={{display:"grid",gridTemplateColumns:"auto 1fr",gap:"10px 18px",alignItems:"center"}}>
-          {CANVAS_SHORTCUTS.map(({key,desc})=>(
-            <React.Fragment key={key}>
-              <kbd style={{background:"#0f1117",border:"1px solid #374151",borderRadius:5,
-                padding:"3px 8px",fontSize:11,color:"#a78bfa",fontFamily:"monospace",
-                whiteSpace:"nowrap",boxShadow:"0 1px 0 #374151"}}>
-                {key}
-              </kbd>
-              <span style={{color:"#94a3b8",fontSize:13}}>{desc}</span>
-            </React.Fragment>
-          ))}
-        </div>
-        <div style={{marginTop:16,paddingTop:12,borderTop:"1px solid #2a2d3e",fontSize:11,color:"#475569",textAlign:"center"}}>
-          Tip: press <kbd style={{background:"#0f1117",border:"1px solid #374151",borderRadius:4,padding:"1px 6px",fontSize:10,color:"#a78bfa",fontFamily:"monospace"}}>?</kbd> anywhere on the canvas to show this
+        {CANVAS_SHORTCUTS.map((row,i)=>
+          row.section
+            ? <div key={i} style={{fontSize:10,color:"#6366f1",fontWeight:700,textTransform:"uppercase",
+                letterSpacing:".06em",margin:i===0?"0 0 8px":"14px 0 8px",paddingBottom:5,
+                borderBottom:"1px solid #1e2235"}}>
+                {row.section}
+              </div>
+            : <div key={i} style={{display:"flex",alignItems:"center",gap:12,marginBottom:7}}>
+                <KBD>{row.key}</KBD>
+                <span style={{color:"#94a3b8",fontSize:12,flex:1}}>{row.desc}</span>
+              </div>
+        )}
+        <div style={{marginTop:16,paddingTop:12,borderTop:"1px solid #2a2d3e",
+          fontSize:11,color:"#475569",textAlign:"center"}}>
+          Press <KBD>?</KBD> or use <strong style={{color:"#64748b"}}>⋯ → Keyboard shortcuts</strong> to reopen
         </div>
       </div>
     </div>
@@ -3540,23 +3566,6 @@ function App(){
                 }}
               />
             )}
-            {/* Floating minimap toggle — stays visible even on mobile */}
-            <Panel position="bottom-left" style={{marginBottom:52,marginLeft:8}}>
-              <button
-                onClick={()=>setShowMap(m=>!m)}
-                title={showMap?"Hide minimap":"Show minimap"}
-                aria-label="Toggle minimap"
-                style={{
-                  background:"#1a1d2e",border:"1px solid #2a2d3e",borderRadius:6,
-                  color:showMap?"#a78bfa":"#475569",cursor:"pointer",
-                  padding:"4px 8px",fontSize:14,lineHeight:1,
-                  transition:"color .15s,border-color .15s",
-                  boxShadow:"0 2px 8px rgba(0,0,0,.3)"
-                }}
-                onMouseEnter={e=>{e.currentTarget.style.borderColor="#7c3aed";e.currentTarget.style.color="#a78bfa";}}
-                onMouseLeave={e=>{e.currentTarget.style.borderColor="#2a2d3e";e.currentTarget.style.color=showMap?"#a78bfa":"#475569";}}
-              >🗺</button>
-            </Panel>
           </FlowCanvas>
         </div>
         {/* Slim right panel: only shows the empty-state hint */}
