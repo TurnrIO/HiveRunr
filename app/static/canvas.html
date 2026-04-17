@@ -2600,10 +2600,50 @@ function PermissionsModal({ isOpen, onClose, graphId, showToast }) {
   );
 }
 
+// ── Keyboard Shortcuts cheatsheet ─────────────────────────────────────────────
+const CANVAS_SHORTCUTS = [
+  { key:"Ctrl + S",        desc:"Save flow" },
+  { key:"Ctrl + Z",        desc:"Undo" },
+  { key:"Ctrl + Y",        desc:"Redo" },
+  { key:"Escape",          desc:"Deselect node / close panel" },
+  { key:"Delete",          desc:"Delete selected node" },
+  { key:"?",               desc:"Toggle this cheatsheet" },
+];
+function ShortcutsModal({ onClose }) {
+  const ref = useRef(null);
+  useFocusTrap(ref, onClose);
+  return (
+    <div className="modal-overlay" aria-hidden="true" onClick={onClose}>
+      <div className="modal" style={{maxWidth:380,padding:"18px 20px"}} ref={ref}
+        role="dialog" aria-modal="true" aria-label="Keyboard shortcuts" onClick={e=>e.stopPropagation()}>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
+          <span style={{fontWeight:700,fontSize:14,color:"#e2e8f0"}}>⌨️ Keyboard Shortcuts</span>
+          <button className="btn btn-ghost btn-sm" onClick={onClose} aria-label="Close">✕</button>
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"auto 1fr",gap:"10px 18px",alignItems:"center"}}>
+          {CANVAS_SHORTCUTS.map(({key,desc})=>(
+            <React.Fragment key={key}>
+              <kbd style={{background:"#0f1117",border:"1px solid #374151",borderRadius:5,
+                padding:"3px 8px",fontSize:11,color:"#a78bfa",fontFamily:"monospace",
+                whiteSpace:"nowrap",boxShadow:"0 1px 0 #374151"}}>
+                {key}
+              </kbd>
+              <span style={{color:"#94a3b8",fontSize:13}}>{desc}</span>
+            </React.Fragment>
+          ))}
+        </div>
+        <div style={{marginTop:16,paddingTop:12,borderTop:"1px solid #2a2d3e",fontSize:11,color:"#475569",textAlign:"center"}}>
+          Tip: press <kbd style={{background:"#0f1117",border:"1px solid #374151",borderRadius:4,padding:"1px 6px",fontSize:10,color:"#a78bfa",fontFamily:"monospace"}}>?</kbd> anywhere on the canvas to show this
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Topbar "More" dropdown ────────────────────────────────────────────────────
 function MoreMenu({ onExport, onImport, onLayout, onValidate, onHistory, onPermissions,
                     onTest, onAdmin, onUndo, onRedo, undoDisabled, redoDisabled,
-                    isAdmin, disabled }){
+                    onShortcuts, isAdmin, disabled }){
   const [open, setOpen] = useState(false);
   const wrapRef = useRef(null);
   useEffect(()=>{
@@ -2627,6 +2667,8 @@ function MoreMenu({ onExport, onImport, onLayout, onValidate, onHistory, onPermi
           <button className="tb-more-item" onClick={()=>act(onHistory)} disabled={disabled}>📜 Version history</button>
           {isAdmin && <><div className="tb-more-sep"/>
           <button className="tb-more-item" onClick={()=>act(onPermissions)} disabled={disabled}>🔐 Manage permissions</button></>}
+          <div className="tb-more-sep"/>
+          <button className="tb-more-item" onClick={()=>act(onShortcuts)}>⌨️ Keyboard shortcuts</button>
           {/* Extra items shown only when topbar secondary is hidden (mobile) */}
           <div className="tb-more-sep tb-more-mobile-extra"/>
           <button className="tb-more-item tb-more-mobile-extra" onClick={()=>act(onUndo)} disabled={undoDisabled}>↩ Undo</button>
@@ -2671,6 +2713,7 @@ function App(){
   const [inspectorRunId, setInspectorRunId] = useState(null); // selected run for inspection
   const [credentials, setCredentials]    = useState([]);   // for variable autocomplete
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false); // mobile palette drawer
+  const [showShortcuts, setShowShortcuts]         = useState(false); // keyboard cheatsheet
 
   // undo/redo
   const histRef = useRef([]);
@@ -2703,13 +2746,32 @@ function App(){
   },[]);
 
   // keyboard shortcuts
+  // Always-fresh ref for keyboard handler — avoids stale closure over state/functions
+  const kbRef = useRef({});
+  kbRef.current = {
+    saveGraph, doUndo, doRedo,
+    setSelectedNode, setSelectedEdge, setContextMenu, setRunError,
+    setShowModal, setShowTestModal, setShowHistoryModal, setShowPermissionsModal, setShowShortcuts,
+  };
   useEffect(()=>{
     function onKey(e){
+      const kb = kbRef.current;
       const mac = e.metaKey;
       const ctrl = e.ctrlKey;
-      if((ctrl||mac) && e.key==="z" && !e.shiftKey){ e.preventDefault(); doUndo() }
-      if((ctrl&&e.key==="y")||(mac&&e.shiftKey&&e.key==="z")){ e.preventDefault(); doRedo() }
-      if((ctrl||mac) && e.key==="s"){ e.preventDefault(); saveGraph() }
+      // Ctrl/Cmd shortcuts fire even from inputs
+      if((ctrl||mac) && e.key==="z" && !e.shiftKey){ e.preventDefault(); kb.doUndo(); return; }
+      if((ctrl&&e.key==="y")||(mac&&e.shiftKey&&e.key==="z")){ e.preventDefault(); kb.doRedo(); return; }
+      if((ctrl||mac) && e.key==="s"){ e.preventDefault(); kb.saveGraph(); return; }
+      // Remaining shortcuts only fire when not typing in an input
+      const tag = document.activeElement?.tagName;
+      if(tag==="INPUT"||tag==="TEXTAREA"||tag==="SELECT"||document.activeElement?.isContentEditable) return;
+      if(e.key==="Escape"){
+        kb.setContextMenu(null); kb.setSelectedEdge(null); kb.setRunError(null);
+        kb.setSelectedNode(null); kb.setShowModal(false); kb.setShowTestModal(false);
+        kb.setShowHistoryModal(false); kb.setShowPermissionsModal(false); kb.setShowShortcuts(false);
+        return;
+      }
+      if(e.key==="?"){ kb.setShowShortcuts(s=>!s); return; }
     }
     window.addEventListener("keydown", onKey);
     return ()=>window.removeEventListener("keydown", onKey);
@@ -3317,6 +3379,7 @@ function App(){
           onPermissions={()=>setShowPermissionsModal(true)}
           onTest={()=>setShowTestModal(true)}
           onAdmin={()=>{ window.location.href="/admin"; }}
+          onShortcuts={()=>setShowShortcuts(s=>!s)}
           onUndo={doUndo}
           onRedo={doRedo}
           undoDisabled={histState.idx<=0}
@@ -3543,6 +3606,7 @@ function App(){
           onRename={ctxRenameNode}
         />
       )}
+      {showShortcuts && <ShortcutsModal onClose={()=>setShowShortcuts(false)}/>}
       {toast && <Toast key={toast.key} msg={toast.msg} type={toast.type} onDone={()=>setToast(null)}/>}
     </>
   );

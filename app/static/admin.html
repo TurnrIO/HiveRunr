@@ -4040,6 +4040,43 @@ const PAGES = [
   {id:"system",      icon:"🔧", label:"System"},
 ];
 
+// ── Admin keyboard shortcuts cheatsheet ────────────────────────────────────────
+const ADMIN_SHORTCUTS = [
+  { key:"?",          desc:"Toggle this cheatsheet" },
+  { key:"Escape",     desc:"Close sidebar / cheatsheet" },
+];
+function AdminShortcutsModal({ onClose }) {
+  const ref = useRef(null);
+  useFocusTrap(ref, onClose);
+  return (
+    <div className="modal-overlay" onClick={e=>{ if(e.target.className==="modal-overlay") onClose(); }}
+      aria-hidden="true">
+      <div className="modal" style={{maxWidth:380,padding:"18px 20px"}} ref={ref}
+        role="dialog" aria-modal="true" aria-label="Keyboard shortcuts" onClick={e=>e.stopPropagation()}>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
+          <span style={{fontWeight:700,fontSize:14,color:"#e2e8f0"}}>⌨️ Keyboard Shortcuts</span>
+          <button className="btn btn-ghost btn-sm" onClick={onClose} aria-label="Close">✕</button>
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"auto 1fr",gap:"10px 18px",alignItems:"center"}}>
+          {ADMIN_SHORTCUTS.map(({key,desc})=>(
+            <React.Fragment key={key}>
+              <kbd style={{background:"#0f1117",border:"1px solid #374151",borderRadius:5,
+                padding:"3px 8px",fontSize:11,color:"#a78bfa",fontFamily:"monospace",
+                whiteSpace:"nowrap",boxShadow:"0 1px 0 #374151"}}>
+                {key}
+              </kbd>
+              <span style={{color:"#94a3b8",fontSize:13}}>{desc}</span>
+            </React.Fragment>
+          ))}
+        </div>
+        <div style={{marginTop:16,paddingTop:12,borderTop:"1px solid #2a2d3e",fontSize:11,color:"#475569",textAlign:"center"}}>
+          Press <kbd style={{background:"#0f1117",border:"1px solid #374151",borderRadius:4,padding:"1px 6px",fontSize:10,color:"#a78bfa",fontFamily:"monospace"}}>?</kbd> anywhere to show this
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function App() {
   const validIds = PAGES.map(p=>p.id);
   const hashPage = () => {
@@ -4053,6 +4090,7 @@ function App() {
   const [currentUser, setCurrentUser]      = useState(null);
   const [sidebarOpen, setSidebarOpen]      = useState(false);
   const [encryptionOk, setEncryptionOk]   = useState(true);
+  const [showShortcuts, setShowShortcuts]  = useState(false);
   const [workspaces, setWorkspaces]        = useState([]);
   const [activeWorkspace, setActiveWorkspace] = useState(null);
   const showToast = useCallback((msg, type="success") => setToast({msg,type,key:Date.now()}), []);
@@ -4078,6 +4116,17 @@ function App() {
       showToast(`OAuth failed: ${sp.get("oauth_error").replace(/_/g," ")}`, "error");
       window.history.replaceState({}, "", window.location.pathname + window.location.hash);
     }
+  },[]);
+
+  useEffect(()=>{
+    function onKey(e){
+      const tag = document.activeElement?.tagName;
+      if(tag==="INPUT"||tag==="TEXTAREA"||tag==="SELECT"||document.activeElement?.isContentEditable) return;
+      if(e.key==="?"){ setShowShortcuts(s=>!s); }
+      if(e.key==="Escape"){ setShowShortcuts(false); setSidebarOpen(false); }
+    }
+    window.addEventListener("keydown", onKey);
+    return ()=>window.removeEventListener("keydown", onKey);
   },[]);
 
   const setPage = useCallback((id) => {
@@ -4170,6 +4219,12 @@ function App() {
           <a className="ext-link" href="/health" target="_blank" rel="noopener">
             <span className="el-icon">💚</span>Health check
           </a>
+          <button className="ext-link" onClick={()=>setShowShortcuts(true)}
+            style={{background:"none",border:"none",width:"100%",textAlign:"left",cursor:"pointer"}}>
+            <span className="el-icon">⌨️</span>Keyboard shortcuts
+            <kbd style={{marginLeft:"auto",background:"#1e2235",border:"1px solid #2a2d3e",borderRadius:4,
+              padding:"1px 5px",fontSize:9,color:"#6366f1",fontFamily:"monospace"}}>?</kbd>
+          </button>
           {currentUser && (
             <div style={{marginTop:12,borderTop:"1px solid #2a2d3e",paddingTop:10}}>
               <div style={{display:"flex",alignItems:"center",gap:8,padding:"4px 8px",marginBottom:2}}>
@@ -4209,6 +4264,7 @@ function App() {
         {page==="workspaces" && <WorkspacesPage showToast={showToast} user={currentUser}/>}
         {page==="system"     && <SystemDiagnostics showToast={showToast}/>}
       </div>
+      {showShortcuts && <AdminShortcutsModal onClose={()=>setShowShortcuts(false)}/>}
       {toast && <Toast key={toast.key} msg={toast.msg} type={toast.type} onDone={()=>setToast(null)}/>}
     </>
   );
