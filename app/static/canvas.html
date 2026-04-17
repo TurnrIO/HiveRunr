@@ -36,6 +36,14 @@ body{font-family:'Inter',system-ui,sans-serif;background:#0f1117;color:#e2e8f0;h
 .tb-more-item:hover{background:#2a2d3e;color:#e2e8f0}
 .tb-more-item.danger:hover{background:#7f1d1d22;color:#f87171}
 .tb-more-sep{height:1px;background:#2a2d3e;margin:3px 0}
+/* mobile-only topbar elements (hidden on desktop) */
+.topbar-mobile-only{display:none}
+/* secondary topbar group: shown on desktop as flex row items */
+.topbar-secondary{display:contents}
+/* MoreMenu extras: hidden on desktop, shown on mobile */
+.tb-more-mobile-extra{display:none !important}
+/* sidebar backdrop for mobile overlay */
+.sidebar-backdrop{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:39}
 
 /* ── error banner ── */
 .error-banner{background:#1f0a0a;border-bottom:1px solid #7f1d1d;padding:8px 16px;display:flex;align-items:center;gap:10px;flex-shrink:0;z-index:9}
@@ -274,16 +282,32 @@ select.field-input{appearance:none;cursor:pointer;background-image:url("data:ima
   .nio-modal{width:min(600px,96vw)}
 }
 @media(max-width:768px){
-  /* Stack sidebar below topbar; canvas takes full width */
-  .canvas-layout{flex-direction:column}
-  .sidebar{width:100%;height:auto;max-height:160px;border-right:none;border-bottom:1px solid #2a2d3e;flex-direction:row;flex-wrap:wrap;overflow-y:auto}
-  .sidebar-search{width:100%;border-bottom:none;border-right:1px solid #2a2d3e}
-  .sidebar-scroll{display:flex;flex-wrap:wrap;overflow-x:auto}
-  .sidebar-title{display:none}
-  /* Config panel becomes bottom sheet */
-  .config-panel{position:fixed;bottom:0;left:0;right:0;width:100%;height:50vh;border-top:2px solid #7c3aed;border-right:none;z-index:50;border-radius:12px 12px 0 0}
-  .topbar input.name-input{width:90px}
-  /* Modals go near-fullscreen */
+  /* ── topbar: hide secondary controls, show mobile extras ── */
+  .topbar-secondary{display:none !important}
+  .topbar-mobile-only{display:flex !important}
+  .tb-more-mobile-extra{display:flex !important}
+  .topbar input.name-input{width:80px;font-size:11px}
+  .topbar .logo{font-size:13px}
+
+  /* ── canvas layout stays horizontal; sidebar is an off-canvas overlay ── */
+  .canvas-layout{flex-direction:row;position:relative}
+
+  /* ── sidebar: off-canvas overlay, toggled via .sidebar-open class ── */
+  .sidebar{
+    position:absolute;top:0;left:0;height:100%;z-index:40;
+    width:210px !important;max-height:none !important;
+    flex-direction:column;flex-shrink:0;
+    border-right:1px solid #2a2d3e;border-bottom:none;
+    transform:translateX(-100%);transition:transform .2s ease;
+    box-shadow:4px 0 24px rgba(0,0,0,.6)
+  }
+  .sidebar.sidebar-open{transform:translateX(0)}
+  .sidebar-backdrop{display:block}
+
+  /* ── config panel: hidden on mobile (NodeEditorModal handles editing) ── */
+  .config-panel{display:none !important}
+
+  /* ── modals near-fullscreen ── */
   .nio-modal,.modal-overlay .modal{width:98vw;max-height:94vh;border-radius:8px}
   .nem-overlay{align-items:flex-end}
 }
@@ -1172,7 +1196,7 @@ function NodeContextMenu({ menu, onClose, onDuplicate, onDelete, onToggleDisable
 }
 
 // ── Palette ───────────────────────────────────────────────────────────────────
-function Palette({ search, onSearch }){
+function Palette({ search, onSearch, open }){
   function onDragStart(e, type){
     e.dataTransfer.setData("application/reactflow-type", type);
     e.dataTransfer.effectAllowed = "move";
@@ -1183,7 +1207,7 @@ function Palette({ search, onSearch }){
   );
 
   return (
-    <div className="sidebar">
+    <div className={`sidebar${open ? " sidebar-open" : ""}`}>
       <div className="sidebar-search">
         <input placeholder="🔍 Search nodes…" value={search} onChange={e=>onSearch(e.target.value)}/>
       </div>
@@ -2577,7 +2601,9 @@ function PermissionsModal({ isOpen, onClose, graphId, showToast }) {
 }
 
 // ── Topbar "More" dropdown ────────────────────────────────────────────────────
-function MoreMenu({ onExport, onImport, onLayout, onValidate, onHistory, onPermissions, isAdmin, disabled }){
+function MoreMenu({ onExport, onImport, onLayout, onValidate, onHistory, onPermissions,
+                    onTest, onAdmin, onUndo, onRedo, undoDisabled, redoDisabled,
+                    isAdmin, disabled }){
   const [open, setOpen] = useState(false);
   const wrapRef = useRef(null);
   useEffect(()=>{
@@ -2601,6 +2627,13 @@ function MoreMenu({ onExport, onImport, onLayout, onValidate, onHistory, onPermi
           <button className="tb-more-item" onClick={()=>act(onHistory)} disabled={disabled}>📜 Version history</button>
           {isAdmin && <><div className="tb-more-sep"/>
           <button className="tb-more-item" onClick={()=>act(onPermissions)} disabled={disabled}>🔐 Manage permissions</button></>}
+          {/* Extra items shown only when topbar secondary is hidden (mobile) */}
+          <div className="tb-more-sep tb-more-mobile-extra"/>
+          <button className="tb-more-item tb-more-mobile-extra" onClick={()=>act(onUndo)} disabled={undoDisabled}>↩ Undo</button>
+          <button className="tb-more-item tb-more-mobile-extra" onClick={()=>act(onRedo)} disabled={redoDisabled}>↪ Redo</button>
+          <div className="tb-more-sep tb-more-mobile-extra"/>
+          <button className="tb-more-item tb-more-mobile-extra" onClick={()=>act(onTest)} disabled={disabled}>🧪 Test run</button>
+          <button className="tb-more-item tb-more-mobile-extra" onClick={()=>act(onAdmin)}>← Admin panel</button>
         </div>
       )}
     </div>
@@ -2637,6 +2670,7 @@ function App(){
   const [inspectorRuns, setInspectorRuns] = useState([]);  // recent runs for current graph
   const [inspectorRunId, setInspectorRunId] = useState(null); // selected run for inspection
   const [credentials, setCredentials]    = useState([]);   // for variable autocomplete
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false); // mobile palette drawer
 
   // undo/redo
   const histRef = useRef([]);
@@ -3281,78 +3315,96 @@ function App(){
           onValidate={()=>validateAndRun()}
           onHistory={()=>setShowHistoryModal(true)}
           onPermissions={()=>setShowPermissionsModal(true)}
+          onTest={()=>setShowTestModal(true)}
+          onAdmin={()=>{ window.location.href="/admin"; }}
+          onUndo={doUndo}
+          onRedo={doRedo}
+          undoDisabled={histState.idx<=0}
+          redoDisabled={histState.idx>=histState.len-1}
           isAdmin={currentUser && (currentUser.role === "admin" || currentUser.role === "owner")}
           disabled={!currentGraph}
         />
         <div className="tb-divider"/>
         <input className="name-input" value={graphName}
           onChange={e=>setGraphName(e.target.value)} placeholder="Flow name…"/>
-        {currentGraph && (
-          <span style={{fontSize:10,color:"#475569",whiteSpace:"nowrap"}}>
-            #{currentGraph.id}
-          </span>
-        )}
+        {/* Mobile: nodes sidebar toggle */}
+        <button className="topbar-mobile-only btn btn-ghost btn-sm"
+          onClick={()=>setMobileSidebarOpen(o=>!o)}
+          title="Toggle node palette" aria-label="Toggle node palette"
+          style={{fontSize:15,padding:"4px 8px"}}>
+          {mobileSidebarOpen ? "✕" : "📦"}
+        </button>
+        {/* Secondary controls: hidden on mobile, in MoreMenu instead */}
+        <div className="topbar-secondary">
+          {currentGraph && (
+            <span style={{fontSize:10,color:"#475569",whiteSpace:"nowrap"}}>
+              #{currentGraph.id}
+            </span>
+          )}
+        </div>
         <div className="topbar-spacer"/>
-        {/* Undo / Redo */}
-        <button className="btn btn-ghost btn-sm" onClick={doUndo}
-          disabled={histState.idx<=0} title="Undo (Ctrl+Z)">↩</button>
-        <button className="btn btn-ghost btn-sm" onClick={doRedo}
-          disabled={histState.idx>=histState.len-1} title="Redo (Ctrl+Y)">↪</button>
-        <div className="tb-divider"/>
-        <button className="btn btn-ghost btn-sm" onClick={()=>setShowMap(m=>!m)}
-          title="Toggle minimap" style={{opacity:showMap?1:0.45}}>🗺</button>
-        <div className="tb-divider"/>
-        {/* Live run inspector */}
-        <select
-          className="btn btn-ghost btn-sm"
-          style={{cursor:"pointer",maxWidth:165,padding:"2px 6px"}}
-          title="Load a past run to inspect node inputs/outputs"
-          value={inspectorRunId||""}
-          onClick={refreshInspectorRuns}
-          onChange={e=>loadInspectorRun(e.target.value||null)}
-          disabled={!currentGraph}
-        >
-          <option value="">🔬 Inspect run…</option>
-          {inspectorRuns.map(r=>(
-            <option key={r.task_id||r.id} value={r.task_id||r.id}>
-              #{r.id} {r.status==="succeeded"?"✓":r.status==="failed"?"✗":"⟳"} {r.created_at?new Date(r.created_at).toLocaleTimeString():""}
-            </option>
-          ))}
-        </select>
-        {inspectorRunId && (
-          <button className="btn btn-ghost btn-sm" style={{color:"#f87171"}} onClick={()=>loadInspectorRun(null)} title="Clear run overlay">✕</button>
-        )}
-        <div className="tb-divider"/>
-        {workspaces.length > 1 && (
+        <div className="topbar-secondary">
+          {/* Undo / Redo */}
+          <button className="btn btn-ghost btn-sm" onClick={doUndo}
+            disabled={histState.idx<=0} title="Undo (Ctrl+Z)">↩</button>
+          <button className="btn btn-ghost btn-sm" onClick={doRedo}
+            disabled={histState.idx>=histState.len-1} title="Redo (Ctrl+Y)">↪</button>
+          <div className="tb-divider"/>
+          <button className="btn btn-ghost btn-sm" onClick={()=>setShowMap(m=>!m)}
+            title="Toggle minimap" style={{opacity:showMap?1:0.45}}>🗺</button>
+          <div className="tb-divider"/>
+          {/* Live run inspector */}
           <select
             className="btn btn-ghost btn-sm"
-            style={{cursor:"pointer",maxWidth:160,padding:"2px 6px",color:"#a78bfa"}}
-            title="Switch workspace"
-            value={activeWorkspace?.id||""}
-            onChange={async e=>{
-              const wid = parseInt(e.target.value);
-              if(!wid) return;
-              try {
-                const res = await api("POST",`/api/workspaces/${wid}/switch`);
-                setActiveWorkspace(res.workspace);
-                loadGraphList();
-                showToast(`Switched to ${res.workspace.name}`);
-              } catch(err){ showToast(err.message,"error"); }
-            }}
+            style={{cursor:"pointer",maxWidth:165,padding:"2px 6px"}}
+            title="Load a past run to inspect node inputs/outputs"
+            value={inspectorRunId||""}
+            onClick={refreshInspectorRuns}
+            onChange={e=>loadInspectorRun(e.target.value||null)}
+            disabled={!currentGraph}
           >
-            {workspaces.map(w=>(
-              <option key={w.id} value={w.id}>🏢 {w.name}</option>
+            <option value="">🔬 Inspect run…</option>
+            {inspectorRuns.map(r=>(
+              <option key={r.task_id||r.id} value={r.task_id||r.id}>
+                #{r.id} {r.status==="succeeded"?"✓":r.status==="failed"?"✗":"⟳"} {r.created_at?new Date(r.created_at).toLocaleTimeString():""}
+              </option>
             ))}
           </select>
-        )}
-        {workspaces.length === 1 && activeWorkspace && (
-          <span style={{fontSize:11,color:"#6366f1",whiteSpace:"nowrap",padding:"0 4px"}}
-            title={`Workspace: ${activeWorkspace.name}`}>
-            🏢 {activeWorkspace.name}
-          </span>
-        )}
-        <a href="/admin" className="btn btn-ghost btn-sm">← Admin</a>
-        <button className="btn btn-ghost btn-sm" onClick={()=>setShowTestModal(true)} disabled={!currentGraph}>🧪 Test</button>
+          {inspectorRunId && (
+            <button className="btn btn-ghost btn-sm" style={{color:"#f87171"}} onClick={()=>loadInspectorRun(null)} title="Clear run overlay">✕</button>
+          )}
+          <div className="tb-divider"/>
+          {workspaces.length > 1 && (
+            <select
+              className="btn btn-ghost btn-sm"
+              style={{cursor:"pointer",maxWidth:160,padding:"2px 6px",color:"#a78bfa"}}
+              title="Switch workspace"
+              value={activeWorkspace?.id||""}
+              onChange={async e=>{
+                const wid = parseInt(e.target.value);
+                if(!wid) return;
+                try {
+                  const res = await api("POST",`/api/workspaces/${wid}/switch`);
+                  setActiveWorkspace(res.workspace);
+                  loadGraphList();
+                  showToast(`Switched to ${res.workspace.name}`);
+                } catch(err){ showToast(err.message,"error"); }
+              }}
+            >
+              {workspaces.map(w=>(
+                <option key={w.id} value={w.id}>🏢 {w.name}</option>
+              ))}
+            </select>
+          )}
+          {workspaces.length === 1 && activeWorkspace && (
+            <span style={{fontSize:11,color:"#6366f1",whiteSpace:"nowrap",padding:"0 4px"}}
+              title={`Workspace: ${activeWorkspace.name}`}>
+              🏢 {activeWorkspace.name}
+            </span>
+          )}
+          <a href="/admin" className="btn btn-ghost btn-sm">← Admin</a>
+          <button className="btn btn-ghost btn-sm" onClick={()=>setShowTestModal(true)} disabled={!currentGraph}>🧪 Test</button>
+        </div>
         <button className="btn btn-ghost btn-sm" onClick={saveGraph} disabled={saving} title="Save (Ctrl+S)">
           {saving ? <><span style={{animation:"spin .8s linear infinite",display:"inline-block"}}>⟳</span> Saving…</> : isDirty ? "💾 Save ●" : "💾 Save"}
         </button>
@@ -3374,8 +3426,12 @@ function App(){
       )}
 
       {/* Main layout */}
+      {/* Mobile sidebar backdrop — tap outside to close */}
+      {mobileSidebarOpen && (
+        <div className="sidebar-backdrop" onClick={()=>setMobileSidebarOpen(false)} aria-hidden="true"/>
+      )}
       <div className="canvas-layout">
-        <Palette search={paletteSearch} onSearch={setPaletteSearch}/>
+        <Palette search={paletteSearch} onSearch={setPaletteSearch} open={mobileSidebarOpen}/>
         <div className="flow-wrap" ref={reactFlowWrapper}>
           <FlowCanvas
             nodes={nodes}

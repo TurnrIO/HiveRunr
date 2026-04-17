@@ -144,7 +144,6 @@ def _rows_to_dicts(cursor, driver: str):
         return cols, [dict(r) for r in rows]
 
     if driver == "sqlite":
-        import sqlite3
         cols = [d[0] for d in (cursor.description or [])]
         rows = cursor.fetchall() or []
         return cols, [dict(zip(cols, row)) for row in rows]
@@ -199,7 +198,6 @@ def run(config: dict, inp: dict, context: dict, logger, creds=None, **kwargs) ->
         elif driver == "mysql":
             cur = db_conn.cursor()
         else:
-            import psycopg2.extras
             cur = db_conn.cursor()
 
         if params:
