@@ -178,6 +178,11 @@ OWNER_EMAIL=
 | P3-24 | Keyboard shortcuts — canvas: `Ctrl+S` save, `Ctrl+Z` undo, `Ctrl+Y`/`Ctrl+Shift+Z` redo, `Escape` deselect/close, `?` toggle cheatsheet; `kbRef = useRef({})` pattern avoids stale closures; `ShortcutsModal` 4-section / 15-entry cheatsheet; admin: `?`/`Escape` + `AdminShortcutsModal` with `useFocusTrap`; "⌨️ Keyboard shortcuts" button in sidebar footer |
 | P3-25 | Canvas minimap — `<MiniMap>` pannable + zoomable with styled colours; toggle via topbar 🗺 button (desktop) and MoreMenu (mobile); floating Panel button removed (was crashing on UMD undefined) |
 | P3-fix | Canvas bug fixes — removed `Panel` from ReactFlow UMD destructure (undefined → React crash); removed overlapping floating Panel button; replaced `useFocusTrap` call in `ShortcutsModal` (not defined in canvas) with manual Escape `useEffect`; fixed overlay click guard to `target===currentTarget`; expanded shortcuts from 5 to 15 entries across 4 sections |
+| P4-26 | Canvas search — `Ctrl+F` floating `NodeSearchBar` (text filter + group chips + jump-to via `setCenter`); 🔍 topbar button + MoreMenu item; `SEARCH_GROUPS` constant |
+| P4-27 | Replay with payload override — `GET /api/runs/{id}/payload`; `POST .../replay` body `{payload?}`; `ReplayEditModal` in canvas inspector + admin Logs/Dashboard; audit logs `payload_overridden` flag |
+| P4-28 | Templates gallery — `app/routers/templates.py` (`GET /api/templates`, `GET /api/templates/{slug}`); 9 bundled JSON templates in `app/templates/`; canvas OpenModal "Start from template" tab with category filter + 2-col cards |
+| P4-29 | Webhook improvements — HMAC-SHA256 (`X-Hub-Signature-256`), allowed-origins CORS, `OPTIONS` preflight; `WebhookUrlPanel` in NodeEditorModal; secret + allowed_origins fields in NODE_DEFS |
+| P4-30 | Sticky note enhancements — `NOTE_COLORS` palette (6 colours); StickyNote applies colour + minWidth/minHeight from config; NODE_DEFS adds colour select + width/height fields; `zIndex:-1` in all 4 node-load paths; hint panel with live colour swatches |
 
 ---
 
@@ -258,17 +263,17 @@ Pick the next item off the top. Cross it off and add a "Completed sprints" row w
 
 ---
 
-### 🔵 P4 — Power user features
+### 🔵 P4 — Power user features ✅ Done
 
-26. **Canvas search / filter** — `Ctrl+F` opens an inline search bar that highlights nodes matching by label or type; filter chips for node group (Trigger / Control / Data / Network); "jump to node" centres the viewport on a clicked result. No new API needed — pure client-side filter over `nodes[]`.
+26. ~~**Canvas search / filter**~~ ✓ — `Ctrl+F` floating search bar with text filter + group chips; jump-to-node centres viewport; 🔍 topbar button + MoreMenu item.
 
-27. **Run replay with payload override** — existing Replay button re-enqueues with the original trigger payload; add a "Replay with edits" option that opens `TestPayloadModal` pre-filled with the original payload so the user can tweak it before re-running. Extend `POST /api/runs/{task_id}/replay` to accept optional `payload` body.
+27. ~~**Run replay with payload override**~~ ✓ — `GET /api/runs/{id}/payload` + `POST .../replay` accepts optional body `{payload}`; "✏ Replay…" button opens pre-filled editor modal in both canvas inspector and admin Logs page.
 
-28. **Flow templates gallery** — new `GET /api/templates` endpoint returning a curated list of built-in flow templates (JSON bundles stored in `app/templates/`); canvas "New flow" dialog gains a "Start from template" tab with category filter + preview cards; selecting a template calls `POST /api/graphs/import` (reuses existing import endpoint).
+28. ~~**Flow templates gallery**~~ ✓ — `GET/GET /api/templates/{slug}` router + 9 bundled JSON templates; canvas OpenModal gains "Start from template" tab with category chips + 2-col cards; selecting a template calls existing import endpoint.
 
-29. **Webhook trigger improvements** — `trigger.webhook` currently accepts any POST; add optional HMAC-SHA256 signature validation (`secret` credential field, `X-Hub-Signature-256` header, same convention as GitHub webhooks); add configurable allowed-origins CORS header; expose the per-flow webhook URL in the canvas hint panel with a copy button.
+29. ~~**Webhook trigger improvements**~~ ✓ — HMAC-SHA256 signature verification (`X-Hub-Signature-256`), configurable allowed-origins CORS, `WebhookUrlPanel` in NodeEditorModal with copy button; `OPTIONS` preflight handler added.
 
-30. **Canvas node grouping / labels** — allow users to draw a free-form label / comment box on the canvas (new node type `canvas.note` — stored in graph_data but skipped by executor); note nodes render as a coloured sticky-note rectangle behind other nodes; config: text, colour, width, height.
+30. ~~**Canvas node grouping / labels**~~ ✓ — `NOTE_COLORS` palette (amber/blue/green/purple/red/slate); `StickyNote` applies colour + `minWidth`/`minHeight` from config; `NODE_DEFS["note"]` gains colour select + width/height fields; `zIndex:-1` on note nodes in all load paths so they render behind other nodes; hint panel shows inline colour swatches.
 
 ---
 
