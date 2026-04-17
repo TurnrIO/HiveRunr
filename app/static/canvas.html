@@ -422,6 +422,17 @@ const NODE_DEFS = {
     {k:"start",l:"Start index (lrange)",ph:"0"},
     {k:"stop",l:"Stop index (lrange, -1 = end)",ph:"-1"},
   ]},
+  "action.graphql":      { label:"GraphQL",            icon:"◈",  color:"#e535ab", group:"integration", fields:[
+    {k:"credential",l:"GraphQL Credential (name)",ph:"my-graphql-api"},
+    {k:"endpoint",l:"Endpoint URL (overrides credential)",ph:"https://api.example.com/graphql",mono:true},
+    {k:"token",l:"Bearer token (overrides credential)",ph:"••••••••",secret:true},
+    {k:"query",l:"Query / Mutation",ph:"query { user(id: \"{{input.id}}\") { name email } }",textarea:true,mono:true},
+    {k:"variables_json",l:"Variables (JSON)",ph:'{"id":"{{input.id}}"}',textarea:true,mono:true},
+    {k:"operation_name",l:"Operation name (optional)",ph:"GetUser"},
+    {k:"headers_json",l:"Extra headers (JSON)",ph:'{"X-Custom":"value"}',mono:true},
+    {k:"ignore_errors",l:"Ignore GraphQL errors",type:"select",options:["false","true"]},
+    {k:"timeout",l:"Timeout (seconds)",ph:"30"},
+  ]},
   "action.csv":          { label:"CSV",                icon:"📄", color:"#16a34a", group:"action", fields:[
     {k:"operation",l:"Operation",ph:"parse",type:"select",options:["parse","generate"]},
     {k:"content",l:"CSV content (parse — blank = use input)",ph:"{{upstream.body}}",textarea:true,mono:true},
@@ -1076,6 +1087,14 @@ function ConfigPanel({ node, onChange, onDelete, edges }){
               <code style={{color:"#a78bfa"}}>search</code><span>→ workspace-wide search</span>
               <code style={{color:"#a78bfa"}}>append_blocks</code><span>→ add paragraph to page</span>
             </div>
+          </div>
+        )}
+        {node.data.type === "action.graphql" && (
+          <div style={{background:"#0f1117",border:"1px solid #2a2d3e",borderRadius:6,padding:"8px 10px",fontSize:10,color:"#94a3b8",marginTop:6,lineHeight:1.8}}>
+            <div style={{color:"#e535ab",fontWeight:600,marginBottom:4}}>◈ GraphQL</div>
+            Create a credential with <code style={{color:"#a78bfa"}}>endpoint</code> + <code style={{color:"#a78bfa"}}>token</code> fields → set <strong>GraphQL Credential</strong>.<br/>
+            Use <code style={{color:"#a78bfa"}}>{"{{input.field}}"}</code> in the query and variables for template rendering.<br/>
+            Output: <code style={{color:"#a78bfa"}}>{"{ data, errors[], has_errors, status_code, ok }"}</code>
           </div>
         )}
         {node.data.type === "note" && (
@@ -2457,6 +2476,14 @@ function NodeEditorModal({ node, onChange, onDelete, onClose, edges, allNodes, c
             {node.data.type==="action.http_request"&&(
               <div style={{background:"#0f1117",border:"1px solid #2a2d3e",borderRadius:6,padding:"8px 10px",fontSize:10,color:"#94a3b8",marginTop:6}}>
                 Output: <code style={{color:"#a78bfa"}}>{"{ status, ok, body, headers }"}</code>
+              </div>
+            )}
+            {node.data.type==="action.graphql"&&(
+              <div style={{background:"#0f1117",border:"1px solid #2a2d3e",borderRadius:6,padding:"8px 10px",fontSize:10,color:"#94a3b8",marginTop:6,lineHeight:1.8}}>
+                <div style={{color:"#e535ab",fontWeight:600,marginBottom:4}}>◈ GraphQL</div>
+                Credential fields: <code style={{color:"#a78bfa"}}>endpoint</code>, <code style={{color:"#a78bfa"}}>token</code>.<br/>
+                Template rendering supported in query + variables.<br/>
+                Output: <code style={{color:"#a78bfa"}}>{"{ data, errors[], has_errors, status_code, ok }"}</code>
               </div>
             )}
             {node.data.type==="action.redis"&&(
