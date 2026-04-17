@@ -1,0 +1,66 @@
+{
+  "name": "Email Inbox → Slack Digest",
+  "description": "Polls an IMAP inbox for unread emails and forwards a digest to a Slack channel.",
+  "category": "Notifications",
+  "tags": ["email", "imap", "slack", "digest"],
+  "graph_data": {
+    "nodes": [
+      {
+        "id": "trigger1",
+        "type": "trigger.cron",
+        "position": {"x": 60, "y": 200},
+        "data": {
+          "label": "Every 30 min",
+          "config": {"cron": "*/30 * * * *", "timezone": "UTC", "description": "Check email every 30 min"},
+          "disabled": false, "retry_max": 0, "retry_delay": 5
+        }
+      },
+      {
+        "id": "email1",
+        "type": "trigger.email",
+        "position": {"x": 300, "y": 200},
+        "data": {
+          "label": "Fetch unread emails",
+          "config": {"credential": "my-imap", "folder": "INBOX", "search_criteria": "UNSEEN", "max_messages": "10", "mark_read": "true"},
+          "disabled": false, "retry_max": 0, "retry_delay": 5
+        }
+      },
+      {
+        "id": "cond1",
+        "type": "action.condition",
+        "position": {"x": 540, "y": 200},
+        "data": {
+          "label": "Any new emails?",
+          "config": {"expression": "input.get('count', 0) > 0"},
+          "disabled": false, "retry_max": 0, "retry_delay": 5
+        }
+      },
+      {
+        "id": "transform1",
+        "type": "action.transform",
+        "position": {"x": 780, "y": 140},
+        "data": {
+          "label": "Format digest",
+          "config": {"expression": "{'text': '*New emails ({count}):*\\n'.format(count=input.get('count',0)) + '\\n'.join('• *{}* from {}'.format(e.get('subject','(no subject)'), e.get('from','?')) for e in input.get('emails',[])[:5])}"},
+          "disabled": false, "retry_max": 0, "retry_delay": 5
+        }
+      },
+      {
+        "id": "slack1",
+        "type": "action.slack",
+        "position": {"x": 1020, "y": 140},
+        "data": {
+          "label": "Post to Slack",
+          "config": {"credential": "my-slack", "message": "{{transform1.text}}", "channel": "#notifications"},
+          "disabled": false, "retry_max": 1, "retry_delay": 10
+        }
+      }
+    ],
+    "edges": [
+      {"id": "e1", "source": "trigger1", "target": "email1", "type": "smoothstep"},
+      {"id": "e2", "source": "email1", "target": "cond1", "type": "smoothstep"},
+      {"id": "e3", "source": "cond1", "target": "transform1", "sourceHandle": "true", "type": "smoothstep"},
+      {"id": "e4", "source": "transform1", "target": "slack1", "type": "smoothstep"}
+    ]
+  }
+}

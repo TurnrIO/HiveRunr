@@ -1,0 +1,77 @@
+{
+  "name": "Webhook → Approve / Reject",
+  "description": "Receives a webhook, routes to an approved or rejected path, and sends an email confirmation.",
+  "category": "Automation",
+  "tags": ["webhook", "condition", "email", "routing"],
+  "graph_data": {
+    "nodes": [
+      {
+        "id": "trigger1",
+        "type": "trigger.webhook",
+        "position": {"x": 60, "y": 200},
+        "data": {
+          "label": "Incoming request",
+          "config": {"description": "POST JSON with status field: approved or rejected"},
+          "disabled": false, "retry_max": 0, "retry_delay": 5
+        }
+      },
+      {
+        "id": "cond1",
+        "type": "action.condition",
+        "position": {"x": 300, "y": 200},
+        "data": {
+          "label": "Approved?",
+          "config": {"expression": "input.get('status') == 'approved'"},
+          "disabled": false, "retry_max": 0, "retry_delay": 5
+        }
+      },
+      {
+        "id": "log_ok",
+        "type": "action.log",
+        "position": {"x": 540, "y": 100},
+        "data": {
+          "label": "Log approved",
+          "config": {"message": "Request {{trigger1.id}} approved by {{trigger1.reviewer}}"},
+          "disabled": false, "retry_max": 0, "retry_delay": 5
+        }
+      },
+      {
+        "id": "email_ok",
+        "type": "action.send_email",
+        "position": {"x": 780, "y": 100},
+        "data": {
+          "label": "Send approval email",
+          "config": {"to": "{{trigger1.requester_email}}", "subject": "Your request was approved ✓", "body": "Hi,\n\nYour request has been approved.\n\nHiveRunr", "credential": "my-smtp"},
+          "disabled": false, "retry_max": 1, "retry_delay": 10
+        }
+      },
+      {
+        "id": "log_rej",
+        "type": "action.log",
+        "position": {"x": 540, "y": 300},
+        "data": {
+          "label": "Log rejected",
+          "config": {"message": "Request {{trigger1.id}} rejected"},
+          "disabled": false, "retry_max": 0, "retry_delay": 5
+        }
+      },
+      {
+        "id": "email_rej",
+        "type": "action.send_email",
+        "position": {"x": 780, "y": 300},
+        "data": {
+          "label": "Send rejection email",
+          "config": {"to": "{{trigger1.requester_email}}", "subject": "Your request was not approved", "body": "Hi,\n\nUnfortunately your request was not approved at this time.\n\nHiveRunr", "credential": "my-smtp"},
+          "disabled": false, "retry_max": 1, "retry_delay": 10
+        }
+      }
+    ],
+    "edges": [
+      {"id": "e1", "source": "trigger1", "target": "cond1", "type": "smoothstep"},
+      {"id": "e2", "source": "cond1", "target": "log_ok", "sourceHandle": "true", "type": "smoothstep"},
+      {"id": "e3", "source": "log_ok", "target": "email_ok", "type": "smoothstep"},
+      {"id": "e4", "source": "cond1", "target": "log_rej", "sourceHandle": "false", "type": "smoothstep"},
+      {"id": "e5", "source": "log_rej", "target": "email_rej", "type": "smoothstep"}
+    ]
+  }
+}

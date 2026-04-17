@@ -1,0 +1,77 @@
+{
+  "name": "CSV File Drop → Database",
+  "description": "Watches a folder for new CSV files, parses each row, and bulk-inserts into a PostgreSQL table.",
+  "category": "Data",
+  "tags": ["csv", "file-watch", "postgres", "etl", "loop"],
+  "graph_data": {
+    "nodes": [
+      {
+        "id": "trigger1",
+        "type": "trigger.file_watch",
+        "position": {"x": 60, "y": 200},
+        "data": {
+          "label": "Watch CSV drop folder",
+          "config": {"path": "/data/incoming", "pattern": "*.csv", "lookback_minutes": "5", "min_age_seconds": "5"},
+          "disabled": false, "retry_max": 0, "retry_delay": 5
+        }
+      },
+      {
+        "id": "loop1",
+        "type": "action.loop",
+        "position": {"x": 300, "y": 200},
+        "data": {
+          "label": "For each file",
+          "config": {"field": "files", "max_items": "50"},
+          "disabled": false, "retry_max": 0, "retry_delay": 5
+        }
+      },
+      {
+        "id": "http1",
+        "type": "action.http_request",
+        "position": {"x": 540, "y": 200},
+        "data": {
+          "label": "Read file contents",
+          "config": {"url": "file://{{loop1.item.path}}", "method": "GET"},
+          "disabled": false, "retry_max": 0, "retry_delay": 5
+        }
+      },
+      {
+        "id": "csv1",
+        "type": "action.csv",
+        "position": {"x": 780, "y": 200},
+        "data": {
+          "label": "Parse CSV",
+          "config": {"operation": "parse", "content": "{{http1.body}}", "delimiter": ","},
+          "disabled": false, "retry_max": 0, "retry_delay": 5
+        }
+      },
+      {
+        "id": "db1",
+        "type": "action.postgres",
+        "position": {"x": 1020, "y": 200},
+        "data": {
+          "label": "Insert rows",
+          "config": {"credential": "my-postgres", "query": "INSERT INTO imported_rows (data, source_file) VALUES (%s, %s)", "params": "[\"{{csv1.rows}}\", \"{{loop1.item.name}}\"]"},
+          "disabled": false, "retry_max": 2, "retry_delay": 15
+        }
+      },
+      {
+        "id": "agg1",
+        "type": "action.aggregate",
+        "position": {"x": 1260, "y": 200},
+        "data": {
+          "label": "Collect results",
+          "config": {"field": "affected", "mode": "list"},
+          "disabled": false, "retry_max": 0, "retry_delay": 5
+        }
+      }
+    ],
+    "edges": [
+      {"id": "e1", "source": "trigger1", "target": "loop1", "type": "smoothstep"},
+      {"id": "e2", "source": "loop1", "target": "http1", "sourceHandle": "body", "type": "smoothstep"},
+      {"id": "e3", "source": "http1", "target": "csv1", "type": "smoothstep"},
+      {"id": "e4", "source": "csv1", "target": "db1", "type": "smoothstep"},
+      {"id": "e5", "source": "db1", "target": "agg1", "type": "smoothstep"}
+    ]
+  }
+}

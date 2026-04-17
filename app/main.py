@@ -33,6 +33,7 @@ from app.routers.webhooks    import router as webhooks_router
 from app.routers.admin       import router as admin_router
 from app.routers.workspaces  import router as workspaces_router
 from app.routers.oauth       import router as oauth_router
+from app.routers.templates   import router as templates_router
 
 log          = logging.getLogger(__name__)
 STATIC_DIR   = Path(__file__).parent / "static"
@@ -54,6 +55,7 @@ app.include_router(webhooks_router)
 app.include_router(admin_router)
 app.include_router(workspaces_router)
 app.include_router(oauth_router)
+app.include_router(templates_router)
 
 # ── Static files ──────────────────────────────────────────────────────────────
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
