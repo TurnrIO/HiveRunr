@@ -332,6 +332,12 @@ const {
 const NODE_DEFS = {
   "trigger.manual":      { label:"Manual Trigger",    icon:"▶",  color:"#059669", group:"trigger",   fields:[] },
   "trigger.webhook":     { label:"Webhook Trigger",   icon:"🔗", color:"#0284c7", group:"trigger",   fields:[{k:"description",l:"Description",ph:"What this webhook receives…"},{k:"secret",l:"HMAC Secret (optional)",ph:"Leave blank to accept any POST",secret:true},{k:"allowed_origins",l:"Allowed Origins (one per line, blank = any)",ph:"https://app.example.com\nhttps://admin.example.com",textarea:true}] },
+  "trigger.rss":         { label:"RSS / Atom Feed",    icon:"📡", color:"#ea580c", group:"trigger",   fields:[
+    {k:"url",l:"Feed URL",ph:"https://feeds.example.com/rss.xml"},
+    {k:"lookback_minutes",l:"Lookback window (minutes, 0 = all)",ph:"60"},
+    {k:"filter_expression",l:"Filter expression (use 'entry' dict, optional)",ph:"'python' in entry.get('title','').lower()",mono:true},
+    {k:"max_entries",l:"Max entries",ph:"50"},
+  ]},
   "trigger.cron":        { label:"Cron Schedule",     icon:"⏰", color:"#7c3aed", group:"trigger",   fields:[{k:"cron",l:"Cron expression",ph:"0 9 * * 1-5"},{k:"timezone",l:"Timezone",ph:"UTC"},{k:"description",l:"Description (optional)",ph:"Weekdays at 9am"}] },
   "action.http_request": { label:"HTTP Request",      icon:"🌐", color:"#0891b2", group:"action",    fields:[{k:"url",l:"URL",ph:"https://api.example.com/data"},{k:"method",l:"Method",ph:"GET",type:"select",options:["GET","POST","PUT","PATCH","DELETE","HEAD"]},{k:"credential",l:"Bearer Credential (name)",ph:"my-api-credential"},{k:"headers_json",l:"Headers (JSON)",ph:'{"Authorization":"Bearer {{token}}"}',mono:true},{k:"body_json",l:"Body (JSON)",ph:'{"key":"{{value}}"}',mono:true,textarea:true},{k:"form_json",l:"Form data (JSON)",ph:'{"field":"value"}',mono:true},{k:"timeout",l:"Timeout (seconds)",ph:"30"},{k:"ignore_errors",l:"Ignore HTTP errors",ph:"false",type:"select",options:["false","true"]}] },
   "action.transform":    { label:"Transform",         icon:"⚙",  color:"#7c3aed", group:"action",    fields:[{k:"expression",l:"Python expression",ph:"{'out': input['value'] * 2}",mono:true,textarea:true}] },
@@ -1093,6 +1099,15 @@ function ConfigPanel({ node, onChange, onDelete, edges }){
               <code style={{color:"#a78bfa"}}>search</code><span>→ workspace-wide search</span>
               <code style={{color:"#a78bfa"}}>append_blocks</code><span>→ add paragraph to page</span>
             </div>
+          </div>
+        )}
+        {node.data.type === "trigger.rss" && (
+          <div style={{background:"#0f1117",border:"1px solid #2a2d3e",borderRadius:6,padding:"8px 10px",fontSize:10,color:"#94a3b8",marginTop:6,lineHeight:1.8}}>
+            <div style={{color:"#ea580c",fontWeight:600,marginBottom:4}}>📡 RSS / Atom Feed</div>
+            Polls any RSS 2.0 or Atom 1.0 feed — no extra dependencies (stdlib only).<br/>
+            Pair with a <strong>Cron</strong> trigger to check for new items periodically.<br/>
+            <code style={{color:"#a78bfa"}}>filter_expression</code> is a Python bool expression — use <code style={{color:"#a78bfa"}}>entry</code> dict with keys <code style={{color:"#a78bfa"}}>title</code>, <code style={{color:"#a78bfa"}}>link</code>, <code style={{color:"#a78bfa"}}>summary</code>, <code style={{color:"#a78bfa"}}>author</code>.<br/>
+            Output: <code style={{color:"#a78bfa"}}>{"{ entries[], count, feed_title, title, link, summary, published }"}</code>
           </div>
         )}
         {node.data.type === "action.pdf" && (
@@ -2493,6 +2508,18 @@ function NodeEditorModal({ node, onChange, onDelete, onClose, edges, allNodes, c
             {node.data.type==="action.http_request"&&(
               <div style={{background:"#0f1117",border:"1px solid #2a2d3e",borderRadius:6,padding:"8px 10px",fontSize:10,color:"#94a3b8",marginTop:6}}>
                 Output: <code style={{color:"#a78bfa"}}>{"{ status, ok, body, headers }"}</code>
+              </div>
+            )}
+            {node.data.type==="trigger.rss"&&(
+              <div style={{background:"#0f1117",border:"1px solid #2a2d3e",borderRadius:6,padding:"8px 10px",fontSize:10,color:"#94a3b8",marginTop:6,lineHeight:1.8}}>
+                <div style={{color:"#ea580c",fontWeight:600,marginBottom:4}}>📡 RSS / Atom</div>
+                No dependencies — uses Python stdlib xml.etree + urllib.<br/>
+                <div style={{display:"grid",gridTemplateColumns:"auto 1fr",gap:"0 10px",marginTop:4}}>
+                  <code style={{color:"#4ade80"}}>entries[]</code><span>→ title, link, published, summary, author, id</span>
+                  <code style={{color:"#60a5fa"}}>count</code><span>→ number of matching entries</span>
+                  <code style={{color:"#a78bfa"}}>title/link/summary</code><span>→ first-entry shortcuts</span>
+                  <code style={{color:"#f59e0b"}}>feed_title</code><span>→ name of the feed</span>
+                </div>
               </div>
             )}
             {node.data.type==="action.pdf"&&(
