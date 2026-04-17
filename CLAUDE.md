@@ -173,6 +173,11 @@ OWNER_EMAIL=
 | S-C | Ops hardening — `OPERATIONS.md` runbook (health check, start/stop/restart, DB ops, worker/scheduler ops, common errors table, env vars reference); inline NOTE comments in `db.py`, `worker.py`, `email.py`; `PrometheusMiddleware` rewritten as pure ASGI (no `BaseHTTPMiddleware`) so exceptions propagate correctly to uvicorn; email.py two bug fixes: `inbox_id` = full address, endpoint `/messages/send` |
 | S-D | DB performance + retry resilience — migration `0011_performance_indexes.py`: `runs.retry_count INT DEFAULT 0`, indexes on `(workspace_id, created_at DESC)`, `status`, `(graph_id, created_at DESC)`, audit_log indexes, schedules index; `enqueue_graph` Celery task gets `max_retries=3` + exponential backoff (30/60/120 s) for `_TRANSIENT_EXCEPTIONS`; run status lifecycle adds `retrying` + `dead`; admin.html Runs page shows DEAD/RETRY N badges, status filter adds Dead/Retrying options |
 | Polish | Runs page bulk-delete — checkbox per row, select-all header checkbox, "Delete selected (N)" button using `POST /api/runs/bulk-delete`; checked rows highlighted purple; ruff --fix: removed unused imports across 8 files; `secrets.py` unused `ClientError` import removed |
+| P3-22 | Mobile canvas layout — topbar collapses to icon-only (`≤768px`); `.topbar-secondary` wrapper uses `display:contents` desktop / `display:none !important` mobile; sidebar becomes off-canvas overlay with hamburger toggle (📦 button in topbar); config panel hidden on mobile; `mobileSidebarOpen` state drives overlay |
+| P3-23 | Mobile admin layout — Runs page `.runs-split` grid stacks to single column; `.mobile-cards` CSS transforms Credentials / Schedules / Audit Log tables into card lists (`display:block` on all table elements + `td::before { content:attr(data-label) }` for column labels); `data-label` attrs added to all `<td>` cells |
+| P3-24 | Keyboard shortcuts — canvas: `Ctrl+S` save, `Ctrl+Z` undo, `Ctrl+Y`/`Ctrl+Shift+Z` redo, `Escape` deselect/close, `?` toggle cheatsheet; `kbRef = useRef({})` pattern avoids stale closures; `ShortcutsModal` 4-section / 15-entry cheatsheet; admin: `?`/`Escape` + `AdminShortcutsModal` with `useFocusTrap`; "⌨️ Keyboard shortcuts" button in sidebar footer |
+| P3-25 | Canvas minimap — `<MiniMap>` pannable + zoomable with styled colours; toggle via topbar 🗺 button (desktop) and MoreMenu (mobile); floating Panel button removed (was crashing on UMD undefined) |
+| P3-fix | Canvas bug fixes — removed `Panel` from ReactFlow UMD destructure (undefined → React crash); removed overlapping floating Panel button; replaced `useFocusTrap` call in `ShortcutsModal` (not defined in canvas) with manual Escape `useEffect`; fixed overlay click guard to `target===currentTarget`; expanded shortcuts from 5 to 15 entries across 4 sections |
 
 ---
 
@@ -241,15 +246,57 @@ Pick the next item off the top. Cross it off and add a "Completed sprints" row w
 
 ---
 
-### 🟢 P3 — Polish / UX
+### 🟢 P3 — Polish / UX ✅ Done
 
-22. **Mobile layout — canvas** — canvas topbar collapses to icon-only on `≤768px`; node sidebar + config panel collapse to bottom sheets or toggleable drawers; run status ribbon stays legible on small screens.
+22. ~~**Mobile layout — canvas**~~ ✓ Done
 
-23. **Mobile layout — admin pages** — Runs page two-column grid stacks to single column on `≤768px`; Schedules, Credentials, Audit Log tables become card lists on mobile; sidebar hamburger already in place (P2-21).
+23. ~~**Mobile layout — admin pages**~~ ✓ Done
 
-24. **Keyboard shortcuts** — global shortcuts in canvas: `Ctrl+S` save, `Ctrl+Z` undo (version restore), `Escape` close open modals/panels, `Del`/`Backspace` delete selected node; admin: `?` opens shortcut cheatsheet modal.
+24. ~~**Keyboard shortcuts**~~ ✓ Done
 
-25. **Canvas minimap** — optional minimap panel (bottom-right corner) showing all nodes as coloured dots with a viewport rect; toggle via toolbar button; useful for large flows.
+25. ~~**Canvas minimap**~~ ✓ Done
+
+---
+
+### 🔵 P4 — Power user features
+
+26. **Canvas search / filter** — `Ctrl+F` opens an inline search bar that highlights nodes matching by label or type; filter chips for node group (Trigger / Control / Data / Network); "jump to node" centres the viewport on a clicked result. No new API needed — pure client-side filter over `nodes[]`.
+
+27. **Run replay with payload override** — existing Replay button re-enqueues with the original trigger payload; add a "Replay with edits" option that opens `TestPayloadModal` pre-filled with the original payload so the user can tweak it before re-running. Extend `POST /api/runs/{task_id}/replay` to accept optional `payload` body.
+
+28. **Flow templates gallery** — new `GET /api/templates` endpoint returning a curated list of built-in flow templates (JSON bundles stored in `app/templates/`); canvas "New flow" dialog gains a "Start from template" tab with category filter + preview cards; selecting a template calls `POST /api/graphs/import` (reuses existing import endpoint).
+
+29. **Webhook trigger improvements** — `trigger.webhook` currently accepts any POST; add optional HMAC-SHA256 signature validation (`secret` credential field, `X-Hub-Signature-256` header, same convention as GitHub webhooks); add configurable allowed-origins CORS header; expose the per-flow webhook URL in the canvas hint panel with a copy button.
+
+30. **Canvas node grouping / labels** — allow users to draw a free-form label / comment box on the canvas (new node type `canvas.note` — stored in graph_data but skipped by executor); note nodes render as a coloured sticky-note rectangle behind other nodes; config: text, colour, width, height.
+
+---
+
+### 🟣 P5 — Integrations & ecosystem
+
+31. **New node: `action.redis`** — GET/SET/DEL/LPUSH/RPOP/INCR/EXPIRE operations against a Redis instance (credential: `url`); useful for caching, counters, and cross-flow signalling without a DB.
+
+32. **New node: `action.graphql`** — send a GraphQL query/mutation with variables; credential stores endpoint + optional Authorization header; output: `data`, `errors[]`; supports template rendering in query + variables.
+
+33. **New node: `action.pdf`** — generate a PDF from an HTML template (uses `weasyprint` or `pdfkit`); config: `html` (template-rendered), `filename`; output: `pdf_bytes` (base64) + `size_bytes`; pairs well with `action.s3` or `action.send_email` to attach.
+
+34. **New node: `trigger.rss`** — poll an RSS/Atom feed URL; config: `url`, `lookback_minutes`, `filter_expression` (Python eval with `entry` dict); output: `entries[]` list with `title`, `link`, `published`, `summary`; uses stdlib `xml.etree` — no extra deps.
+
+35. **New node: `action.airtable`** — Airtable REST API; credential: `api_key` + `base_id`; operations: list-records, get-record, create-record, update-record, delete-record; config: `table`, `filter_formula`, `fields_json`; output: `records[]`, `record`, `id`.
+
+---
+
+### 🟤 P6 — Platform & ops
+
+36. **Webhook rate-limit UI** — expose the per-IP rate-limit window + max-calls config (currently hardcoded in `main.py`) via `GET/PUT /api/settings/ratelimit`; add a Rate Limits card to the Settings page with current counters visible.
+
+37. **CHANGELOG + `v0.2.0` release tag** — document P3, P4, P5 in `CHANGELOG.md`; bump version in any version string / `__version__`; create `v0.2.0` git tag.
+
+38. **Observability: OpenTelemetry traces** — wrap `run_graph` and each node `run()` call with OTEL spans (use `opentelemetry-sdk`; export to stdout OTLP or Jaeger if `OTEL_EXPORTER_OTLP_ENDPOINT` is set); add `OTEL_SERVICE_NAME` to `.env.example`; zero-overhead when env var is unset.
+
+39. **DB connection pool tuning** — replace `psycopg2.connect()` one-shot connections with `psycopg2.pool.ThreadedConnectionPool` (min 2, max 10, configurable via `DB_POOL_MIN`/`DB_POOL_MAX`); expose pool stats in `GET /api/system/status`.
+
+40. **Multi-region / DR runbook** — extend `OPERATIONS.md` with PostgreSQL streaming-replication setup, Redis Sentinel failover config, Celery multi-region worker targeting, and a DR checklist; add `docker-compose.ha.yml` example.
 
 ---
 
