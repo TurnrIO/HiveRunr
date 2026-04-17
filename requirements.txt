@@ -19,5 +19,5 @@ cryptography>=46.0.6
 starlette>=0.47.2
 # Optional: install boto3 to use SECRETS_PROVIDER=aws (AWS Secrets Manager)
 # boto3>=1.34.0
-# PDF generation (action.pdf node) — pure-Python, no system binaries required
-xhtml2pdf>=0.2.16
+# Optional: install xhtml2pdf to use the action.pdf node (requires system cairo libs on some platforms)
+# xhtml2pdf>=0.2.16
