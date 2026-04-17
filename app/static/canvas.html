@@ -416,6 +416,20 @@ const NODE_DEFS = {
     {k:"username",l:"Bot display name (optional)",ph:"HiveRunr"},
     {k:"avatar_url",l:"Avatar URL (optional)",ph:"https://…/icon.png"},
   ]},
+  "action.airtable":     { label:"Airtable",            icon:"🟧", color:"#f59e0b", group:"integration", fields:[
+    {k:"credential",l:"Airtable Credential (name)",ph:"my-airtable"},
+    {k:"api_key",l:"API Key / PAT (overrides credential)",ph:"pat…",secret:true},
+    {k:"base_id",l:"Base ID (overrides credential)",ph:"app…",mono:true},
+    {k:"table",l:"Table name",ph:"Tasks"},
+    {k:"operation",l:"Operation",type:"select",options:["list_records","search","get_record","create_record","update_record","upsert_record","delete_record"]},
+    {k:"record_id",l:"Record ID (get / update / delete)",ph:"rec…",mono:true},
+    {k:"fields_json",l:"Fields (JSON — create / update / upsert)",ph:'{"Name":"{{input.title}}","Status":"Open"}',textarea:true,mono:true},
+    {k:"filter_formula",l:"Filter formula (list / search)",ph:"AND({Status}='Open',{Priority}='High')"},
+    {k:"upsert_field",l:"Merge-on field (upsert only)",ph:"Email"},
+    {k:"sort_json",l:'Sort (JSON array)',ph:'[{"field":"Name","direction":"asc"}]',mono:true},
+    {k:"view",l:"View name (list / search)",ph:"Grid view"},
+    {k:"max_records",l:"Max records (list / search)",ph:"100"},
+  ]},
   "action.pdf":          { label:"PDF Generate",       icon:"📋", color:"#b91c1c", group:"action", fields:[
     {k:"html",l:"HTML source (supports {{templates}})",ph:"<h1>Report for {{input.name}}</h1><p>Generated: {{input.date}}</p>",textarea:true,mono:true},
     {k:"filename",l:"Filename",ph:"report.pdf"},
@@ -998,6 +1012,20 @@ function ConfigPanel({ node, onChange, onDelete, edges }){
             Runs another flow as a sub-routine.<br/>
             Output: the sub-flow's final context dict.<br/>
             Max nesting depth: <code style={{color:"#a78bfa"}}>5</code> levels.
+          </div>
+        )}
+        {node.data.type === "action.airtable" && (
+          <div style={{background:"#0f1117",border:"1px solid #2a2d3e",borderRadius:6,padding:"8px 10px",fontSize:10,color:"#94a3b8",marginTop:6,lineHeight:1.8}}>
+            <div style={{color:"#f59e0b",fontWeight:600,marginBottom:4}}>🟧 Airtable</div>
+            Create a credential with <code style={{color:"#a78bfa"}}>api_key</code> (personal access token, starts with <code style={{color:"#a78bfa"}}>pat…</code>) and <code style={{color:"#a78bfa"}}>base_id</code> (starts with <code style={{color:"#a78bfa"}}>app…</code>).<br/>
+            <div style={{display:"grid",gridTemplateColumns:"auto 1fr",gap:"0 10px",marginTop:6}}>
+              <code style={{color:"#4ade80"}}>list_records</code><span>→ {"{ records[], count }"} — all pages fetched</span>
+              <code style={{color:"#60a5fa"}}>search</code><span>→ same with filterByFormula + sort</span>
+              <code style={{color:"#a78bfa"}}>create_record</code><span>→ {"{ id, fields, created: true }"}</span>
+              <code style={{color:"#f59e0b"}}>update_record</code><span>→ PATCH — set record_id + fields_json</span>
+              <code style={{color:"#94a3b8"}}>upsert_record</code><span>→ create or update on upsert_field match</span>
+              <code style={{color:"#f87171"}}>delete_record</code><span>→ {"{ id, deleted: true }"}</span>
+            </div>
           </div>
         )}
         {node.data.type === "action.redis" && (
@@ -2539,6 +2567,20 @@ function NodeEditorModal({ node, onChange, onDelete, onClose, edges, allNodes, c
                 Credential fields: <code style={{color:"#a78bfa"}}>endpoint</code>, <code style={{color:"#a78bfa"}}>token</code>.<br/>
                 Template rendering supported in query + variables.<br/>
                 Output: <code style={{color:"#a78bfa"}}>{"{ data, errors[], has_errors, status_code, ok }"}</code>
+              </div>
+            )}
+            {node.data.type==="action.airtable"&&(
+              <div style={{background:"#0f1117",border:"1px solid #2a2d3e",borderRadius:6,padding:"8px 10px",fontSize:10,color:"#94a3b8",marginTop:6,lineHeight:1.8}}>
+                <div style={{color:"#f59e0b",fontWeight:600,marginBottom:4}}>🟧 Airtable</div>
+                Credential: <code style={{color:"#a78bfa"}}>api_key</code> (pat…) + <code style={{color:"#a78bfa"}}>base_id</code> (app…).<br/>
+                <div style={{display:"grid",gridTemplateColumns:"auto 1fr",gap:"0 10px",marginTop:4}}>
+                  <code style={{color:"#4ade80"}}>list_records</code><span>→ {"{ records[], count, record }"}</span>
+                  <code style={{color:"#60a5fa"}}>get_record</code><span>→ {"{ record, id, fields }"}</span>
+                  <code style={{color:"#a78bfa"}}>create_record</code><span>→ {"{ id, fields, created: true }"}</span>
+                  <code style={{color:"#f59e0b"}}>update_record</code><span>→ {"{ id, fields, updated: true }"}</span>
+                  <code style={{color:"#94a3b8"}}>upsert_record</code><span>→ create or update on field match</span>
+                  <code style={{color:"#f87171"}}>delete_record</code><span>→ {"{ id, deleted: true }"}</span>
+                </div>
               </div>
             )}
             {node.data.type==="action.redis"&&(
