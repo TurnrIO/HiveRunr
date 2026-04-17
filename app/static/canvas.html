@@ -410,6 +410,12 @@ const NODE_DEFS = {
     {k:"username",l:"Bot display name (optional)",ph:"HiveRunr"},
     {k:"avatar_url",l:"Avatar URL (optional)",ph:"https://…/icon.png"},
   ]},
+  "action.pdf":          { label:"PDF Generate",       icon:"📋", color:"#b91c1c", group:"action", fields:[
+    {k:"html",l:"HTML source (supports {{templates}})",ph:"<h1>Report for {{input.name}}</h1><p>Generated: {{input.date}}</p>",textarea:true,mono:true},
+    {k:"filename",l:"Filename",ph:"report.pdf"},
+    {k:"page_size",l:"Page size",type:"select",options:["a4","letter","legal"]},
+    {k:"orientation",l:"Orientation",type:"select",options:["portrait","landscape"]},
+  ]},
   "action.redis":        { label:"Redis",              icon:"🟥", color:"#dc2626", group:"integration", fields:[
     {k:"credential",l:"Redis Credential (name)",ph:"my-redis"},
     {k:"url",l:"Redis URL (overrides credential)",ph:"redis://localhost:6379/0",mono:true},
@@ -1086,6 +1092,17 @@ function ConfigPanel({ node, onChange, onDelete, edges }){
               <code style={{color:"#a78bfa"}}>update_page</code><span>→ update page properties</span>
               <code style={{color:"#a78bfa"}}>search</code><span>→ workspace-wide search</span>
               <code style={{color:"#a78bfa"}}>append_blocks</code><span>→ add paragraph to page</span>
+            </div>
+          </div>
+        )}
+        {node.data.type === "action.pdf" && (
+          <div style={{background:"#0f1117",border:"1px solid #2a2d3e",borderRadius:6,padding:"8px 10px",fontSize:10,color:"#94a3b8",marginTop:6,lineHeight:1.8}}>
+            <div style={{color:"#b91c1c",fontWeight:600,marginBottom:4}}>📋 PDF Generate</div>
+            Renders HTML to PDF — full documents or bare fragments both work (a page wrapper is added automatically).<br/>
+            Use <code style={{color:"#a78bfa"}}>{"{{template}}"}</code> syntax anywhere in the HTML.<br/>
+            Output: <code style={{color:"#a78bfa"}}>{"{ pdf_bytes (base64), size_bytes, filename, ok }"}</code><br/>
+            <div style={{marginTop:4,color:"#64748b"}}>
+              💡 Pair with <strong>Send Email</strong> (base64 attachment) or <strong>S3</strong> (put operation) to deliver the file.
             </div>
           </div>
         )}
@@ -2476,6 +2493,17 @@ function NodeEditorModal({ node, onChange, onDelete, onClose, edges, allNodes, c
             {node.data.type==="action.http_request"&&(
               <div style={{background:"#0f1117",border:"1px solid #2a2d3e",borderRadius:6,padding:"8px 10px",fontSize:10,color:"#94a3b8",marginTop:6}}>
                 Output: <code style={{color:"#a78bfa"}}>{"{ status, ok, body, headers }"}</code>
+              </div>
+            )}
+            {node.data.type==="action.pdf"&&(
+              <div style={{background:"#0f1117",border:"1px solid #2a2d3e",borderRadius:6,padding:"8px 10px",fontSize:10,color:"#94a3b8",marginTop:6,lineHeight:1.8}}>
+                <div style={{color:"#b91c1c",fontWeight:600,marginBottom:4}}>📋 PDF Generate</div>
+                Renders HTML to PDF using xhtml2pdf (pure Python, no system binaries).<br/>
+                Output: <code style={{color:"#a78bfa"}}>{"{ pdf_bytes (base64), size_bytes, filename, ok }"}</code><br/>
+                <div style={{display:"grid",gridTemplateColumns:"auto 1fr",gap:"0 10px",marginTop:4}}>
+                  <code style={{color:"#60a5fa"}}>pdf_bytes</code><span>→ base64 string, pass to S3 put or email attachment</span>
+                  <code style={{color:"#4ade80"}}>size_bytes</code><span>→ raw byte count of generated PDF</span>
+                </div>
               </div>
             )}
             {node.data.type==="action.graphql"&&(
