@@ -228,8 +228,7 @@ select.field-input{appearance:none;cursor:pointer;background-image:url("data:ima
 .node-off-chip{background:#374151;color:#94a3b8;font-size:9px;font-weight:700;padding:1px 5px;border-radius:4px;letter-spacing:.04em}
 
 /* ── sticky note node ── */
-.note-node{background:#854d0e22;border:1.5px solid #854d0e;border-radius:8px;min-width:160px;max-width:240px;box-shadow:0 4px 12px rgba(0,0,0,.3)}
-.note-node.selected{border-color:#ca8a04;box-shadow:0 0 0 2px rgba(202,138,4,.2)}
+.note-node{border:1.5px solid #854d0e;border-radius:8px;min-width:160px;box-shadow:0 4px 12px rgba(0,0,0,.3)}
 .note-node .note-body{padding:10px 12px;font-size:11px;color:#fde68a;line-height:1.6;white-space:pre-wrap;word-break:break-word}
 .note-node .note-id{font-size:9px;color:#78350f;padding:0 10px 6px;font-family:monospace}
 
@@ -417,7 +416,7 @@ const NODE_DEFS = {
     {k:"field",l:"Field containing items (generate)",ph:"rows"},
     {k:"delimiter",l:"Delimiter",ph:","},
   ]},
-  "note":                { label:"Sticky Note",        icon:"📝", color:"#ca8a04", group:"utility",   fields:[{k:"text",l:"Note text",ph:"Document what this part of the flow does…",textarea:true}] },
+  "note":                { label:"Sticky Note",        icon:"📝", color:"#ca8a04", group:"utility",   fields:[{k:"text",l:"Note text",ph:"Document what this part of the flow does…",textarea:true},{k:"colour",l:"Colour",type:"select",options:["amber","blue","green","purple","red","slate"]},{k:"width",l:"Width (px)",ph:"200"},{k:"height",l:"Min height (px)",ph:"100"}] },
 };
 
 const GROUPS = [
@@ -458,13 +457,29 @@ function Toast({ msg, type, onDone }){
   return <div className={`toast ${type}`}>{type==="success"?"✓":"✗"} {msg}</div>;
 }
 
+// ── Sticky note colour palette ────────────────────────────────────────────────
+const NOTE_COLORS = {
+  amber:  { bg:"#854d0e22", border:"#b45309", text:"#fde68a", sub:"#92400e" },
+  blue:   { bg:"#1e3a8a22", border:"#2563eb", text:"#93c5fd", sub:"#1e3a8a" },
+  green:  { bg:"#064e3b22", border:"#059669", text:"#6ee7b7", sub:"#065f46" },
+  purple: { bg:"#3b076422", border:"#7c3aed", text:"#c4b5fd", sub:"#4c1d95" },
+  red:    { bg:"#450a0a22", border:"#dc2626", text:"#fca5a5", sub:"#7f1d1d" },
+  slate:  { bg:"#1e293b22", border:"#475569", text:"#94a3b8", sub:"#334155" },
+};
+
 // ── Custom Node ───────────────────────────────────────────────────────────────
 function StickyNote({ id, data, selected }){
-  const text = (data.config||{}).text || "Double-click to edit in config panel →";
+  const cfg  = data.config || {};
+  const text = cfg.text || "Double-click to edit in config panel →";
+  const clr  = NOTE_COLORS[cfg.colour] || NOTE_COLORS.amber;
+  const w    = cfg.width  ? (parseInt(cfg.width)  || 200) : 200;
+  const h    = cfg.height ? (parseInt(cfg.height) || 100) : 100;
   return (
-    <div className={`note-node${selected?" selected":""}`}>
-      <div className="note-body">{text}</div>
-      <div className="note-id">#{id}</div>
+    <div className={`note-node${selected?" selected":""}`}
+         style={{background:clr.bg, borderColor:clr.border, minWidth:w+"px", minHeight:h+"px",
+                 boxShadow: selected ? `0 0 0 2px ${clr.border}66, 0 4px 12px rgba(0,0,0,.3)` : "0 4px 12px rgba(0,0,0,.3)"}}>
+      <div className="note-body" style={{color:clr.text}}>{text}</div>
+      <div className="note-id"   style={{color:clr.sub}}>#{id}</div>
     </div>
   );
 }
@@ -1034,6 +1049,18 @@ function ConfigPanel({ node, onChange, onDelete, edges }){
               <code style={{color:"#a78bfa"}}>update_page</code><span>→ update page properties</span>
               <code style={{color:"#a78bfa"}}>search</code><span>→ workspace-wide search</span>
               <code style={{color:"#a78bfa"}}>append_blocks</code><span>→ add paragraph to page</span>
+            </div>
+          </div>
+        )}
+        {node.data.type === "note" && (
+          <div style={{background:"#0f1117",border:"1px solid #2a2d3e",borderRadius:6,padding:"8px 10px",fontSize:10,color:"#94a3b8",marginTop:6}}>
+            <div style={{color:"#ca8a04",fontWeight:600,marginBottom:5}}>📝 Sticky notes are skipped by the executor</div>
+            <div style={{marginBottom:8}}>Use them to label sections, leave reminders, or document your flow logic.</div>
+            <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+              {["amber","blue","green","purple","red","slate"].map(c=>{
+                const p=NOTE_COLORS[c];
+                return <span key={c} style={{background:p.bg,border:`1.5px solid ${p.border}`,borderRadius:4,padding:"2px 8px",color:p.text,fontSize:9,fontWeight:600}}>{c}</span>;
+              })}
             </div>
           </div>
         )}
@@ -3234,6 +3261,7 @@ function App(){
         const gd = full.graph_data || { nodes:[], edges:[] };
         const newNodes = (gd.nodes||[]).map(n=>({
           id:n.id, type:"custom", position:n.position||{x:100,y:100},
+          ...(n.type==="note"?{zIndex:-1}:{}),
           data:{ type:n.type, label:n.data?.label||"", config:n.data?.config||{},
                  disabled:!!n.data?.disabled, retry_max:n.data?.retry_max||0, retry_delay:n.data?.retry_delay||5 }
         }));
@@ -3349,8 +3377,9 @@ function App(){
     const def = NODE_DEFS[type];
     const pos = screenToFlowPosition({ x:e.clientX, y:e.clientY });
     const id = uid();
+    const isNote = type === "note";
     setNodes(ns => {
-      const updated = [...ns, { id, type:"custom", position:pos, data:{ type, label:def.label, config:{}, retry_max:0, retry_delay:5 } }];
+      const updated = [...ns, { id, type:"custom", position:pos, ...(isNote?{zIndex:-1}:{}), data:{ type, label:def.label, config:{}, retry_max:0, retry_delay:5 } }];
       saveSnap(updated, edges);
       return updated;
     });
@@ -3684,6 +3713,7 @@ function App(){
       const gd = full.graph_data || { nodes:[], edges:[] };
       const newNodes = (gd.nodes||[]).map(n=>({
         id:n.id, type:"custom", position:n.position||{x:100,y:100},
+        ...(n.type==="note"?{zIndex:-1}:{}),
         data:{ type:n.type, label:n.data?.label||"", config:n.data?.config||{}, disabled:!!n.data?.disabled, retry_max:n.data?.retry_max||0, retry_delay:n.data?.retry_delay||5, fail_mode:n.data?.fail_mode||"abort" }
       }));
       const newEdges = (gd.edges||[]).map(e=>({
@@ -4018,6 +4048,7 @@ function App(){
           const gd = restoredGraph.graph_data || { nodes:[], edges:[] };
           const newNodes = (gd.nodes||[]).map(n=>({
             id:n.id, type:"custom", position:n.position||{x:100,y:100},
+            ...(n.type==="note"?{zIndex:-1}:{}),
             data:{ type:n.type, label:n.data?.label||"", config:n.data?.config||{},
                    disabled:!!n.data?.disabled, retry_max:n.data?.retry_max||0, retry_delay:n.data?.retry_delay||5 }
           }));
