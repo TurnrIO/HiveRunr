@@ -51,7 +51,13 @@ API_KEY      = os.environ.get("API_KEY", "dev_api_key")
 #   F2  → "login.html", "signup.html", "reset.html", "invite.html"
 #   F6  → "admin.html"
 #   F9  → "canvas.html"
-_MIGRATED_PAGES: set[str] = set()
+_MIGRATED_PAGES: set[str] = {
+    # F2 — auth pages migrated to Vite + React
+    "login.html",
+    "signup.html",
+    "reset.html",
+    "invite.html",
+}
 
 
 def _serve_page(filename: str) -> "FileResponse":
