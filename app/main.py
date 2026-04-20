@@ -40,7 +40,7 @@ STATIC_DIR   = Path(__file__).parent / "static"
 WORKFLOWS    = ["example"]
 API_KEY      = os.environ.get("API_KEY", "dev_api_key")
 
-__version__ = "0.2.0"
+from app._version import __version__
 
 app = FastAPI(title="HiveRunr", version=__version__, docs_url=None, redoc_url=None, openapi_url=None)
 

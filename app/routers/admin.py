@@ -8,7 +8,7 @@ from typing import Optional
 
 from app.deps import _check_admin, _require_owner
 from app.core.db import log_audit, get_audit_log
-from app.main import __version__
+from app._version import __version__
 
 SCRIPTS_DIR   = Path(__file__).parent.parent / 'workflows'
 TEMPLATES_DIR = Path(__file__).parent.parent / 'templates'
