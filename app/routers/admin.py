@@ -8,6 +8,7 @@ from typing import Optional
 
 from app.deps import _check_admin, _require_owner
 from app.core.db import log_audit, get_audit_log
+from app.main import __version__
 
 SCRIPTS_DIR   = Path(__file__).parent.parent / 'workflows'
 TEMPLATES_DIR = Path(__file__).parent.parent / 'templates'
@@ -241,7 +242,7 @@ def api_system_status(request: Request):
     results["system"] = {
         "status": "ok",
         "message": f"Python {sys.version.split()[0]} · {platform.system()} · PID {os.getpid()}",
-        "app_version":  "0.1.0",
+        "app_version":  __version__,
         "python":       sys.version.split()[0],
         "platform":     platform.system() + " " + platform.release(),
         "hostname":     socket.gethostname(),
@@ -252,6 +253,81 @@ def api_system_status(request: Request):
     }
 
     return results
+
+
+# ── Version check ─────────────────────────────────────────────────────────────
+_GITHUB_REPO    = "TurnrIO/HiveRunr"
+_VERSION_CACHE_KEY = "version_check_cache"   # stored as JSON in app_settings
+_VERSION_CACHE_TTL = 86400                   # 24 hours in seconds
+
+@router.get("/api/version")
+def api_version(request: Request):
+    """Return current version + latest GitHub release (cached 24 h)."""
+    import time, httpx
+    from app.core.db import get_setting, set_setting
+    _check_admin(request)
+
+    # ── Try to return a cached latest-version result ───────────────────────
+    cached_raw = get_setting(_VERSION_CACHE_KEY, None)
+    cached = None
+    if cached_raw:
+        try:
+            cached = json.loads(cached_raw)
+            age = time.time() - cached.get("checked_at", 0)
+            if age < _VERSION_CACHE_TTL:
+                # Cache is fresh — return immediately
+                cached["current"] = __version__
+                cached["update_available"] = _version_gt(cached.get("latest", __version__), __version__)
+                return cached
+        except Exception:
+            cached = None
+
+    # ── Fetch latest release from GitHub ──────────────────────────────────
+    latest = __version__
+    release_url = f"https://github.com/{_GITHUB_REPO}/releases/latest"
+    error = None
+    try:
+        resp = httpx.get(
+            f"https://api.github.com/repos/{_GITHUB_REPO}/releases/latest",
+            headers={"Accept": "application/vnd.github+json", "User-Agent": f"HiveRunr/{__version__}"},
+            timeout=5,
+        )
+        if resp.status_code == 200:
+            data = resp.json()
+            tag = data.get("tag_name", "").lstrip("v")
+            if tag:
+                latest = tag
+                release_url = data.get("html_url", release_url)
+    except Exception as exc:
+        error = str(exc)
+
+    payload = {
+        "current":          __version__,
+        "latest":           latest,
+        "update_available": _version_gt(latest, __version__),
+        "release_url":      release_url,
+        "checked_at":       int(time.time()),
+    }
+    if error:
+        payload["check_error"] = error
+
+    # Cache result (even on error, to avoid hammering GH on every page load)
+    try:
+        set_setting(_VERSION_CACHE_KEY, json.dumps({k: v for k, v in payload.items() if k != "current"}))
+    except Exception:
+        pass
+
+    return payload
+
+
+def _version_gt(a: str, b: str) -> bool:
+    """Return True if semver string a is strictly greater than b."""
+    try:
+        def _parts(v):
+            return tuple(int(x) for x in v.lstrip("v").split(".")[:3])
+        return _parts(a) > _parts(b)
+    except Exception:
+        return False
 
 
 # ── Metrics ───────────────────────────────────────────────────────────────────

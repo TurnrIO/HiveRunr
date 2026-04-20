@@ -18,6 +18,10 @@ body{font-family:'Inter',system-ui,sans-serif;background:#0f1117;color:#e2e8f0;m
 .nav-icon{font-size:16px;width:20px;text-align:center}
 .sidebar-footer{margin-top:auto;border-top:1px solid #2a2d3e;padding:14px 12px 10px}
 .sidebar-footer .footer-label{font-size:10px;color:#4b5563;padding:0 8px;margin-bottom:8px;text-transform:uppercase;letter-spacing:.07em;font-weight:600}
+.version-chip{display:inline-flex;align-items:center;gap:4px;font-size:10px;color:#64748b;padding:2px 7px;border-radius:999px;border:1px solid #2a2d3e;margin-left:auto;white-space:nowrap}
+.version-chip.update-avail{color:#fbbf24;border-color:#fbbf2455;background:#fbbf2408;cursor:pointer;text-decoration:none}
+.version-chip.update-avail:hover{background:#fbbf2418}
+.update-banner{display:flex;align-items:center;gap:10px;padding:9px 14px;background:#fbbf2412;border-bottom:1px solid #fbbf2435;font-size:12px;color:#fbbf24;flex-shrink:0}
 .ext-link{display:flex;align-items:center;gap:9px;padding:8px 10px;border-radius:7px;color:#64748b;font-size:12px;font-weight:500;text-decoration:none;transition:all .15s;cursor:pointer}
 .ext-link:hover{background:#252840;color:#e2e8f0}
 .ext-link .el-icon{font-size:15px;width:20px;text-align:center}
@@ -4265,11 +4269,16 @@ function App() {
   const [showShortcuts, setShowShortcuts]  = useState(false);
   const [workspaces, setWorkspaces]        = useState([]);
   const [activeWorkspace, setActiveWorkspace] = useState(null);
+  const [versionInfo, setVersionInfo]      = useState(null);
+  const [updateDismissed, setUpdateDismissed] = useState(() => {
+    try { return localStorage.getItem("hr_update_dismissed") || ""; } catch(e) { return ""; }
+  });
   const showToast = useCallback((msg, type="success") => setToast({msg,type,key:Date.now()}), []);
 
   useEffect(()=>{
     api("GET","/api/auth/me").then(u=>{ if(u) setCurrentUser(u); }).catch(()=>{});
     api("GET","/api/auth/status").then(s=>{ if(s) setEncryptionOk(!!s.encryption_configured); }).catch(()=>{});
+    api("GET","/api/version").then(v=>{ if(v) setVersionInfo(v); }).catch(()=>{});
     api("GET","/api/workspaces/my/list").then(list=>{
       setWorkspaces(list||[]);
       const wid = _getWorkspaceId();
@@ -4319,6 +4328,27 @@ function App() {
 
   return (
     <>
+      {/* ── New-version banner ─────────────────────────────────────────── */}
+      {versionInfo?.update_available && versionInfo.latest !== updateDismissed && (
+        <div className="update-banner" role="alert">
+          <span>🆕</span>
+          <span style={{flex:1}}>
+            HiveRunr <strong>v{versionInfo.latest}</strong> is available — you're on v{versionInfo.current}.{" "}
+            <a href={versionInfo.release_url||"https://github.com/TurnrIO/HiveRunr/releases"}
+               target="_blank" rel="noopener" style={{color:"#fbbf24",fontWeight:600}}>
+              View release notes ↗
+            </a>
+          </span>
+          <button onClick={()=>{
+            const v = versionInfo.latest;
+            try { localStorage.setItem("hr_update_dismissed", v); } catch(e){}
+            setUpdateDismissed(v);
+          }} aria-label="Dismiss update notification"
+          style={{background:"none",border:"none",color:"#fbbf24",cursor:"pointer",fontSize:16,lineHeight:1,padding:"0 4px",opacity:.7}}
+          onMouseEnter={e=>e.currentTarget.style.opacity="1"}
+          onMouseLeave={e=>e.currentTarget.style.opacity=".7"}>✕</button>
+        </div>
+      )}
       <button className="hamburger" aria-label="Open navigation menu" aria-expanded={sidebarOpen}
         onClick={()=>setSidebarOpen(o=>!o)}>☰</button>
       <div className={`sidebar-overlay${sidebarOpen?" sidebar-open":""}`}
@@ -4378,7 +4408,21 @@ function App() {
           </div>
         ))}
         <div className="sidebar-footer">
-          <div className="footer-label">Quick links</div>
+          <div className="footer-label" style={{display:"flex",alignItems:"center",padding:"0 8px",marginBottom:8}}>
+            Quick links
+            {versionInfo && (
+              versionInfo.update_available && versionInfo.latest !== updateDismissed
+                ? <a href={versionInfo.release_url||"https://github.com/TurnrIO/HiveRunr/releases"}
+                     target="_blank" rel="noopener"
+                     className="version-chip update-avail"
+                     title={`v${versionInfo.latest} available — click to view release notes`}>
+                    ↑ v{versionInfo.latest}
+                  </a>
+                : <span className="version-chip" title={`HiveRunr v${versionInfo.current}`}>
+                    v{versionInfo.current}
+                  </span>
+            )}
+          </div>
           <a className="ext-link" href="/canvas">
             <span className="el-icon">🎨</span>Node Canvas
           </a>
