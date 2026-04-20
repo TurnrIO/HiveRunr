@@ -12,7 +12,7 @@
 | Workers | Celery + Redis (broker + result backend) |
 | DB | PostgreSQL via psycopg2 (`RealDictCursor`) + Alembic migrations |
 | Scheduler | APScheduler `BlockingScheduler` + Redis leader-lock |
-| Frontend | Inline JSX/Babel (no build step) — single-file pages in `app/static/` |
+| Frontend | **Vite + React** (F-series migration in progress — see backlog) |
 | Reverse proxy | Caddy |
 | Email | AgentMail.to REST API (`POST /v0/inboxes/{inbox_id}/messages/send`, Bearer auth) |
 | Container | Docker Compose — bind-mount `./app:/app/app` so host files are live |
@@ -25,17 +25,100 @@
 app/
   core/db.py          — all DB helpers (psycopg2, RealDictCursor)
   routers/            — FastAPI routers (auth, graphs, runs, nodes, tokens, …)
-  static/             — HTML/JSX pages (admin.html, canvas.html, login.html, reset.html)
+  static/             — legacy monolithic HTML pages (being replaced by F-series)
+  static/dist/        — Vite build output (served by FastAPI in production)
   worker.py           — Celery tasks, alert/webhook dispatch
   scheduler.py        — APScheduler entry point + nightly jobs
   email.py            — AgentMail.to send helpers
   main.py             — FastAPI app + middleware
   nodes/              — built-in node modules (one file per node type)
   nodes/custom/       — hot-reloadable custom nodes (no restart needed)
-migrations/versions/  — Alembic migration files (0001 … 0005)
+migrations/versions/  — Alembic migration files (0001 … 0011)
+frontend/             — Vite + React source (see Frontend architecture below)
 install.sh            — curl | bash one-liner installer
 setup.sh              — interactive first-run configurator
 ```
+
+---
+
+## Frontend architecture (F-series migration)
+
+The frontend is being migrated from two monolithic inline-JSX files to a proper
+Vite + React multi-page application.  The old files stay in `app/static/` until
+their replacement sprint is complete — the app is always fully functional.
+
+**Key decisions:**
+
+| Decision | Choice |
+|----------|--------|
+| Build tool | Vite with `@vitejs/plugin-react` |
+| Language | JSX (plain JS — no TypeScript yet) |
+| Routing | React Router v6 (admin SPA); standalone pages for auth/canvas |
+| CSS | CSS Modules for new files; inline styles preserved during migration |
+| State | React Context for workspace/user/toast; local useState elsewhere |
+| Output | `app/static/dist/` — FastAPI's existing StaticFiles mount serves it |
+| Dev mode | `npm run dev` (`vite build --watch`) — continuous rebuild, FastAPI serves dist/ |
+
+**Directory structure (target state):**
+```
+frontend/
+  src/
+    api/
+      client.js             — the api() fetch helper (single source of truth)
+    components/             — shared components used across multiple pages
+      Toast.jsx
+      ConfirmModal.jsx
+      useFocusTrap.js
+      StatusDot.jsx
+      ViewerBanner.jsx
+      RoleBadge.jsx
+      ReplayEditModal.jsx
+      TraceRow.jsx
+    contexts/
+      WorkspaceContext.jsx
+      AuthContext.jsx
+    pages/
+      admin/                — one file per admin page
+        Dashboard.jsx
+        Flows.jsx
+        Runs.jsx
+        Credentials.jsx
+        Schedules.jsx
+        Settings.jsx
+        AuditLog.jsx
+        System.jsx
+        Workspaces.jsx
+        Users.jsx
+        Templates.jsx
+      auth/                 — standalone auth pages
+        Login.jsx
+        Signup.jsx
+        Reset.jsx
+        Invite.jsx
+      canvas/               — canvas editor components
+        CanvasApp.jsx
+        ConfigPanel.jsx
+        NodeEditorModal.jsx
+        HistoryModal.jsx
+        OpenModal.jsx
+        Palette.jsx
+        nodeDefs.js
+        ... (see F7–F9)
+    admin/
+      App.jsx               — React Router root + AdminLayout
+      index.jsx             — entry point
+    canvas/
+      index.jsx             — entry point
+  admin.html                — Vite HTML entry for admin SPA
+  canvas.html               — Vite HTML entry for canvas
+  login.html / signup.html / reset.html / invite.html
+  vite.config.js
+  package.json
+```
+
+**NODE_DEFS note (post-F7):** After F7 ships, add new nodes to
+`frontend/src/pages/canvas/nodeDefs.js` instead of `app/static/canvas.html`.
+Until then the old canvas.html file is the source of truth.
 
 ---
 
@@ -312,6 +395,39 @@ Pick the next item off the top. Cross it off and add a "Completed sprints" row w
 39. ~~**DB connection pool tuning**~~ ✓ Done — `ThreadedConnectionPool` in `db.py` (min 2/max 10, env-configurable); `get_pool_stats()` exposed in `GET /api/system/status` System page pool chip.
 
 40. ~~**Multi-region / DR runbook**~~ ✓ Done — `OPERATIONS.md` extended with HA + DR sections; `docker-compose.ha.yml` (Postgres streaming replication, Redis Sentinel × 3, 2× API/worker/scheduler replicas).
+
+---
+
+### 🏗 F-series — Frontend restructure (Vite + React migration)
+
+**Goal:** Replace the two 4,000+ line monolithic inline-JSX files (`admin.html`,
+`canvas.html`) with a properly structured Vite + React multi-page application.
+Each sprint keeps the app 100% functional — old files are only deleted once
+their replacement is confirmed working.
+
+**Rule:** After each sprint, update `CLAUDE.md`: tick the item, add a row to
+Completed sprints, and update the "Frontend architecture" section if the
+directory structure changed.
+
+41. **F0 — Vite scaffolding** — `frontend/` at repo root; `package.json` (react, react-dom, react-router-dom v6, @vitejs/plugin-react, vite); `vite.config.js` multi-page build outputting to `app/static/dist/`; entry HTML stubs for admin, canvas, login, signup, reset, invite; `src/api/client.js` with the `api()` helper extracted once; `app/main.py` updated to serve from `dist/` with fallback to `app/static/`; `Makefile` with `dev` (watch) and `build` (prod) targets; `Dockerfile` gains `npm ci && npm run build` step.
+
+42. **F1 — Shared component library** — extract components used across multiple pages into `frontend/src/components/`: `Toast.jsx`, `ConfirmModal.jsx`, `useFocusTrap.js`, `StatusDot.jsx`, `ViewerBanner.jsx`, `RoleBadge.jsx`, `ReplayEditModal.jsx`, `TraceRow.jsx`; `frontend/src/contexts/WorkspaceContext.jsx` + `AuthContext.jsx`.
+
+43. **F2 — Auth pages** — `src/pages/auth/Login.jsx`, `Signup.jsx`, `Reset.jsx`, `Invite.jsx`; wired as Vite entry points; delete `app/static/login.html`, `signup.html`, `reset.html`, `invite.html`.
+
+44. **F3 — Admin shell + routing** — React Router v6 in `src/admin/App.jsx`; `AdminLayout.jsx` (sidebar, workspace switcher, nav links, keyboard shortcuts modal, version chip); workspace resolution via `WorkspaceContext`; `src/admin/index.jsx` entry point.
+
+45. **F4 — Admin: Dashboard + Flows + Runs** — `src/pages/admin/Dashboard.jsx`, `Metrics.jsx`, `Flows.jsx` (+ `GraphRow.jsx`, `HistoryModal.jsx`, `AlertSettingsModal.jsx`), `Logs.jsx`.
+
+46. **F5 — Admin: Credentials + Schedules** — `Credentials.jsx` + `OAuthConnectModal.jsx`; `Schedules.jsx` + `CronBuilder.jsx`, `DateTimePicker.jsx`, `TimezoneSelect.jsx`, `FlowPicker.jsx`, `CronNextRun.jsx`.
+
+47. **F6 — Admin: remaining pages + delete admin.html** — `Settings.jsx`, `AuditLog.jsx`, `SystemDiagnostics.jsx`, `Users.jsx`, `WorkspacesPage.jsx`, `Templates.jsx`; delete `app/static/admin.html`.
+
+48. **F7 — Canvas: node defs + primitives** — `src/pages/canvas/nodeDefs.js` (all NODE_DEFS out of canvas.html); `CustomNode.jsx`, `StickyNote.jsx`, `NodeContextMenu.jsx`, `Palette.jsx`, `ConfigPanel.jsx`.
+
+49. **F8 — Canvas: modals** — `NodeEditorModal.jsx` (with TestPanel + VariableInserter), `HistoryModal.jsx`, `OpenModal.jsx`, `TestPayloadModal.jsx`, `ValidationModal.jsx`, `EdgeLabelModal.jsx`, `PermissionsModal.jsx`.
+
+50. **F9 — Canvas: main app + delete canvas.html** — `CanvasApp.jsx` (ReactFlow root, SSE streaming, keyboard shortcuts, minimap, autosave, dirty-state); `NodeSearchBar.jsx`; delete `app/static/canvas.html`.
 
 ---
 
