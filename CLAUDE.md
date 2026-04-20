@@ -276,6 +276,8 @@ OWNER_EMAIL=
 | P6-38 | OpenTelemetry tracing — `app/telemetry.py` zero-overhead module (noop when OTLP endpoint unset); `graph.run` root span in worker; `run_graph` + per-node child spans in executor; `setup_tracing()` called in API/worker/scheduler; optional SDK + OTLP exporter |
 | P6-39 | DB connection pool — `psycopg2.ThreadedConnectionPool` (min 2/max 10, `DB_POOL_MIN`/`DB_POOL_MAX`); broken-connection discard; `get_pool_stats()` exposed in `GET /api/system/status` System page |
 | P6-40 | HA/DR runbook — `OPERATIONS.md` extended with Postgres streaming replication, Redis Sentinel failover, multi-region Celery workers, DR checklist + RTO/RPO table; `docker-compose.ha.yml` (Postgres primary+replica, Redis+2 replicas+3 Sentinels, 2× API/worker/scheduler) |
+| F0 | Vite scaffolding — `frontend/` at repo root; `package.json`, `vite.config.js` multi-page build → `app/static/dist/`; HTML stubs for all 6 pages; `src/api/client.js` single `api()` helper; `_MIGRATED_PAGES` gate in `main.py`; multi-stage `Dockerfile`; `Makefile` dev/build/install/test targets; `.gitignore` updated |
+| F1 | Shared component library — `frontend/src/components/`: `Toast.jsx`, `useFocusTrap.js`, `ConfirmModal.jsx`, `ViewerBanner.jsx`, `ReplayEditModal.jsx`, `TraceRow.jsx`, `StatusDot.jsx`, `RoleBadge.jsx` (+ `ROLE_META`); `frontend/src/contexts/WorkspaceContext.jsx` + `AuthContext.jsx`; 35 modules build cleanly, 118 tests pass |
 
 ---
 
@@ -409,9 +411,9 @@ their replacement is confirmed working.
 Completed sprints, and update the "Frontend architecture" section if the
 directory structure changed.
 
-41. **F0 — Vite scaffolding** — `frontend/` at repo root; `package.json` (react, react-dom, react-router-dom v6, @vitejs/plugin-react, vite); `vite.config.js` multi-page build outputting to `app/static/dist/`; entry HTML stubs for admin, canvas, login, signup, reset, invite; `src/api/client.js` with the `api()` helper extracted once; `app/main.py` updated to serve from `dist/` with fallback to `app/static/`; `Makefile` with `dev` (watch) and `build` (prod) targets; `Dockerfile` gains `npm ci && npm run build` step.
+41. ~~**F0 — Vite scaffolding**~~ ✓ Done
 
-42. **F1 — Shared component library** — extract components used across multiple pages into `frontend/src/components/`: `Toast.jsx`, `ConfirmModal.jsx`, `useFocusTrap.js`, `StatusDot.jsx`, `ViewerBanner.jsx`, `RoleBadge.jsx`, `ReplayEditModal.jsx`, `TraceRow.jsx`; `frontend/src/contexts/WorkspaceContext.jsx` + `AuthContext.jsx`.
+42. ~~**F1 — Shared component library**~~ ✓ Done
 
 43. **F2 — Auth pages** — `src/pages/auth/Login.jsx`, `Signup.jsx`, `Reset.jsx`, `Invite.jsx`; wired as Vite entry points; delete `app/static/login.html`, `signup.html`, `reset.html`, `invite.html`.
 
