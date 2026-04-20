@@ -10,25 +10,97 @@ IMPORTANT — RealDictCursor:
       n = cur.fetchone()["n"]   # correct
       n = cur.fetchone()[0]     # WRONG — raises TypeError with RealDictCursor
 """
-import os, json, logging
+import os, json, logging, threading
 from contextlib import contextmanager
 import psycopg2
 import psycopg2.extras
+import psycopg2.pool
 
 log = logging.getLogger(__name__)
+# NOTE: DSN is read at module-import time so that Alembic and any code that
+# references DSN directly still gets the right value.  The connection pool
+# reads DATABASE_URL lazily at first-use time so that load_secrets() can
+# inject the value before the first real DB call is made.
 DSN = os.environ.get("DATABASE_URL", "postgresql://hiverunr:hiverunr@db:5432/hiverunr")
+
+# ── Connection pool ───────────────────────────────────────────────────────────
+# ThreadedConnectionPool is safe for use in multi-threaded processes (FastAPI
+# workers, Celery workers, APScheduler threads).  Connections are checked-out
+# via get_conn() and returned to the pool on context-manager exit.
+#
+# Tuning env vars (all optional, safe to leave at defaults):
+#   DB_POOL_MIN  — keep-alive connections (default 2)
+#   DB_POOL_MAX  — hard cap on concurrent connections (default 10)
+_pool_lock: threading.Lock = threading.Lock()
+_pool: psycopg2.pool.ThreadedConnectionPool | None = None
+
+
+def _get_pool() -> psycopg2.pool.ThreadedConnectionPool:
+    """Lazily create the pool on first DB call (double-checked locking)."""
+    global _pool
+    if _pool is not None:
+        return _pool
+    with _pool_lock:
+        if _pool is not None:
+            return _pool
+        dsn     = os.environ.get("DATABASE_URL", DSN)
+        min_c   = int(os.environ.get("DB_POOL_MIN", "2"))
+        max_c   = int(os.environ.get("DB_POOL_MAX", "10"))
+        _pool   = psycopg2.pool.ThreadedConnectionPool(min_c, max_c, dsn)
+        host    = dsn.split("@")[-1] if "@" in dsn else dsn
+        log.info("DB connection pool initialised (min=%d max=%d host=%s)", min_c, max_c, host)
+    return _pool
+
+
+def get_pool_stats() -> dict:
+    """Return current pool utilisation — used by /api/system/status.
+
+    Returns an empty dict if the pool has not been initialised yet (i.e. no
+    DB call has been made since startup).
+    """
+    if _pool is None:
+        return {}
+    with _pool_lock:
+        if _pool is None:
+            return {}
+        free   = len(_pool._pool)               # type: ignore[attr-defined]
+        in_use = len(_pool._used)               # type: ignore[attr-defined]
+        return {
+            "pool_min":       _pool.minconn,
+            "pool_max":       _pool.maxconn,
+            "pool_size":      free + in_use,    # total allocated connections
+            "pool_available": free,             # idle, ready to be checked out
+            "pool_in_use":    in_use,           # currently checked out
+        }
+
 
 @contextmanager
 def get_conn():
-    # NOTE: autocommit=True means every statement is its own transaction.
-    # For multi-statement operations that must be atomic, set conn.autocommit=False
-    # and call conn.commit() / conn.rollback() explicitly.
-    conn = psycopg2.connect(DSN)
+    """Check out a connection from the pool; return it when the block exits.
+
+    NOTE: autocommit=True means every statement is its own transaction.
+    For multi-statement operations that must be atomic, set conn.autocommit=False
+    and call conn.commit() / conn.rollback() explicitly.
+
+    If an OperationalError or InterfaceError is raised (broken connection,
+    DB restart, TCP timeout), the bad connection is discarded from the pool
+    so subsequent callers get a fresh one.
+    """
+    pool = _get_pool()
+    conn = pool.getconn()
     conn.autocommit = True
+    close_conn = False
     try:
         yield conn
+    except (psycopg2.OperationalError, psycopg2.InterfaceError):
+        # Broken connection — discard rather than returning to pool
+        close_conn = True
+        raise
     finally:
-        conn.close()
+        try:
+            pool.putconn(conn, close=close_conn)
+        except Exception:
+            pass
 
 psycopg2.extras.register_uuid()
 
