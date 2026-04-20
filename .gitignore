@@ -1,3 +1,7 @@
+# Node / frontend build artefacts
+frontend/node_modules/
+app/static/dist/
+
 # Python
 __pycache__/
 *.py[cod]

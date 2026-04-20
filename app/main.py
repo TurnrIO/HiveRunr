@@ -41,8 +41,27 @@ from app.routers.templates   import router as templates_router
 
 log          = logging.getLogger(__name__)
 STATIC_DIR   = Path(__file__).parent / "static"
+DIST_DIR     = STATIC_DIR / "dist"
 WORKFLOWS    = ["example"]
 API_KEY      = os.environ.get("API_KEY", "dev_api_key")
+
+# ── F-series migration tracker ────────────────────────────────────────────────
+# Pages listed here are served from the Vite dist/ build instead of app/static/.
+# Add the filename when the corresponding F-sprint is complete and confirmed.
+#   F2  → "login.html", "signup.html", "reset.html", "invite.html"
+#   F6  → "admin.html"
+#   F9  → "canvas.html"
+_MIGRATED_PAGES: set[str] = set()
+
+
+def _serve_page(filename: str) -> "FileResponse":
+    """Serve from Vite dist/ if migrated, else fall back to legacy app/static/."""
+    if filename in _MIGRATED_PAGES:
+        dist_file = DIST_DIR / filename
+        if dist_file.exists():
+            return FileResponse(str(dist_file), media_type="text/html")
+        log.warning("_MIGRATED_PAGES includes %s but dist file not found — serving legacy", filename)
+    return FileResponse(str(STATIC_DIR / filename), media_type="text/html")
 
 from app._version import __version__
 
@@ -190,7 +209,7 @@ def login_page(request: Request):
     from app.auth import get_current_user
     if get_current_user(request):
         return RedirectResponse("/", status_code=302)
-    return FileResponse(str(STATIC_DIR / "login.html"), media_type="text/html")
+    return _serve_page("login.html")
 
 
 @app.get("/setup")
@@ -206,7 +225,7 @@ def root(request: Request):
     redir = _auth_redirect(request)
     if redir:
         return redir
-    return FileResponse(str(STATIC_DIR / "admin.html"), media_type="text/html")
+    return _serve_page("admin.html")
 
 
 @app.get("/admin")
@@ -215,17 +234,17 @@ def admin_page(request: Request, rest: str = ""):
     redir = _auth_redirect(request)
     if redir:
         return redir
-    return FileResponse(str(STATIC_DIR / "admin.html"), media_type="text/html")
+    return _serve_page("admin.html")
 
 
 @app.get("/reset-password")
 def reset_password_page():
-    return FileResponse(str(STATIC_DIR / "reset.html"), media_type="text/html")
+    return _serve_page("reset.html")
 
 
 @app.get("/invite/accept")
 def invite_accept_page():
-    return FileResponse(str(STATIC_DIR / "invite.html"), media_type="text/html")
+    return _serve_page("invite.html")
 
 
 @app.get("/canvas")
@@ -234,7 +253,7 @@ def canvas_page(request: Request):
     redir = _auth_redirect(request)
     if redir:
         return redir
-    return FileResponse(str(STATIC_DIR / "canvas.html"), media_type="text/html")
+    return _serve_page("canvas.html")
 
 
 # ── Auth-gated API docs ───────────────────────────────────────────────────────
