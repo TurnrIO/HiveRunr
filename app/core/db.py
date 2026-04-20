@@ -967,6 +967,18 @@ def set_setting(key: str, value: str) -> None:
             ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value, updated_at=NOW()
         """, (key, value))
 
+def get_ratelimit_policy() -> dict:
+    """Return the webhook rate-limit policy with typed values."""
+    import os
+    return {
+        "limit":  int(get_setting("ratelimit_limit",  os.environ.get("WEBHOOK_RATE_LIMIT",  "60"))),
+        "window": int(get_setting("ratelimit_window", os.environ.get("WEBHOOK_RATE_WINDOW", "60"))),
+    }
+
+def set_ratelimit_policy(limit: int, window: int) -> None:
+    set_setting("ratelimit_limit",  str(max(0, int(limit))))
+    set_setting("ratelimit_window", str(max(1, int(window))))
+
 def get_retention_policy() -> dict:
     """Return the run retention policy as a dict with typed values."""
     return {

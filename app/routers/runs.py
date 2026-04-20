@@ -13,6 +13,7 @@ from app.core.db import (
     list_runs, delete_run, clear_runs, bulk_delete_runs, get_run_by_task, update_run, get_graph,
     trim_runs_by_count, trim_runs_by_age,
     get_retention_policy, set_retention_policy,
+    get_ratelimit_policy, set_ratelimit_policy,
     log_audit,
 )
 
@@ -180,6 +181,46 @@ def api_set_retention(body: RetentionBody, request: Request):
                "count": body.count, "days": body.days},
               request.client.host if request.client else None)
     return get_retention_policy()
+
+
+# ── Rate-limit settings ───────────────────────────────────────────────────────
+@router.get("/api/settings/ratelimit")
+def api_get_ratelimit(request: Request):
+    _require_manage_scope(request)
+    policy = get_ratelimit_policy()
+    # Attach live per-token counters from Redis
+    counters = []
+    try:
+        import redis as _redis
+        r = _redis.from_url(os.environ.get("CELERY_BROKER_URL", "redis://redis:6379/0"))
+        keys = r.keys("wh_rate:*")
+        for k in sorted(keys)[:50]:  # cap at 50 entries
+            token = k.split(":", 1)[1] if ":" in k else k
+            count = int(r.get(k) or 0)
+            ttl   = r.ttl(k)
+            counters.append({"token": token, "count": count, "ttl_seconds": ttl})
+    except Exception:
+        pass
+    return {**policy, "counters": counters}
+
+
+class RatelimitBody(BaseModel):
+    limit:  int = 60   # calls per window; 0 = disabled
+    window: int = 60   # window size in seconds
+
+
+@router.put("/api/settings/ratelimit")
+def api_set_ratelimit(body: RatelimitBody, request: Request):
+    user = _require_manage_scope(request)
+    if body.limit < 0:
+        raise HTTPException(422, "limit must be ≥ 0 (use 0 to disable)")
+    if body.window < 1:
+        raise HTTPException(422, "window must be ≥ 1 second")
+    set_ratelimit_policy(body.limit, body.window)
+    log_audit(user["username"], "settings.ratelimit", None, None,
+              {"limit": body.limit, "window": body.window},
+              request.client.host if request.client else None)
+    return get_ratelimit_policy()
 
 
 @router.post("/api/runs/{run_id}/cancel")

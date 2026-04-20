@@ -7,30 +7,30 @@ import os
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
 
-from app.core.db import get_graph_by_token
+from app.core.db import get_graph_by_token, get_ratelimit_policy
 from app.worker import enqueue_graph
 
 router = APIRouter()
 
-_WEBHOOK_RATE_LIMIT  = int(os.environ.get("WEBHOOK_RATE_LIMIT", "60"))
-_WEBHOOK_RATE_WINDOW = int(os.environ.get("WEBHOOK_RATE_WINDOW", "60"))
 
-
-def _check_webhook_rate(token: str) -> bool:
-    """Returns True if the request is allowed, False if rate-limited."""
-    if _WEBHOOK_RATE_LIMIT <= 0:
-        return True
+def _check_webhook_rate(token: str) -> tuple[bool, int, int]:
+    """Returns (allowed, limit, window). Reads config live from app_settings."""
+    policy = get_ratelimit_policy()
+    limit  = policy["limit"]
+    window = policy["window"]
+    if limit <= 0:
+        return True, limit, window
     try:
         import redis as _redis
         r = _redis.from_url(os.environ.get("CELERY_BROKER_URL", "redis://redis:6379/0"))
         key = f"wh_rate:{token}"
         pipe = r.pipeline()
         pipe.incr(key)
-        pipe.expire(key, _WEBHOOK_RATE_WINDOW)
+        pipe.expire(key, window)
         count, _ = pipe.execute()
-        return count <= _WEBHOOK_RATE_LIMIT
+        return count <= limit, limit, window
     except Exception:
-        return True
+        return True, limit, window
 
 
 def _get_webhook_trigger_config(g: dict) -> dict:
@@ -65,8 +65,10 @@ async def webhook_trigger(token: str, request: Request):
         raise HTTPException(404, "Unknown webhook token")
     if not g.get("enabled"):
         raise HTTPException(403, "Graph is disabled")
-    if not _check_webhook_rate(token):
-        raise HTTPException(429, f"Rate limit exceeded — max {_WEBHOOK_RATE_LIMIT} calls per {_WEBHOOK_RATE_WINDOW}s")
+
+    allowed, limit, window = _check_webhook_rate(token)
+    if not allowed:
+        raise HTTPException(429, f"Rate limit exceeded — max {limit} calls per {window}s")
 
     cfg = _get_webhook_trigger_config(g)
 
@@ -74,8 +76,8 @@ async def webhook_trigger(token: str, request: Request):
     allowed_origins_raw = cfg.get("allowed_origins", "").strip()
     origin = request.headers.get("origin", "")
     if allowed_origins_raw and origin:
-        allowed = [o.strip() for o in allowed_origins_raw.splitlines() if o.strip()]
-        if allowed and origin not in allowed and "*" not in allowed:
+        allowed_list = [o.strip() for o in allowed_origins_raw.splitlines() if o.strip()]
+        if allowed_list and origin not in allowed_list and "*" not in allowed_list:
             raise HTTPException(403, f"Origin '{origin}' is not allowed")
 
     # ── Read raw body (needed for HMAC verification before parsing JSON) ───
