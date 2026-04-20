@@ -280,6 +280,7 @@ OWNER_EMAIL=
 | F1 | Shared component library — `frontend/src/components/`: `Toast.jsx`, `useFocusTrap.js`, `ConfirmModal.jsx`, `ViewerBanner.jsx`, `ReplayEditModal.jsx`, `TraceRow.jsx`, `StatusDot.jsx`, `RoleBadge.jsx` (+ `ROLE_META`); `frontend/src/contexts/WorkspaceContext.jsx` + `AuthContext.jsx`; 35 modules build cleanly, 118 tests pass |
 | F2 | Auth pages — `frontend/src/pages/auth/`: `login.jsx` (sign-in + forgot-password toggle), `signup.jsx` (self-serve), `reset.jsx` (token-based), `invite.jsx` (accept + new-user signup); shared `AuthCard.jsx` layout; `_MIGRATED_PAGES` in `main.py` updated; legacy static HTML files removed from git; 36 modules, 14 chunks |
 | F3 | Admin shell + routing — `src/admin/App.jsx` (AuthProvider + WorkspaceProvider + BrowserRouter + 13 routes); `AdminLayout.jsx` (sidebar, workspace switcher, NavLink nav, update banner, keyboard shortcuts modal, user info + sign-out); `src/admin/index.jsx` entry point; 13 stub page components in `src/pages/admin/`; 60 modules, 118 tests passing |
+| F4 | Admin: Dashboard + Metrics + Flows + Logs — full React ports of four pages from admin.html; `GraphRow.jsx` sub-component with inline HistoryModal + AlertSettingsModal; 65 modules, 118 tests passing |
 
 ---
 
@@ -421,9 +422,7 @@ directory structure changed.
 
 44. ~~**F3 — Admin shell + routing**~~ ✓ Done
 
-45. **F4 — Admin: Dashboard + Flows + Runs** — React Router v6 in `src/admin/App.jsx`; `AdminLayout.jsx` (sidebar, workspace switcher, nav links, keyboard shortcuts modal, version chip); workspace resolution via `WorkspaceContext`; `src/admin/index.jsx` entry point.
-
-45. **F4 — Admin: Dashboard + Flows + Runs** — `src/pages/admin/Dashboard.jsx`, `Metrics.jsx`, `Flows.jsx` (+ `GraphRow.jsx`, `HistoryModal.jsx`, `AlertSettingsModal.jsx`), `Logs.jsx`.
+45. ~~**F4 — Admin: Dashboard + Flows + Runs**~~ ✓ Done
 
 46. **F5 — Admin: Credentials + Schedules** — `Credentials.jsx` + `OAuthConnectModal.jsx`; `Schedules.jsx` + `CronBuilder.jsx`, `DateTimePicker.jsx`, `TimezoneSelect.jsx`, `FlowPicker.jsx`, `CronNextRun.jsx`.
 
