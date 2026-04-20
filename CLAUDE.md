@@ -278,6 +278,7 @@ OWNER_EMAIL=
 | P6-40 | HA/DR runbook — `OPERATIONS.md` extended with Postgres streaming replication, Redis Sentinel failover, multi-region Celery workers, DR checklist + RTO/RPO table; `docker-compose.ha.yml` (Postgres primary+replica, Redis+2 replicas+3 Sentinels, 2× API/worker/scheduler) |
 | F0 | Vite scaffolding — `frontend/` at repo root; `package.json`, `vite.config.js` multi-page build → `app/static/dist/`; HTML stubs for all 6 pages; `src/api/client.js` single `api()` helper; `_MIGRATED_PAGES` gate in `main.py`; multi-stage `Dockerfile`; `Makefile` dev/build/install/test targets; `.gitignore` updated |
 | F1 | Shared component library — `frontend/src/components/`: `Toast.jsx`, `useFocusTrap.js`, `ConfirmModal.jsx`, `ViewerBanner.jsx`, `ReplayEditModal.jsx`, `TraceRow.jsx`, `StatusDot.jsx`, `RoleBadge.jsx` (+ `ROLE_META`); `frontend/src/contexts/WorkspaceContext.jsx` + `AuthContext.jsx`; 35 modules build cleanly, 118 tests pass |
+| F2 | Auth pages — `frontend/src/pages/auth/`: `login.jsx` (sign-in + forgot-password toggle), `signup.jsx` (self-serve), `reset.jsx` (token-based), `invite.jsx` (accept + new-user signup); shared `AuthCard.jsx` layout; `_MIGRATED_PAGES` in `main.py` updated; legacy static HTML files removed from git; 36 modules, 14 chunks |
 
 ---
 
@@ -415,7 +416,7 @@ directory structure changed.
 
 42. ~~**F1 — Shared component library**~~ ✓ Done
 
-43. **F2 — Auth pages** — `src/pages/auth/Login.jsx`, `Signup.jsx`, `Reset.jsx`, `Invite.jsx`; wired as Vite entry points; delete `app/static/login.html`, `signup.html`, `reset.html`, `invite.html`.
+43. ~~**F2 — Auth pages**~~ ✓ Done
 
 44. **F3 — Admin shell + routing** — React Router v6 in `src/admin/App.jsx`; `AdminLayout.jsx` (sidebar, workspace switcher, nav links, keyboard shortcuts modal, version chip); workspace resolution via `WorkspaceContext`; `src/admin/index.jsx` entry point.
 
