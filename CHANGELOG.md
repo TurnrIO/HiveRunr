@@ -4,6 +4,102 @@ All notable changes are documented here, newest first.
 
 ---
 
+## [0.2.0] — 2026-04-20 — Resilience, Observability & Power-User Features
+
+This release covers all work since 0.1.0: operations hardening, DB resilience, credential OAuth, nine new node types, full mobile + accessibility overhaul, canvas power-user features, and the webhook rate-limit config UI.
+
+### Credential OAuth flows (Sprint 18)
+- **One-click OAuth connect** — `GET /api/oauth/{provider}/start` redirects to the provider; `GET /api/oauth/{provider}/callback` exchanges the code and saves the credential automatically
+- Supported providers: **GitHub** (repo + read:user scopes), **Google** (Sheets + Drive, offline refresh token), **Notion** (Basic token exchange)
+- `GET /api/oauth/providers` lists which providers have client credentials configured
+- `OAuthConnectModal` in the admin Credentials page; success/error surfaced via toast + auto-navigate; `?oauth_success` / `?oauth_error` query params handled on mount
+- New env vars: `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `NOTION_CLIENT_ID`, `NOTION_CLIENT_SECRET` (all optional)
+
+### System diagnostics & startup validation (S-A / S-B)
+- **System page** (`GET /api/system/status`) — 9 subsystem checks: DB, Redis, Celery, scheduler leader, email, secrets, API key security, HTTPS, disk; each returns `{status, message, fix?}`; new **System** nav page with colour-coded checks and inline fix guidance, auto-refreshes every 30 s
+- **Startup validation** — `_validate_config()` runs on startup; fatal checks (DB + Redis) call `sys.exit(1)` on failure with a clear error; warning checks (SECRET_KEY, API_KEY, APP_URL, AgentMail) log actionable messages
+
+### Ops hardening (S-C)
+- `OPERATIONS.md` runbook: health check, start/stop/restart, DB ops, worker/scheduler ops, common errors table, env vars reference
+- `PrometheusMiddleware` rewritten as pure ASGI (no `BaseHTTPMiddleware`) — handler exceptions now propagate correctly to uvicorn's logger instead of being swallowed
+- Two `email.py` bug fixes backported: `inbox_id` uses the full `AGENTMAIL_FROM` address; send endpoint corrected to `/messages/send`
+- Inline `NOTE` comments added to `db.py`, `worker.py`, and `email.py` for operational clarity
+
+### DB performance + Celery retry resilience (S-D)
+- **Migration `0011_performance_indexes`** — adds `runs.retry_count INT DEFAULT 0`; new indexes on `runs(workspace_id, created_at DESC)`, `runs(status)`, `runs(graph_id, created_at DESC)`, `audit_log`, and `schedules`
+- **Celery retry with backoff** — `enqueue_graph` now has `max_retries=3` with 30/60/120 s exponential backoff for transient DB/Redis failures
+- **Run status lifecycle** gains `retrying` and `dead` states; Runs page shows **DEAD** and **RETRY N** badges; status filter adds Dead/Retrying options
+
+### Runs page bulk-delete (Polish)
+- Checkbox per row, select-all header checkbox, "Delete selected (N)" button using `POST /api/runs/bulk-delete`; checked rows highlighted in purple
+- Ruff `--fix` cleanup: removed unused imports across 8 files
+
+### Test coverage expansion (P2-20)
+- `tests/test_permissions.py` — 26 tests covering `_check_admin`, token scope hierarchy, role guards, per-flow access, workspace resolution
+- `tests/test_executor_failures.py` — 26 tests covering abort/continue/retry failure modes, condition branching, scheduler lock Lua helpers
+- `tests/test_webhook_ratelimit.py` — 13 tests covering rate-limit pipeline logic, Redis fail-open, login brute-force lockout/clear
+- `tests/integration/test_e2e_playwright.py` — Playwright E2E: login, dashboard, canvas create/save/run, logout (auto-skipped unless `HIVERUNR_BASE_URL` set)
+- Total unit suite: 118 tests, all green
+
+### Responsive & accessibility overhaul (P2-21 / P3-22 / P3-23)
+- **Admin pages** — hamburger toggle + sidebar slide-in overlay (`≤1024px`); `useFocusTrap` hook; all modals get `role="dialog" aria-modal="true"`; icon buttons get `aria-label`; nav gets `role="navigation"` + keyboard navigation; Runs split-pane stacks on mobile; Credentials / Schedules / Audit Log tables convert to mobile card lists via `td::before { content:attr(data-label) }`
+- **Canvas** — topbar collapses to icon-only at `≤768px`; sidebar becomes off-canvas overlay with hamburger; config panel hides on mobile; all modals get `role="dialog" aria-modal="true" aria-label="..."`; overlay wrappers `aria-hidden="true"`
+
+### Canvas keyboard shortcuts & minimap (P3-24 / P3-25)
+- **Shortcuts** — `Ctrl+S` save, `Ctrl+Z` undo, `Ctrl+Y`/`Ctrl+Shift+Z` redo, `Escape` deselect/close, `?` toggle cheatsheet; `kbRef = useRef({})` pattern prevents stale closures; `ShortcutsModal` with 4 sections / 15 entries; admin has its own `AdminShortcutsModal`
+- **Minimap** — `<MiniMap>` pannable + zoomable with styled colours; toggle via topbar 🗺 button (desktop) and MoreMenu (mobile)
+
+### Canvas search (P4-26)
+- `Ctrl+F` floating `NodeSearchBar` with text filter + group chips; jump-to-node centres viewport via `setCenter`; 🔍 topbar button + MoreMenu item
+
+### Run replay with payload override (P4-27)
+- `GET /api/runs/{id}/payload` returns the original trigger payload
+- `POST /api/runs/{id}/replay` accepts optional `{payload}` body to override
+- `ReplayEditModal` pre-filled with the original payload in both the canvas run inspector and the admin Logs page
+- Audit log records `payload_overridden` flag
+
+### Flow templates gallery (P4-28)
+- `app/routers/templates.py` — `GET /api/templates` and `GET /api/templates/{slug}`; 9 bundled JSON templates in `app/templates/`
+- Canvas OpenModal gains a "Start from template" tab with category chips and 2-column cards; selecting a template calls the existing import endpoint
+
+### Webhook trigger improvements (P4-29)
+- **HMAC-SHA256 signature verification** — configurable shared secret; verifies `X-Hub-Signature-256` header (same convention as GitHub webhooks); rejects unsigned requests when a secret is set
+- **Allowed-origins CORS** — configurable per-webhook origin allowlist; `OPTIONS` preflight handler added
+- `WebhookUrlPanel` in NodeEditorModal with copy button; `secret` and `allowed_origins` fields added to NODE_DEFS
+
+### Sticky note enhancements (P4-30)
+- `NOTE_COLORS` palette: amber, blue, green, purple, red, slate (6 options)
+- `StickyNote` component applies colour and `minWidth`/`minHeight` dynamically from config
+- NODE_DEFS gains colour select, width, and height fields; hint panel shows inline colour swatches
+- `zIndex: -1` set in all 4 node-load paths so notes always render behind other nodes
+
+### New node types (P5)
+- **`action.redis`** — GET/SET/DEL/LPUSH/RPOP/LRANGE/INCR/DECR/EXPIRE/TTL/EXISTS/KEYS/HGET/HSET/HDEL/HGETALL/SADD/SMEMBERS/SREM/PUBLISH operations; credential: `url` or `host`/`port`/`password`/`db`; useful for caching, counters, and cross-flow signalling
+- **`action.graphql`** — GraphQL query/mutation via httpx; credential: endpoint + optional `Authorization` token + extra headers; template rendering in `query` and `variables_json`; output: `data`, `errors[]`, `has_errors`, `status_code`
+- **`action.pdf`** — generate a PDF from an HTML template using xhtml2pdf (optional dep, gracefully disabled if absent); auto-wraps HTML fragments; output: `pdf_bytes` (base64), `size_bytes`, `filename`
+- **`trigger.rss`** — poll an RSS 2.0 or Atom 1.0 feed using stdlib only (`xml.etree`, `urllib`); sliding `lookback_minutes` window; Python `filter_expression` (use `entry`); output: `entries[]`, `count`, `feed_title`, first-entry shortcuts
+- **`action.airtable`** — Airtable REST API via httpx; credential: `api_key` (PAT) + `base_id`; operations: list_records, search, get_record, create_record, update_record, upsert_record, delete_record; auto-pagination on list/search; output: `records[]`, `record`, `id`, `deleted`
+
+### Webhook rate-limit configuration UI (P6-36)
+- Rate-limit config moved from compile-time constants to the `app_settings` KV store (live-readable via `get_ratelimit_policy()`)
+- `GET /api/settings/ratelimit` returns current policy (`limit`, `window`) + live per-token Redis hit counters
+- `PUT /api/settings/ratelimit` persists new values; `WEBHOOK_RATE_LIMIT` / `WEBHOOK_RATE_WINDOW` env vars remain as initial defaults
+- **Rate Limits card** on the admin Settings page: editable limit + window inputs, Save button, Refresh button, live counter table per active token; `limit=0` disables checking
+
+### Upgrade notes
+- Run `docker compose pull && docker compose up -d --build`
+- Apply pending Alembic migration: `docker compose exec api alembic upgrade head`
+  - Migration `0011` adds `runs.retry_count` and performance indexes — safe to run against live data
+- New **optional** env vars:
+  - `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` — enable GitHub OAuth for credentials
+  - `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` — enable Google OAuth for credentials
+  - `NOTION_CLIENT_ID` / `NOTION_CLIENT_SECRET` — enable Notion OAuth for credentials
+  - `WEBHOOK_RATE_LIMIT` / `WEBHOOK_RATE_WINDOW` — initial defaults for the rate-limit policy (can now be overridden at runtime via the Settings UI)
+- xhtml2pdf (`action.pdf` node) is an optional dependency — install with `pip install xhtml2pdf` inside the container only if needed; the node gracefully disables itself if the library is absent
+- boto3 remains required for `action.s3`; all other new nodes use stdlib or httpx (already a dependency)
+
+---
+
 ## [0.1.0] — 2026-04-15 — First versioned release
 
 This release consolidates all work from the initial commit through the P1 sprint series into the first tagged version of HiveRunr.
