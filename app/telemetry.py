@@ -37,6 +37,8 @@ Environment variables
                                    Authorization=Bearer <token>
   OTEL_LOG_LEVEL                 Set to "debug" to also print spans to stdout
 """
+from __future__ import annotations  # keep annotations as strings — avoids AttributeError on trace.Tracer at load time
+
 import logging
 import os
 import types
