@@ -239,3 +239,161 @@ See `.env.example` for the full annotated list. Critical ones:
 | `OWNER_EMAIL` | Optional | Receives flow failure alerts |
 | `APP_TIMEZONE` | Optional | Display timezone for scheduler UI (default UTC) |
 | `ALLOW_SIGNUP` | Optional | Enable self-serve signup (default false) |
+| `DB_POOL_MIN` | Optional | Min DB connections in pool (default 2) |
+| `DB_POOL_MAX` | Optional | Max DB connections in pool (default 10) |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | Optional | Enable distributed tracing (OTLP/HTTP URL) |
+| `OTEL_SERVICE_NAME` | Optional | Service name in traces (default `hiverunr`) |
+
+---
+
+## High availability (HA) setup
+
+The default `docker-compose.yml` is a single-node deployment. For production deployments that need redundancy, the components scale independently.
+
+### What scales horizontally
+
+| Component | HA strategy | Notes |
+|-----------|-------------|-------|
+| **API** | Multiple replicas behind a load balancer | Stateless — safe to run N instances |
+| **Worker** | Multiple replicas | Celery tasks distributed via Redis queue |
+| **Scheduler** | Multiple replicas | Only one is active at a time (Redis leader lock) |
+| **Redis** | Redis Sentinel or Redis Cluster | Primary/replica with automatic failover |
+| **PostgreSQL** | Streaming replication + pgBouncer | Primary writes, read replicas optional |
+
+A ready-to-use HA Compose file is provided at `docker-compose.ha.yml`.
+
+### PostgreSQL streaming replication
+
+The HA Compose file starts a primary (`db`) and a replica (`db-replica`) using Bitnami's PostgreSQL image, which handles `pg_basebackup` automatically via env vars.
+
+Key environment variables on the **primary**:
+```
+POSTGRESQL_REPLICATION_MODE=master
+POSTGRESQL_REPLICATION_USER=replicator
+POSTGRESQL_REPLICATION_PASSWORD=replicatorpass
+```
+
+Key environment variables on the **replica**:
+```
+POSTGRESQL_REPLICATION_MODE=slave
+POSTGRESQL_MASTER_HOST=db
+POSTGRESQL_MASTER_PORT_NUMBER=5432
+POSTGRESQL_REPLICATION_USER=replicator
+POSTGRESQL_REPLICATION_PASSWORD=replicatorpass
+```
+
+> **Note:** HiveRunr does not currently auto-switch to the replica on primary failure.
+> Automatic failover requires Patroni or an external connection manager.
+> For zero-downtime failover, place pgBouncer in front of both nodes and update its
+> target on primary failure.
+
+To verify replication is working:
+```bash
+docker compose -f docker-compose.ha.yml exec db \
+  psql -U hiverunr -c "SELECT client_addr, state, sent_lsn, replay_lsn FROM pg_stat_replication;"
+```
+
+### Redis Sentinel
+
+The HA Compose file starts one Redis primary (`redis`) and two replicas (`redis-replica-1`, `redis-replica-2`), with three Sentinel processes (`redis-sentinel-1/2/3`) providing automatic primary election.
+
+Check Sentinel state:
+```bash
+docker compose -f docker-compose.ha.yml exec redis-sentinel-1 \
+  redis-cli -p 26379 SENTINEL masters
+```
+
+To connect HiveRunr to Sentinel (rather than a fixed Redis URL), point `REDIS_URL` at a Sentinel-aware proxy such as [redis-sentinel-proxy](https://github.com/lmolas/redis-sentinel-proxy), or use `rediss://` with a load balancer in front of your Sentinel-elected primary.
+
+### Celery multi-region workers
+
+Workers only need `CELERY_BROKER_URL` (Redis) and `DATABASE_URL` (Postgres). To run workers in a second region:
+
+1. Ensure the region can reach the same Redis and Postgres endpoints (VPN / private networking).
+2. Set the same `SECRET_KEY` and `DATABASE_URL` on all workers.
+3. Start additional worker containers:
+   ```bash
+   docker run -d \
+     --env-file .env.region2 \
+     hiverunr_worker \
+     celery -A app.worker worker --loglevel=info
+   ```
+4. Celery routes tasks to any available worker — no extra config needed.
+
+To confirm all workers are visible:
+```bash
+docker compose exec api python -c "
+from app.worker import app
+print(app.control.ping(timeout=3))
+"
+```
+
+### Scheduler HA
+
+No config changes required. Run multiple scheduler containers and the Redis leader lock ensures only one fires jobs at a time. Failover latency is at most the lock TTL (default 45 s).
+
+```bash
+docker compose -f docker-compose.ha.yml up -d --scale scheduler=2
+```
+
+---
+
+## Disaster recovery (DR) checklist
+
+Use this checklist after a catastrophic failure (data centre outage, volume loss, etc.).
+
+### Before a failure — what to back up
+
+| Asset | Where | How often |
+|-------|-------|-----------|
+| PostgreSQL data | `db` volume | Daily `pg_dump` (see below) |
+| `.env` file | Host filesystem | Every time you change it |
+| `app/nodes/custom/` | Host filesystem | After every custom node change |
+| `SECRET_KEY` | `.env` / secrets manager | Never change without a backup |
+
+Automated daily backup (add to cron or a HiveRunr `trigger.cron` flow):
+```bash
+# Run on the Docker host
+docker compose exec db pg_dump -U hiverunr hiverunr \
+  | gzip > /backups/hiverunr_$(date +%Y%m%d_%H%M%S).sql.gz
+# Keep last 30 days
+find /backups -name "hiverunr_*.sql.gz" -mtime +30 -delete
+```
+
+### Recovery steps
+
+1. **Provision a new host** and install Docker + Docker Compose.
+2. **Clone the repo** and copy your `.env` file (especially `SECRET_KEY`, `DATABASE_URL`, `REDIS_URL`).
+3. **Start infrastructure** (Postgres + Redis only):
+   ```bash
+   docker compose up -d db redis
+   ```
+4. **Restore the database:**
+   ```bash
+   # Create the database user and DB if they don't exist yet:
+   docker compose exec db psql -U postgres -c "CREATE USER hiverunr WITH PASSWORD 'hiverunr';"
+   docker compose exec db psql -U postgres -c "CREATE DATABASE hiverunr OWNER hiverunr;"
+   
+   # Restore from backup:
+   gunzip -c /backups/hiverunr_20240101_030000.sql.gz \
+     | docker compose exec -T db psql -U hiverunr hiverunr
+   ```
+5. **Run migrations** to ensure schema is at head:
+   ```bash
+   docker compose run --rm api alembic upgrade head
+   ```
+6. **Start all services:**
+   ```bash
+   docker compose up -d
+   ```
+7. **Verify** via `GET /health` and Admin → System page.
+
+### RTO / RPO targets (default setup)
+
+| Metric | Target | How to improve |
+|--------|--------|----------------|
+| RPO (data loss) | ≤ 24 h | Run hourly `pg_dump`; or use streaming replication |
+| RTO (recovery time) | ≤ 30 min | Pre-provision standby host with `docker compose pull` |
+| Scheduler failover | ≤ 45 s | Reduce `SCHEDULER_LOCK_TTL_MS`; run ≥2 scheduler replicas |
+| Worker failover | Immediate | Run ≥2 worker replicas; Celery re-queues in-flight tasks on worker death (only with `acks_late=True` — not default) |
+
