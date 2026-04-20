@@ -279,6 +279,7 @@ OWNER_EMAIL=
 | F0 | Vite scaffolding — `frontend/` at repo root; `package.json`, `vite.config.js` multi-page build → `app/static/dist/`; HTML stubs for all 6 pages; `src/api/client.js` single `api()` helper; `_MIGRATED_PAGES` gate in `main.py`; multi-stage `Dockerfile`; `Makefile` dev/build/install/test targets; `.gitignore` updated |
 | F1 | Shared component library — `frontend/src/components/`: `Toast.jsx`, `useFocusTrap.js`, `ConfirmModal.jsx`, `ViewerBanner.jsx`, `ReplayEditModal.jsx`, `TraceRow.jsx`, `StatusDot.jsx`, `RoleBadge.jsx` (+ `ROLE_META`); `frontend/src/contexts/WorkspaceContext.jsx` + `AuthContext.jsx`; 35 modules build cleanly, 118 tests pass |
 | F2 | Auth pages — `frontend/src/pages/auth/`: `login.jsx` (sign-in + forgot-password toggle), `signup.jsx` (self-serve), `reset.jsx` (token-based), `invite.jsx` (accept + new-user signup); shared `AuthCard.jsx` layout; `_MIGRATED_PAGES` in `main.py` updated; legacy static HTML files removed from git; 36 modules, 14 chunks |
+| F3 | Admin shell + routing — `src/admin/App.jsx` (AuthProvider + WorkspaceProvider + BrowserRouter + 13 routes); `AdminLayout.jsx` (sidebar, workspace switcher, NavLink nav, update banner, keyboard shortcuts modal, user info + sign-out); `src/admin/index.jsx` entry point; 13 stub page components in `src/pages/admin/`; 60 modules, 118 tests passing |
 
 ---
 
@@ -418,7 +419,9 @@ directory structure changed.
 
 43. ~~**F2 — Auth pages**~~ ✓ Done
 
-44. **F3 — Admin shell + routing** — React Router v6 in `src/admin/App.jsx`; `AdminLayout.jsx` (sidebar, workspace switcher, nav links, keyboard shortcuts modal, version chip); workspace resolution via `WorkspaceContext`; `src/admin/index.jsx` entry point.
+44. ~~**F3 — Admin shell + routing**~~ ✓ Done
+
+45. **F4 — Admin: Dashboard + Flows + Runs** — React Router v6 in `src/admin/App.jsx`; `AdminLayout.jsx` (sidebar, workspace switcher, nav links, keyboard shortcuts modal, version chip); workspace resolution via `WorkspaceContext`; `src/admin/index.jsx` entry point.
 
 45. **F4 — Admin: Dashboard + Flows + Runs** — `src/pages/admin/Dashboard.jsx`, `Metrics.jsx`, `Flows.jsx` (+ `GraphRow.jsx`, `HistoryModal.jsx`, `AlertSettingsModal.jsx`), `Logs.jsx`.
 
