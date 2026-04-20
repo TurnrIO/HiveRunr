@@ -1,14 +1,274 @@
-/**
- * Dashboard page — full implementation coming in a later F-sprint.
- * This stub keeps the admin shell routing wired without a build error.
- */
+import { useState, useEffect, useCallback } from "react";
+import { api } from "../../api/client.js";
+import { ViewerBanner } from "../../components/ViewerBanner.jsx";
+import { ReplayEditModal } from "../../components/ReplayEditModal.jsx";
+import { useAuth } from "../../contexts/AuthContext.jsx";
+
 export function Dashboard({ showToast }) {
+  const { currentUser: user } = useAuth();
+  const [runs, setRuns]             = useState([]);
+  const [workflows, setWfs]         = useState([]);
+  const [graphs, setGraphs]         = useState([]);
+  const [loading, setLoading]       = useState(true);
+  const [expandedRunId, setExpanded] = useState(null);
+  const [replayEdit, setReplayEdit] = useState(null);
+
+  const load = useCallback(async () => {
+    try {
+      const [r, w, g] = await Promise.all([
+        api("GET", "/api/runs?page_size=200"),
+        api("GET", "/api/workflows"),
+        api("GET", "/api/graphs"),
+      ]);
+      setRuns(r.runs ?? r);
+      setWfs(w);
+      setGraphs(g);
+    } catch (e) { showToast(e.message, "error"); }
+    setLoading(false);
+  }, []);
+
+  useEffect(() => {
+    load();
+    const t = setInterval(load, 5000);
+    return () => clearInterval(t);
+  }, []);
+
+  const stats = {
+    total:  runs.length,
+    active: runs.filter(r => r.status === "running" || r.status === "queued").length,
+    ok:     runs.filter(r => r.status === "succeeded").length,
+    failed: runs.filter(r => r.status === "failed").length,
+  };
+
+  async function toggleWf(name) {
+    try { await api("POST", `/api/workflows/${name}/toggle`); load(); showToast("Toggled"); }
+    catch (e) { showToast(e.message, "error"); }
+  }
+  async function runWf(name) {
+    try { await api("POST", `/api/workflows/${name}/run`, { payload: {} }); load(); showToast("Queued!"); }
+    catch (e) { showToast(e.message, "error"); }
+  }
+  async function deleteRun(id) {
+    try { await api("DELETE", `/api/runs/${id}`); load(); }
+    catch (e) { showToast(e.message, "error"); }
+  }
+  async function cancelRun(id) {
+    try { await api("POST", `/api/runs/${id}/cancel`); load(); showToast("Cancelled"); }
+    catch (e) { showToast(e.message, "error"); }
+  }
+  async function replayRun(id) {
+    try { await api("POST", `/api/runs/${id}/replay`); load(); showToast("Queued for replay"); }
+    catch (e) { showToast(e.message, "error"); }
+  }
+  async function openReplayEdit(id) {
+    try {
+      const data = await api("GET", `/api/runs/${id}/payload`);
+      setReplayEdit({ runId: id, payload: JSON.stringify(data.payload || {}, null, 2) });
+    } catch (e) { showToast(e.message, "error"); }
+  }
+  async function submitReplayEdit(runId, payloadStr) {
+    try {
+      let payload;
+      try { payload = JSON.parse(payloadStr); }
+      catch { showToast("Invalid JSON payload", "error"); return; }
+      await api("POST", `/api/runs/${runId}/replay`, { payload });
+      load();
+      showToast("Queued for replay with custom payload");
+      setReplayEdit(null);
+    } catch (e) { showToast(e.message, "error"); }
+  }
+
+  function fmtDur(r) {
+    if (r.status === "queued" || r.status === "running") return "—";
+    if (!r.updated_at || !r.created_at) return "—";
+    const d = new Date(r.updated_at) - new Date(r.created_at);
+    return d < 1000 ? `${d}ms` : `${(d / 1000).toFixed(1)}s`;
+  }
+
+  const ro = user?.role === "viewer";
+
   return (
     <div>
       <h1 className="page-title">Dashboard</h1>
-      <div className="empty-state" style={{marginTop:40}}>
-        This page is being migrated — coming soon.
+      {ro && <ViewerBanner />}
+
+      <div className="stat-grid">
+        <div className="stat-card"><div className="stat-val">{stats.total}</div><div className="stat-lbl">Total Runs</div></div>
+        <div className="stat-card"><div className="stat-val" style={{ color: "#60a5fa" }}>{stats.active}</div><div className="stat-lbl">Active</div></div>
+        <div className="stat-card"><div className="stat-val" style={{ color: "#4ade80" }}>{stats.ok}</div><div className="stat-lbl">Succeeded</div></div>
+        <div className="stat-card"><div className="stat-val" style={{ color: "#f87171" }}>{stats.failed}</div><div className="stat-lbl">Failed</div></div>
       </div>
+
+      {(workflows.length > 0 || graphs.length > 0) && (
+        <div style={{ display: "grid", gridTemplateColumns: workflows.length > 0 && graphs.length > 0 ? "1fr 1fr" : "1fr", gap: 16, marginBottom: 24 }}>
+          {workflows.length > 0 && (
+            <div className="card" style={{ marginBottom: 0 }}>
+              <div className="card-title">Python Workflows</div>
+              {workflows.map(w => (
+                <div key={w.name} className="wf-pill">
+                  <div>
+                    <div className="wf-name">{w.name}</div>
+                    <div className={w.enabled ? "wf-enabled" : "wf-disabled"}>{w.enabled ? "● enabled" : "○ disabled"}</div>
+                  </div>
+                  {!ro && (
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <button className="btn btn-ghost" onClick={() => toggleWf(w.name)}>Toggle</button>
+                      <button className="btn btn-success" disabled={!w.enabled} onClick={() => runWf(w.name)}>▶ Run</button>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+          {graphs.length > 0 && (
+            <div className="card" style={{ marginBottom: 0 }}>
+              <div className="card-title">Canvas Flows</div>
+              {graphs.map(g => (
+                <div key={g.id} className="wf-pill">
+                  <div>
+                    <div className="wf-name">{g.name}</div>
+                    <div className={g.enabled ? "wf-enabled" : "wf-disabled"}>{g.enabled ? "● enabled" : "○ disabled"}</div>
+                  </div>
+                  {!ro && (
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <a className="btn btn-ghost" href={`/canvas#graph-${g.id}`}>✏️ Edit</a>
+                      <button className="btn btn-success" disabled={!g.enabled}
+                        onClick={async () => {
+                          try { await api("POST", `/api/graphs/${g.id}/run`, { payload: {} }); load(); showToast("Queued!"); }
+                          catch (e) { showToast(e.message, "error"); }
+                        }}>▶ Run</button>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      <div className="card">
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+          <div className="card-title" style={{ marginBottom: 0 }}>Recent Runs</div>
+          {!ro && runs.length > 0 && (
+            <button className="btn btn-ghost" onClick={() => api("DELETE", "/api/runs").then(load)}>Clear all</button>
+          )}
+        </div>
+
+        {loading ? (
+          <div className="empty-state">Loading…</div>
+        ) : runs.length === 0 ? (
+          <div className="empty-state">No runs yet. Trigger a workflow to get started.</div>
+        ) : (
+          <table>
+            <thead>
+              <tr><th>#</th><th>Workflow</th><th>Status</th><th>Started</th><th>Duration</th><th></th></tr>
+            </thead>
+            <tbody>
+              {runs.map(r => (
+                <>
+                  <tr key={r.id} className="expandable-row"
+                    onClick={() => setExpanded(expandedRunId === r.id ? null : r.id)}
+                    style={{ cursor: "pointer" }}>
+                    <td style={{ color: "#4b5563" }}>{r.id}</td>
+                    <td>{r.flow_name || "—"}</td>
+                    <td><span className={`badge badge-${r.status}`}>{r.status}</span></td>
+                    <td style={{ color: "#64748b" }}>{r.created_at ? new Date(r.created_at).toLocaleString() : "—"}</td>
+                    <td style={{ color: "#64748b", fontVariantNumeric: "tabular-nums" }}>{fmtDur(r)}</td>
+                    <td>
+                      <div style={{ display: "flex", gap: 6 }}>
+                        {r.graph_id && (
+                          <>
+                            <button className="btn btn-ghost" onClick={e => { e.stopPropagation(); replayRun(r.id); }} title="Replay with original payload">▶ Replay</button>
+                            <button className="btn btn-ghost" onClick={e => { e.stopPropagation(); openReplayEdit(r.id); }} title="Replay with custom payload">✏ Replay…</button>
+                          </>
+                        )}
+                        {(r.status === "queued" || r.status === "running") && (
+                          <button className="btn btn-warning" onClick={e => { e.stopPropagation(); cancelRun(r.id); }}>Cancel</button>
+                        )}
+                        <button className="btn btn-danger" title="Delete run" aria-label="Delete run"
+                          onClick={e => { e.stopPropagation(); deleteRun(r.id); }}>✕</button>
+                      </div>
+                    </td>
+                  </tr>
+                  {expandedRunId === r.id && (
+                    <tr key={`${r.id}-expand`} style={{ background: "#0f1117" }}>
+                      <td colSpan="6" style={{ padding: "12px" }}>
+                        {r.initial_payload && Object.keys(r.initial_payload).length > 0 && (
+                          <div style={{ marginBottom: 12 }}>
+                            <div style={{ fontSize: 11, fontWeight: 600, color: "#94a3b8", marginBottom: 6 }}>Initial Payload</div>
+                            <div style={{ background: "#0a0c14", border: "1px solid #2a2d3e", borderRadius: 6, padding: 10, fontFamily: "monospace", fontSize: 11, color: "#94a3b8", maxHeight: 200, overflowY: "auto" }}>
+                              {JSON.stringify(r.initial_payload, null, 2)}
+                            </div>
+                          </div>
+                        )}
+                        {r.result && (r.result.output || r.result.error) && (
+                          <div style={{ marginBottom: 12 }}>
+                            <div style={{ fontSize: 11, fontWeight: 600, color: r.result.error ? "#f87171" : "#4ade80", marginBottom: 6 }}>
+                              {r.result.error ? "❌ Error" : "✅ Output"}
+                            </div>
+                            <div style={{
+                              background: "#0a0c14", border: `1px solid ${r.result.error ? "#7f1d1d" : "#14532d"}`,
+                              borderRadius: 6, padding: 10, fontFamily: "monospace", fontSize: 11,
+                              color: r.result.error ? "#fca5a5" : "#86efac",
+                              maxHeight: 300, overflowY: "auto", whiteSpace: "pre-wrap", wordBreak: "break-word",
+                            }}>
+                              {r.result.error || r.result.output}
+                            </div>
+                          </div>
+                        )}
+                        {r.traces && r.traces.length > 0 ? (
+                          <div>
+                            <div style={{ fontSize: 11, fontWeight: 600, color: "#94a3b8", marginBottom: 6 }}>Trace</div>
+                            <div className="trace-table">
+                              <table>
+                                <thead><tr><th>Node</th><th>Type</th><th>Status</th><th>Duration (ms)</th><th>Attempts</th><th>Output/Error</th></tr></thead>
+                                <tbody>
+                                  {r.traces.map((t, idx) => (
+                                    <tr key={idx}>
+                                      <td style={{ fontFamily: "monospace", fontSize: 11 }}>{t.node_id}</td>
+                                      <td style={{ fontSize: 11 }}>{t.type}</td>
+                                      <td>
+                                        <span className={`trace-status-dot ${t.status === undefined || t.status === "ok" ? "ok" : t.status === "error" ? "err" : "skipped"}`} />
+                                        {t.status === undefined || t.status === "ok" ? "ok" : t.status === "error" ? "error" : "skipped"}
+                                      </td>
+                                      <td>{t.duration_ms ?? "—"}</td>
+                                      <td>{t.attempts ?? 1}</td>
+                                      <td>
+                                        <div style={{ maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: 11 }}>
+                                          {t.error
+                                            ? <span style={{ color: "#f87171" }}>{String(t.error).slice(0, 50)}</span>
+                                            : t.output
+                                            ? <span style={{ color: "#94a3b8" }}>{typeof t.output === "string" ? t.output : JSON.stringify(t.output).slice(0, 50)}</span>
+                                            : "—"}
+                                        </div>
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+                        ) : (
+                          <div style={{ color: "#4b5563", fontSize: 12 }}>No trace data available</div>
+                        )}
+                      </td>
+                    </tr>
+                  )}
+                </>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      {replayEdit && (
+        <ReplayEditModal
+          runId={replayEdit.runId}
+          payload={replayEdit.payload}
+          onClose={() => setReplayEdit(null)}
+          onSubmit={submitReplayEdit}
+        />
+      )}
     </div>
   );
 }
