@@ -40,7 +40,9 @@ STATIC_DIR   = Path(__file__).parent / "static"
 WORKFLOWS    = ["example"]
 API_KEY      = os.environ.get("API_KEY", "dev_api_key")
 
-app = FastAPI(title="HiveRunr", docs_url=None, redoc_url=None, openapi_url=None)
+__version__ = "0.2.0"
+
+app = FastAPI(title="HiveRunr", version=__version__, docs_url=None, redoc_url=None, openapi_url=None)
 
 # ── Middleware ────────────────────────────────────────────────────────────────
 app.add_middleware(PrometheusMiddleware)
