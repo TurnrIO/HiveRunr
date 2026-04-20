@@ -4104,7 +4104,8 @@ function SystemDiagnostics({ showToast }) {
               ["Migration", check.migration],
               ["Latency", `${check.latency_ms} ms`],
               ["DB size", check.db_size],
-            ].map(([l,v]) => v != null && (
+              check.pool ? ["Pool", `${check.pool.pool_in_use ?? 0}/${check.pool.pool_max ?? "?"} in use (${check.pool.pool_available ?? 0} free)`] : null,
+            ].filter(Boolean).map(([l,v]) => v != null && (
               <span key={l} style={{fontSize:11, color:"#64748b"}}><strong style={{color:"#94a3b8"}}>{l}:</strong> {v}</span>
             ))}
           </div>

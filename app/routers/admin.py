@@ -43,7 +43,7 @@ def api_system_status(request: Request):
 
     # ── Database ──────────────────────────────────────────────────────────────
     try:
-        from app.core.db import get_conn
+        from app.core.db import get_conn, get_pool_stats
         t0 = time.monotonic()
         with get_conn() as conn:
             cur = conn.cursor()
@@ -64,14 +64,21 @@ def api_system_status(request: Request):
             migration_current = (migration_row["version_num"] if isinstance(migration_row, dict)
                                  else migration_row[0]) if migration_row else "unknown"
         latency_ms = round((time.monotonic() - t0) * 1000)
+        pool = get_pool_stats()
+        pool_msg = (
+            f"pool {pool['pool_in_use']}/{pool['pool_max']} in use"
+            if pool else ""
+        )
         results["db"] = {
             "status": "ok",
-            "message": f"Connected · {run_count} runs · {flow_count} flows · {db_size}",
+            "message": f"Connected · {run_count} runs · {flow_count} flows · {db_size}"
+                       + (f" · {pool_msg}" if pool_msg else ""),
             "run_count": run_count,
             "flow_count": flow_count,
             "db_size": db_size,
             "migration": migration_current,
             "latency_ms": latency_ms,
+            "pool": pool,
         }
     except Exception as exc:
         results["db"] = {
