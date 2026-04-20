@@ -20,6 +20,11 @@ log = logging.getLogger(__name__)
 # ── re-export _render for backward compatibility (call_graph etc) ──────────
 from app.nodes._utils import _render  # noqa: F401
 
+# ── OpenTelemetry (noop when OTEL_EXPORTER_OTLP_ENDPOINT is unset) ────────
+from app.telemetry import get_tracer as _get_tracer
+from opentelemetry.trace import StatusCode as _SC
+from opentelemetry import context as _otel_ctx, trace as _otel_trace
+
 
 # ── topological sort (Kahn's) ─────────────────────────────────────────────
 def _topo(nodes, edges):
@@ -180,95 +185,113 @@ def _exec_node(nid, nodes_map, edges, context, creds, logger, succ, _depth):
     ndata  = node.get('data', {})
     config = ndata.get('config', {})
 
-    # Collect input from the most-recently-connected upstream node.
-    # Root nodes (no incoming edges) receive the initial payload.
-    inp = {}
-    is_root = True
-    for e in edges:
-        if e['target'] == nid:
-            is_root = False
-            if e['source'] in context:
-                inp = context[e['source']]
-            break
-    if is_root and '__initial_payload__' in context:
-        inp = context['__initial_payload__']
+    # ── OTEL: per-node span — child of the enclosing run_graph span ───────
+    _n_span  = _get_tracer("hiverunr.executor").start_span(f"node.{ntype}")
+    _n_span.set_attribute("node.id",    nid)
+    _n_span.set_attribute("node.type",  ntype)
+    _n_span.set_attribute("node.label", ndata.get('label', ''))
+    _n_span.set_attribute("node.depth", _depth)
+    _n_token = _otel_ctx.attach(_otel_trace.set_span_in_context(_n_span))
 
-    _inp_str    = json.dumps(inp, default=str) if isinstance(inp, (dict, list)) else str(inp)
-    _inp_stored = inp if len(_inp_str) < 5_000_000 else {'__truncated': True, '__size': len(_inp_str)}
+    try:
+        # Collect input from the most-recently-connected upstream node.
+        # Root nodes (no incoming edges) receive the initial payload.
+        inp = {}
+        is_root = True
+        for e in edges:
+            if e['target'] == nid:
+                is_root = False
+                if e['source'] in context:
+                    inp = context[e['source']]
+                break
+        if is_root and '__initial_payload__' in context:
+            inp = context['__initial_payload__']
 
-    trace = {
-        'node_id':     nid,
-        'type':        ntype,
-        'label':       ndata.get('label', ''),
-        'status':      'skipped',
-        'duration_ms': 0,
-        'attempts':    0,
-        'input':       _inp_stored,
-        'output':      None,
-        'error':       None,
-    }
+        _inp_str    = json.dumps(inp, default=str) if isinstance(inp, (dict, list)) else str(inp)
+        _inp_stored = inp if len(_inp_str) < 5_000_000 else {'__truncated': True, '__size': len(_inp_str)}
 
-    retry_max   = int(ndata.get('retry_max', 0))
-    retry_delay = float(ndata.get('retry_delay', 5))
-    fail_mode   = ndata.get('fail_mode', 'abort')
+        trace = {
+            'node_id':     nid,
+            'type':        ntype,
+            'label':       ndata.get('label', ''),
+            'status':      'skipped',
+            'duration_ms': 0,
+            'attempts':    0,
+            'input':       _inp_stored,
+            'output':      None,
+            'error':       None,
+        }
 
-    t_start  = time.time()
-    last_err = None
-    result   = None
+        retry_max   = int(ndata.get('retry_max', 0))
+        retry_delay = float(ndata.get('retry_delay', 5))
+        fail_mode   = ndata.get('fail_mode', 'abort')
 
-    for attempt in range(retry_max + 1):
-        try:
-            if attempt > 0:
-                logger(f"RETRY {attempt}/{retry_max} {ntype} [{nid}]")
-                time.sleep(retry_delay)
-            result = _run_node(
-                ntype, config, inp, context, logger,
-                edges, nodes_map, creds,
-                _depth=_depth, _nid=nid,
-            )
-            last_err = None
-            break
-        except Exception as e:
-            last_err = e
-            logger(f"ERROR attempt {attempt+1} {ntype} [{nid}]: {e}")
+        t_start  = time.time()
+        last_err = None
+        result   = None
 
-    trace['duration_ms'] = int((time.time() - t_start) * 1000)
-    trace['attempts']    = attempt + 1
+        for attempt in range(retry_max + 1):
+            try:
+                if attempt > 0:
+                    logger(f"RETRY {attempt}/{retry_max} {ntype} [{nid}]")
+                    time.sleep(retry_delay)
+                result = _run_node(
+                    ntype, config, inp, context, logger,
+                    edges, nodes_map, creds,
+                    _depth=_depth, _nid=nid,
+                )
+                last_err = None
+                break
+            except Exception as e:
+                last_err = e
+                logger(f"ERROR attempt {attempt+1} {ntype} [{nid}]: {e}")
 
-    if last_err is not None:
-        err_msg = f"{type(last_err).__name__}: {last_err}"
-        trace['status'] = 'error'
-        trace['error']  = err_msg
-        if fail_mode == 'continue':
-            error_out = {'__error': err_msg, '__node': nid, '__type': ntype}
-            trace['output'] = error_out
-            logger(f"CONTINUE-ON-ERROR [{nid}]: {err_msg}")
-            return error_out, trace, set(), None
-        else:
-            result_err = {'__error': err_msg}
-            return result_err, trace, set(), ('abort', last_err, nid, ntype, attempt + 1)
+        trace['duration_ms'] = int((time.time() - t_start) * 1000)
+        trace['attempts']    = attempt + 1
 
-    _out_str = json.dumps(result, default=str) if isinstance(result, (dict, list)) else str(result)
-    trace['status'] = 'ok'
-    trace['output'] = result if len(_out_str) < 5_000_000 else {'__truncated': True, '__size': len(_out_str)}
+        if last_err is not None:
+            err_msg = f"{type(last_err).__name__}: {last_err}"
+            trace['status'] = 'error'
+            trace['error']  = err_msg
+            _n_span.set_status(_SC.ERROR, err_msg)
+            _n_span.record_exception(last_err)
+            if fail_mode == 'continue':
+                error_out = {'__error': err_msg, '__node': nid, '__type': ntype}
+                trace['output'] = error_out
+                logger(f"CONTINUE-ON-ERROR [{nid}]: {err_msg}")
+                return error_out, trace, set(), None
+            else:
+                result_err = {'__error': err_msg}
+                return result_err, trace, set(), ('abort', last_err, nid, ntype, attempt + 1)
 
-    # Compute condition skip delta
-    skip_delta = set()
-    if ntype == 'action.condition':
-        condition_val = result.get('result', False) if isinstance(result, dict) else bool(result)
-        true_reach  = _reachable_via_handle(nid, 'true',  succ)
-        false_reach = _reachable_via_handle(nid, 'false', succ)
-        if condition_val:
-            skip_delta = false_reach - true_reach
-            logger(f"Condition [{nid}] = True  → skipping {len(skip_delta)} false-branch node(s)")
-        else:
-            skip_delta = true_reach - false_reach
-            logger(f"Condition [{nid}] = False → skipping {len(skip_delta)} true-branch node(s)")
+        _out_str = json.dumps(result, default=str) if isinstance(result, (dict, list)) else str(result)
+        trace['status'] = 'ok'
+        trace['output'] = result if len(_out_str) < 5_000_000 else {'__truncated': True, '__size': len(_out_str)}
 
-    # Detect loop node (caller handles body expansion sequentially)
-    loop_result = result if (isinstance(result, dict) and result.get('__loop__')) else None
+        # Compute condition skip delta
+        skip_delta = set()
+        if ntype == 'action.condition':
+            condition_val = result.get('result', False) if isinstance(result, dict) else bool(result)
+            true_reach  = _reachable_via_handle(nid, 'true',  succ)
+            false_reach = _reachable_via_handle(nid, 'false', succ)
+            if condition_val:
+                skip_delta = false_reach - true_reach
+                logger(f"Condition [{nid}] = True  → skipping {len(skip_delta)} false-branch node(s)")
+            else:
+                skip_delta = true_reach - false_reach
+                logger(f"Condition [{nid}] = False → skipping {len(skip_delta)} true-branch node(s)")
 
-    return result, trace, skip_delta, loop_result
+        # Detect loop node (caller handles body expansion sequentially)
+        loop_result = result if (isinstance(result, dict) and result.get('__loop__')) else None
+
+        return result, trace, skip_delta, loop_result
+
+    finally:
+        _n_span.set_attribute("node.attempts",    trace.get('attempts', 0) if 'trace' in dir() else 0)
+        _n_span.set_attribute("node.duration_ms", trace.get('duration_ms', 0) if 'trace' in dir() else 0)
+        _n_span.set_attribute("node.status",      trace.get('status', 'unknown') if 'trace' in dir() else 'unknown')
+        _otel_ctx.detach(_n_token)
+        _n_span.end()
 
 
 # ── loop body expansion (sequential, called after any loop node completes) ─
@@ -351,15 +374,34 @@ def run_graph(graph_data: dict, initial_payload: dict = None, logger=None, _dept
                   os.environ.get('EXECUTOR_PARALLEL', '').lower() == 'true'
     max_workers = int(os.environ.get('EXECUTOR_MAX_WORKERS', '8'))
 
-    if parallel and max_workers > 1:
-        levels = _compute_levels(nodes, succ)
-        _run_parallel(levels, nodes_map, edges, context, results, traces,
-                      creds, logger, succ, skip_nodes, _depth, max_workers,
-                      node_callback=node_callback)
-    else:
-        _run_sequential(order, nodes_map, edges, context, results, traces,
-                        creds, logger, succ, skip_nodes, _depth,
-                        node_callback=node_callback)
+    # ── OTEL: root span for this graph run ────────────────────────────────
+    _tracer = _get_tracer("hiverunr.executor")
+    _span   = _tracer.start_span("run_graph")
+    _span.set_attribute("graph.node_count", len(nodes))
+    _span.set_attribute("graph.edge_count", len(edges))
+    _span.set_attribute("graph.depth",      _depth)
+    _span.set_attribute("graph.parallel",   parallel)
+    if workspace_id:
+        _span.set_attribute("workspace.id", workspace_id)
+    _token = _otel_ctx.attach(_otel_trace.set_span_in_context(_span))
+
+    try:
+        if parallel and max_workers > 1:
+            levels = _compute_levels(nodes, succ)
+            _run_parallel(levels, nodes_map, edges, context, results, traces,
+                          creds, logger, succ, skip_nodes, _depth, max_workers,
+                          node_callback=node_callback)
+        else:
+            _run_sequential(order, nodes_map, edges, context, results, traces,
+                            creds, logger, succ, skip_nodes, _depth,
+                            node_callback=node_callback)
+    except Exception as exc:
+        _span.set_status(_SC.ERROR, str(exc))
+        raise
+    finally:
+        _span.set_attribute("graph.trace_count", len(traces))
+        _otel_ctx.detach(_token)
+        _span.end()
 
     return {'context': context, 'results': results, 'traces': traces}
 

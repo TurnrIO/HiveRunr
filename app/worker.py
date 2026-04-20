@@ -275,10 +275,23 @@ def enqueue_graph(self, graph_id: int, payload: dict):
 
     publish = _make_run_publisher(task_id)
 
+    # ── OTEL: root span for this Celery task ──────────────────────────────
+    from app.telemetry import get_tracer as _get_tracer
+    from opentelemetry.trace import StatusCode as _SC
+    _tracer  = _get_tracer("hiverunr.worker")
+    _w_span  = _tracer.start_span("graph.run")
+    _w_span.set_attribute("celery.task_id", task_id)
+    _w_span.set_attribute("graph.id",       graph_id)
+    _w_span.set_attribute("celery.attempt", retry_attempt)
+    from opentelemetry import context as _otel_ctx, trace as _otel_trace
+    _w_token = _otel_ctx.attach(_otel_trace.set_span_in_context(_w_span))
+
     try:
         g = get_graph(graph_id)
         if not g:
             raise ValueError(f"Graph {graph_id} not found")
+        _w_span.set_attribute("graph.name",         g.get("name", ""))
+        _w_span.set_attribute("graph.workspace_id", g.get("workspace_id") or 0)
         graph_data = json.loads(g.get('graph_json') or '{}')
         from app.core.executor import run_graph
 
@@ -322,6 +335,8 @@ def enqueue_graph(self, graph_id: int, payload: dict):
         if publish:
             publish({"type": "run_done", "status": "retrying",
                      "error": str(exc), "retry_attempt": attempt + 1})
+        _w_span.set_status(_SC.ERROR, str(exc))
+        _w_span.set_attribute("celery.will_retry", True)
         raise self.retry(exc=exc, countdown=countdown)
 
     except Exception as exc:
@@ -344,3 +359,8 @@ def enqueue_graph(self, graph_id: int, payload: dict):
             task_id=task_id,
             error=str(exc),
         )
+        _w_span.set_status(_SC.ERROR, str(exc))
+
+    finally:
+        _otel_ctx.detach(_w_token)
+        _w_span.end()
