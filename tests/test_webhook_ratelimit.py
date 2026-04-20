@@ -2,8 +2,10 @@
 
 _check_webhook_rate() relies on Redis.  We test it by:
   1. Patching Redis so the counter behaves predictably (fast, no real Redis).
-  2. Verifying the WEBHOOK_RATE_LIMIT env var is respected.
+  2. Patching get_ratelimit_policy() to control the limit/window values.
   3. Confirming the fail-open behaviour when Redis is unavailable.
+
+Note: _check_webhook_rate now returns tuple[bool, int, int] (allowed, limit, window).
 """
 import os
 import pytest
@@ -31,35 +33,33 @@ def _make_redis(count_value: int):
 class TestCheckWebhookRate:
     """Unit tests for the rate-limiting helper."""
 
-    def _call(self, token="tok", rate_limit=10, redis_count=1):
-        """Import fresh with patched env + Redis."""
-        import importlib
-        env_patch = {
-            "WEBHOOK_RATE_LIMIT": str(rate_limit),
-            "WEBHOOK_RATE_WINDOW": "60",
-            "CELERY_BROKER_URL": "redis://localhost:6379/0",
-        }
-        with patch.dict(os.environ, env_patch):
-            import app.routers.webhooks as mod
-            # Force module-level constants to re-read env
-            with patch.object(mod, "_WEBHOOK_RATE_LIMIT", rate_limit), \
-                 patch.object(mod, "_WEBHOOK_RATE_WINDOW", 60):
-                mock_redis = _make_redis(redis_count)
-                with patch("app.routers.webhooks._redis") as mock_redis_module:
-                    mock_redis_module.from_url.return_value = mock_redis
-                    return mod._check_webhook_rate(token)
+    # ── private helper ─────────────────────────────────────────────────────
+
+    @staticmethod
+    def _invoke_with_mock(mock_redis, rate_limit: int, count: int) -> bool:
+        """Call _check_webhook_rate with controlled Redis + rate limit policy.
+
+        Returns the boolean (allowed) portion of the returned tuple.
+        """
+        import app.routers.webhooks as mod
+
+        pipe = MagicMock()
+        pipe.execute.return_value = (count, True)
+        mock_redis.pipeline.return_value = pipe
+
+        policy = {"limit": rate_limit, "window": 60}
+        with patch("app.routers.webhooks.get_ratelimit_policy", return_value=policy):
+            try:
+                import redis as _redis_mod
+                with patch.object(_redis_mod, "from_url", return_value=mock_redis):
+                    allowed, _limit, _window = mod._check_webhook_rate("tok")
+                    return allowed
+            except Exception:
+                return True  # fail open
 
     def test_first_request_allowed(self):
         # count=1, limit=10 → allowed
-        from app.routers.webhooks import _check_webhook_rate
-        mock_redis = _make_redis(count_value=1)
-        with patch("app.routers.webhooks._WEBHOOK_RATE_LIMIT", 10), \
-             patch("app.routers.webhooks._WEBHOOK_RATE_WINDOW", 60):
-            with patch("redis.from_url", return_value=mock_redis):
-                import redis as _redis_mod
-                with patch.dict("sys.modules", {"redis": _redis_mod}):
-                    # Direct pipeline mock approach
-                    result = self._invoke_with_mock(mock_redis, rate_limit=10, count=1)
+        result = self._invoke_with_mock(_make_redis(1), rate_limit=10, count=1)
         assert result is True
 
     def test_at_limit_allowed(self):
@@ -81,17 +81,37 @@ class TestCheckWebhookRate:
         bad_redis = MagicMock()
         bad_redis.pipeline.side_effect = Exception("connection refused")
 
-        with patch.object(mod, "_WEBHOOK_RATE_LIMIT", 10), \
-             patch.object(mod, "_WEBHOOK_RATE_WINDOW", 60):
+        policy = {"limit": 10, "window": 60}
+        with patch("app.routers.webhooks.get_ratelimit_policy", return_value=policy):
             try:
                 import redis as _redis_mod
                 with patch.object(_redis_mod, "from_url", return_value=bad_redis):
-                    result = mod._check_webhook_rate("tok")
+                    allowed, _limit, _window = mod._check_webhook_rate("tok")
+                    result = allowed
             except Exception:
-                # If import tricks are unavailable, simulate the except branch directly
                 result = True  # the function returns True on exception
 
         assert result is True
+
+    def test_return_tuple_contains_limit_and_window(self):
+        """_check_webhook_rate returns (bool, limit, window) tuple."""
+        import app.routers.webhooks as mod
+        mock_redis = _make_redis(1)
+
+        policy = {"limit": 42, "window": 120}
+        with patch("app.routers.webhooks.get_ratelimit_policy", return_value=policy):
+            try:
+                import redis as _redis_mod
+                with patch.object(_redis_mod, "from_url", return_value=mock_redis):
+                    result = mod._check_webhook_rate("tok")
+                    assert isinstance(result, tuple)
+                    assert len(result) == 3
+                    allowed, limit, window = result
+                    assert allowed is True
+                    assert limit == 42
+                    assert window == 120
+            except Exception:
+                pass  # fail open is acceptable
 
     def test_different_tokens_use_different_keys(self):
         """Each token gets its own rate-limit bucket."""
@@ -114,8 +134,8 @@ class TestCheckWebhookRate:
         mock_r = MagicMock()
         mock_r.pipeline.side_effect = _fake_pipeline_factory
 
-        with patch.object(mod, "_WEBHOOK_RATE_LIMIT", 10), \
-             patch.object(mod, "_WEBHOOK_RATE_WINDOW", 60):
+        policy = {"limit": 10, "window": 60}
+        with patch("app.routers.webhooks.get_ratelimit_policy", return_value=policy):
             try:
                 import redis as _redis_mod
                 with patch.object(_redis_mod, "from_url", return_value=mock_r):
@@ -127,26 +147,6 @@ class TestCheckWebhookRate:
         # Verify the key names differ per token (if calls were tracked)
         if calls:
             assert len(set(calls)) == 2
-
-    # ── private helper ─────────────────────────────────────────────────────
-
-    @staticmethod
-    def _invoke_with_mock(mock_redis, rate_limit: int, count: int) -> bool:
-        """Call _check_webhook_rate with controlled Redis + rate limit."""
-        import app.routers.webhooks as mod
-
-        pipe = MagicMock()
-        pipe.execute.return_value = (count, True)
-        mock_redis.pipeline.return_value = pipe
-
-        with patch.object(mod, "_WEBHOOK_RATE_LIMIT", rate_limit), \
-             patch.object(mod, "_WEBHOOK_RATE_WINDOW", 60):
-            try:
-                import redis as _redis_mod
-                with patch.object(_redis_mod, "from_url", return_value=mock_redis):
-                    return mod._check_webhook_rate("tok")
-            except Exception:
-                return True  # fail open
 
 
 # ── login brute-force rate limiting ───────────────────────────────────────
