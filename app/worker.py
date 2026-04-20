@@ -5,6 +5,8 @@ from celery import Celery
 # Load secrets before any env-var reads (Celery broker URL, AgentMail creds, etc.)
 from app.core.secrets import load_secrets
 load_secrets()
+from app.telemetry import setup_tracing
+setup_tracing()
 from app.core.db import (
     update_run,
     get_graph

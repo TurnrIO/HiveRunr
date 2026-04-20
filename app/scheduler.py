@@ -37,6 +37,8 @@ from apscheduler.triggers.date import DateTrigger
 # Load secrets before DB connection (DATABASE_URL may come from provider)
 from app.core.secrets import load_secrets
 load_secrets()
+from app.telemetry import setup_tracing
+setup_tracing()
 
 from app.core.db import init_db, list_schedules, delete_schedule, purge_expired_sessions
 

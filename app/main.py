@@ -19,9 +19,13 @@ from app.worker import enqueue_workflow
 from app.deps import _auth_redirect
 from app.seeds import seed_example_graphs
 from app.observability import configure_logging, PrometheusMiddleware
+from app.telemetry import setup_tracing
 
 # ── Structured JSON logging (must run before any other log calls) ─────────────
 configure_logging()
+
+# ── Distributed tracing (no-op when OTEL_EXPORTER_OTLP_ENDPOINT is unset) ────
+setup_tracing()
 
 # ── Routers ───────────────────────────────────────────────────────────────────
 from app.routers.auth        import router as auth_router
