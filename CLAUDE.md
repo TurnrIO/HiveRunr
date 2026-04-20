@@ -183,6 +183,16 @@ OWNER_EMAIL=
 | P4-28 | Templates gallery — `app/routers/templates.py` (`GET /api/templates`, `GET /api/templates/{slug}`); 9 bundled JSON templates in `app/templates/`; canvas OpenModal "Start from template" tab with category filter + 2-col cards |
 | P4-29 | Webhook improvements — HMAC-SHA256 (`X-Hub-Signature-256`), allowed-origins CORS, `OPTIONS` preflight; `WebhookUrlPanel` in NodeEditorModal; secret + allowed_origins fields in NODE_DEFS |
 | P4-30 | Sticky note enhancements — `NOTE_COLORS` palette (6 colours); StickyNote applies colour + minWidth/minHeight from config; NODE_DEFS adds colour select + width/height fields; `zIndex:-1` in all 4 node-load paths; hint panel with live colour swatches |
+| P5-31 | New node `action.redis` — GET/SET/DEL/LPUSH/RPOP/INCR/EXPIRE; credential: `url`; NODE_DEFS + hint panels |
+| P5-32 | New node `action.graphql` — query/mutation with variables; template rendering in query/variables; credential: endpoint + Authorization header |
+| P5-33 | New node `action.pdf` — HTML → PDF via xhtml2pdf (optional dep); output: `pdf_bytes` (base64) + `size_bytes` + `filename`; pairs with S3/email nodes |
+| P5-34 | New node `trigger.rss` — RSS/Atom feed polling; stdlib `xml.etree`; lookback window + filter expression; output: `entries[]` + `count` + first-entry shortcuts |
+| P5-35 | New node `action.airtable` — Airtable REST API; credential: `api_key` + `base_id`; operations: list-records, get-record, create-record, update-record, delete-record |
+| P6-36 | Webhook rate-limit UI — `GET/PUT /api/settings/ratelimit` (app_settings KV); Rate Limits card on Settings page with live counters per endpoint + global config form |
+| P6-37 | CHANGELOG `[0.2.0]` + version bump — full changelog entry; `app/_version.py` (circular import fix); `pyproject.toml` bumped to 0.2.0; `v0.2.0` git tag; version chip + update-available banner in admin UI; `GET /api/version` endpoint with 24h GitHub cache |
+| P6-38 | OpenTelemetry tracing — `app/telemetry.py` zero-overhead module (noop when OTLP endpoint unset); `graph.run` root span in worker; `run_graph` + per-node child spans in executor; `setup_tracing()` called in API/worker/scheduler; optional SDK + OTLP exporter |
+| P6-39 | DB connection pool — `psycopg2.ThreadedConnectionPool` (min 2/max 10, `DB_POOL_MIN`/`DB_POOL_MAX`); broken-connection discard; `get_pool_stats()` exposed in `GET /api/system/status` System page |
+| P6-40 | HA/DR runbook — `OPERATIONS.md` extended with Postgres streaming replication, Redis Sentinel failover, multi-region Celery workers, DR checklist + RTO/RPO table; `docker-compose.ha.yml` (Postgres primary+replica, Redis+2 replicas+3 Sentinels, 2× API/worker/scheduler) |
 
 ---
 
@@ -277,31 +287,31 @@ Pick the next item off the top. Cross it off and add a "Completed sprints" row w
 
 ---
 
-### 🟣 P5 — Integrations & ecosystem
+### 🟣 P5 — Integrations & ecosystem ✅ Done
 
-31. **New node: `action.redis`** — GET/SET/DEL/LPUSH/RPOP/INCR/EXPIRE operations against a Redis instance (credential: `url`); useful for caching, counters, and cross-flow signalling without a DB.
+31. ~~**New node: `action.redis`**~~ ✓ Done — GET/SET/DEL/LPUSH/RPOP/INCR/EXPIRE; credential: `url`.
 
-32. **New node: `action.graphql`** — send a GraphQL query/mutation with variables; credential stores endpoint + optional Authorization header; output: `data`, `errors[]`; supports template rendering in query + variables.
+32. ~~**New node: `action.graphql`**~~ ✓ Done — query/mutation with variables; credential stores endpoint + Authorization header.
 
-33. **New node: `action.pdf`** — generate a PDF from an HTML template (uses `weasyprint` or `pdfkit`); config: `html` (template-rendered), `filename`; output: `pdf_bytes` (base64) + `size_bytes`; pairs well with `action.s3` or `action.send_email` to attach.
+33. ~~**New node: `action.pdf`**~~ ✓ Done — HTML → PDF via xhtml2pdf; output: `pdf_bytes` (base64) + `size_bytes`.
 
-34. **New node: `trigger.rss`** — poll an RSS/Atom feed URL; config: `url`, `lookback_minutes`, `filter_expression` (Python eval with `entry` dict); output: `entries[]` list with `title`, `link`, `published`, `summary`; uses stdlib `xml.etree` — no extra deps.
+34. ~~**New node: `trigger.rss`**~~ ✓ Done — RSS/Atom feed polling; stdlib `xml.etree`; output: `entries[]` + `count`.
 
-35. **New node: `action.airtable`** — Airtable REST API; credential: `api_key` + `base_id`; operations: list-records, get-record, create-record, update-record, delete-record; config: `table`, `filter_formula`, `fields_json`; output: `records[]`, `record`, `id`.
+35. ~~**New node: `action.airtable`**~~ ✓ Done — Airtable REST API; list/get/create/update/delete-record.
 
 ---
 
-### 🟤 P6 — Platform & ops
+### 🟤 P6 — Platform & ops ✅ Done
 
-36. **Webhook rate-limit UI** — expose the per-IP rate-limit window + max-calls config (currently hardcoded in `main.py`) via `GET/PUT /api/settings/ratelimit`; add a Rate Limits card to the Settings page with current counters visible.
+36. ~~**Webhook rate-limit UI**~~ ✓ Done — `GET/PUT /api/settings/ratelimit`; Rate Limits card on Settings page with live counters.
 
-37. **CHANGELOG + `v0.2.0` release tag** — document P3, P4, P5 in `CHANGELOG.md`; bump version in any version string / `__version__`; create `v0.2.0` git tag.
+37. ~~**CHANGELOG + `v0.2.0` release tag**~~ ✓ Done — full `[0.2.0]` CHANGELOG entry; `app/_version.py`; `pyproject.toml` bumped; `v0.2.0` tag created.
 
-38. **Observability: OpenTelemetry traces** — wrap `run_graph` and each node `run()` call with OTEL spans (use `opentelemetry-sdk`; export to stdout OTLP or Jaeger if `OTEL_EXPORTER_OTLP_ENDPOINT` is set); add `OTEL_SERVICE_NAME` to `.env.example`; zero-overhead when env var is unset.
+38. ~~**Observability: OpenTelemetry traces**~~ ✓ Done — `app/telemetry.py` zero-overhead module; `graph.run` + `run_graph` + per-node spans; SDK+exporter optional; `OTEL_EXPORTER_OTLP_ENDPOINT` gates activation.
 
-39. **DB connection pool tuning** — replace `psycopg2.connect()` one-shot connections with `psycopg2.pool.ThreadedConnectionPool` (min 2, max 10, configurable via `DB_POOL_MIN`/`DB_POOL_MAX`); expose pool stats in `GET /api/system/status`.
+39. ~~**DB connection pool tuning**~~ ✓ Done — `ThreadedConnectionPool` in `db.py` (min 2/max 10, env-configurable); `get_pool_stats()` exposed in `GET /api/system/status` System page pool chip.
 
-40. **Multi-region / DR runbook** — extend `OPERATIONS.md` with PostgreSQL streaming-replication setup, Redis Sentinel failover config, Celery multi-region worker targeting, and a DR checklist; add `docker-compose.ha.yml` example.
+40. ~~**Multi-region / DR runbook**~~ ✓ Done — `OPERATIONS.md` extended with HA + DR sections; `docker-compose.ha.yml` (Postgres streaming replication, Redis Sentinel × 3, 2× API/worker/scheduler replicas).
 
 ---
 
