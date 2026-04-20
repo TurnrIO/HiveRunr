@@ -39,14 +39,85 @@ Environment variables
 """
 import logging
 import os
-
-from opentelemetry import trace
+import types
 
 log = logging.getLogger(__name__)
 
+# ── opentelemetry-api is an optional dependency ───────────────────────────────
+# If the package is not installed we build a minimal noop shim so that
+# all callers (worker.py, executor.py, scheduler.py) can import and use
+# get_tracer() / setup_tracing() without modification regardless of whether
+# the package is present.
+try:
+    from opentelemetry import trace          # noqa: F401  (re-exported below)
+    from opentelemetry import context as _otel_ctx_mod
+    from opentelemetry import trace  as _otel_trace_mod
+    _OTEL_AVAILABLE = True
+except ImportError:
+    _OTEL_AVAILABLE = False
+
+    # ── Minimal noop shim ─────────────────────────────────────────────────────
+    class _NoopSpan:
+        """Stands in for opentelemetry.trace.Span / NonRecordingSpan."""
+        def set_attribute(self, *a, **kw): pass
+        def set_status(self, *a, **kw):    pass
+        def record_exception(self, *a, **kw): pass
+        def end(self, *a, **kw):           pass
+        def __enter__(self):               return self
+        def __exit__(self, *a):            return False
+
+    class _NoopTracer:
+        def start_span(self, name, **kw):  return _NoopSpan()
+        def start_as_current_span(self, name, **kw):
+            import contextlib
+            @contextlib.contextmanager
+            def _cm():
+                yield _NoopSpan()
+            return _cm()
+
+    class _NoopStatusCode:
+        OK    = "OK"
+        ERROR = "ERROR"
+        UNSET = "UNSET"
+
+    class _NoopTraceModule(types.ModuleType):
+        def get_tracer(self, name, **kw): return _NoopTracer()
+        def set_tracer_provider(self, p): pass
+        StatusCode = _NoopStatusCode
+
+    class _NoopToken:
+        pass
+
+    class _NoopCtxModule(types.ModuleType):
+        def attach(self, ctx):  return _NoopToken()
+        def detach(self, tok):  pass
+
+    def _set_span_in_context(span):
+        return None
+
+    _noop_trace_mod         = _NoopTraceModule("opentelemetry.trace")
+    _noop_trace_mod.set_span_in_context = _set_span_in_context
+    _noop_ctx_mod           = _NoopCtxModule("opentelemetry.context")
+
+    _otel_trace_mod = _noop_trace_mod
+    _otel_ctx_mod   = _noop_ctx_mod
+
+    log.debug("opentelemetry package not installed — tracing disabled (noop mode)")
+
+# ── Public re-exports ─────────────────────────────────────────────────────────
+# worker.py and executor.py import these instead of touching opentelemetry directly,
+# so they work whether or not the package is installed.
+#
+#   from app.telemetry import otel_trace, otel_context, StatusCode
+#
+trace         = _otel_trace_mod   # noqa: F811  (backward compat alias)
+otel_trace    = _otel_trace_mod
+otel_context  = _otel_ctx_mod
+StatusCode    = _otel_trace_mod.StatusCode
+
 # ── Internal state ────────────────────────────────────────────────────────────
 _setup_done   = False
-_tracer_cache: dict[str, trace.Tracer] = {}
+_tracer_cache: dict = {}
 
 
 def setup_tracing() -> None:

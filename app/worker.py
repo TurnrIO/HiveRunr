@@ -276,14 +276,12 @@ def enqueue_graph(self, graph_id: int, payload: dict):
     publish = _make_run_publisher(task_id)
 
     # ── OTEL: root span for this Celery task ──────────────────────────────
-    from app.telemetry import get_tracer as _get_tracer
-    from opentelemetry.trace import StatusCode as _SC
+    from app.telemetry import get_tracer as _get_tracer, otel_context as _otel_ctx, otel_trace as _otel_trace, StatusCode as _SC
     _tracer  = _get_tracer("hiverunr.worker")
     _w_span  = _tracer.start_span("graph.run")
     _w_span.set_attribute("celery.task_id", task_id)
     _w_span.set_attribute("graph.id",       graph_id)
     _w_span.set_attribute("celery.attempt", retry_attempt)
-    from opentelemetry import context as _otel_ctx, trace as _otel_trace
     _w_token = _otel_ctx.attach(_otel_trace.set_span_in_context(_w_span))
 
     try:

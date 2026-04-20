@@ -20,10 +20,10 @@ log = logging.getLogger(__name__)
 # ── re-export _render for backward compatibility (call_graph etc) ──────────
 from app.nodes._utils import _render  # noqa: F401
 
-# ── OpenTelemetry (noop when OTEL_EXPORTER_OTLP_ENDPOINT is unset) ────────
-from app.telemetry import get_tracer as _get_tracer
-from opentelemetry.trace import StatusCode as _SC
-from opentelemetry import context as _otel_ctx, trace as _otel_trace
+# ── OpenTelemetry (noop when package absent or OTLP endpoint unset) ──────────
+# Import from app.telemetry — it provides real impls or safe noops depending
+# on whether opentelemetry-api is installed.
+from app.telemetry import get_tracer as _get_tracer, otel_context as _otel_ctx, otel_trace as _otel_trace, StatusCode as _SC
 
 
 # ── topological sort (Kahn's) ─────────────────────────────────────────────
