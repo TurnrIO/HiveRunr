@@ -59,6 +59,8 @@ _MIGRATED_PAGES: set[str] = {
     "invite.html",
     # F6 — admin SPA migrated to Vite + React
     "admin.html",
+    # F9 — canvas editor migrated to Vite + React
+    "canvas.html",
 }
 
 

@@ -1,0 +1,1151 @@
+import { useState, useEffect, useRef, useCallback } from "react";
+import ReactFlow, {
+  ReactFlowProvider, addEdge, Background, Controls, MiniMap,
+  useNodesState, useEdgesState, useReactFlow,
+  MarkerType, BackgroundVariant,
+} from "reactflow";
+import "reactflow/dist/style.css";
+
+import { api } from "../../api/client.js";
+import { Toast }            from "../../components/Toast.jsx";
+import { ConfirmModal }     from "../../components/ConfirmModal.jsx";
+import { ReplayEditModal }  from "../../components/ReplayEditModal.jsx";
+import { nodeTypes }        from "./CustomNode.jsx";
+import { NODE_DEFS }        from "./nodeDefs.js";
+import { Palette }          from "./Palette.jsx";
+import { ConfigPanel }      from "./ConfigPanel.jsx";
+import { NodeContextMenu }  from "./NodeContextMenu.jsx";
+import { NodeEditorModal }  from "./NodeEditorModal.jsx";
+import { OpenModal }        from "./OpenModal.jsx";
+import { TestPayloadModal } from "./TestPayloadModal.jsx";
+import { ValidationModal }  from "./ValidationModal.jsx";
+import { HistoryModal }     from "./HistoryModal.jsx";
+import { PermissionsModal } from "./PermissionsModal.jsx";
+import { ShortcutsModal }   from "./ShortcutsModal.jsx";
+import { NodeSearchBar }    from "./NodeSearchBar.jsx";
+import { EdgeLabelModal }   from "./EdgeLabelModal.jsx";
+import { validateFlow, computeAutoLayout } from "./canvasHelpers.js";
+
+/* ── RFC 4122 v4 UUID ──────────────────────────────────────────────────── */
+function uid() {
+  if (typeof crypto !== "undefined" && crypto.randomUUID) return crypto.randomUUID();
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, c => {
+    const r = Math.random() * 16 | 0;
+    return (c === "x" ? r : (r & 0x3 | 0x8)).toString(16);
+  });
+}
+
+/* ── Edge style helper ─────────────────────────────────────────────────── */
+const EDGE_STYLE = {
+  type: "smoothstep", animated: true,
+  style: { stroke: "#7c3aed", strokeWidth: 2 },
+  markerEnd: { type: MarkerType.ArrowClosed, color: "#7c3aed" },
+};
+function styledEdge(e) { return { ...e, ...EDGE_STYLE }; }
+
+/* ── Node loader ───────────────────────────────────────────────────────── */
+function loadNode(n) {
+  return {
+    id: n.id, type: "custom",
+    position: n.position || { x: 100, y: 100 },
+    ...(n.type === "note" ? { zIndex: -1 } : {}),
+    data: {
+      type:        n.type,
+      label:       n.data?.label || "",
+      config:      n.data?.config || {},
+      disabled:    !!n.data?.disabled,
+      retry_max:   n.data?.retry_max   || 0,
+      retry_delay: n.data?.retry_delay || 5,
+      fail_mode:   n.data?.fail_mode   || "abort",
+    },
+  };
+}
+
+/* ── MoreMenu ──────────────────────────────────────────────────────────── */
+function MoreMenu({
+  onExport, onImport, onLayout, onValidate, onHistory, onPermissions,
+  onTest, onAdmin, onUndo, onRedo, undoDisabled, redoDisabled,
+  onShortcuts, onToggleMap, showMap, onSearch, isAdmin, disabled,
+}) {
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef(null);
+  useEffect(() => {
+    if (!open) return;
+    function close(e) { if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false); }
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, [open]);
+  function act(fn) { setOpen(false); setTimeout(fn, 0); }
+  return (
+    <div className="tb-more-wrap" ref={wrapRef}>
+      <button className="btn btn-ghost btn-sm" onClick={() => setOpen(o => !o)} title="More actions">⋯</button>
+      {open && (
+        <div className="tb-more-menu">
+          <button className="tb-more-item" onClick={() => act(onExport)} disabled={disabled}>⬇ Export flow</button>
+          <button className="tb-more-item" onClick={() => act(onImport)}>⬆ Import flow</button>
+          <div className="tb-more-sep"/>
+          <button className="tb-more-item" onClick={() => act(onLayout)}>⊞ Auto-layout</button>
+          <button className="tb-more-item" onClick={() => act(onValidate)} disabled={disabled}>✔ Validate</button>
+          <div className="tb-more-sep"/>
+          <button className="tb-more-item" onClick={() => act(onHistory)} disabled={disabled}>📜 Version history</button>
+          {isAdmin && <>
+            <div className="tb-more-sep"/>
+            <button className="tb-more-item" onClick={() => act(onPermissions)} disabled={disabled}>🔐 Manage permissions</button>
+          </>}
+          <div className="tb-more-sep"/>
+          <button className="tb-more-item" onClick={() => act(onSearch)}>🔍 Search nodes (Ctrl+F)</button>
+          <button className="tb-more-item" onClick={() => act(onToggleMap)}>{showMap ? "🗺 Hide minimap" : "🗺 Show minimap"}</button>
+          <button className="tb-more-item" onClick={() => act(onShortcuts)}>⌨️ Keyboard shortcuts</button>
+          {/* Mobile-only extras */}
+          <div className="tb-more-sep tb-more-mobile-extra"/>
+          <button className="tb-more-item tb-more-mobile-extra" onClick={() => act(onUndo)} disabled={undoDisabled}>↩ Undo</button>
+          <button className="tb-more-item tb-more-mobile-extra" onClick={() => act(onRedo)} disabled={redoDisabled}>↪ Redo</button>
+          <div className="tb-more-sep tb-more-mobile-extra"/>
+          <button className="tb-more-item tb-more-mobile-extra" onClick={() => act(onTest)} disabled={disabled}>🧪 Test run</button>
+          <button className="tb-more-item tb-more-mobile-extra" onClick={() => act(onAdmin)}>← Admin panel</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ── Main CanvasApp ────────────────────────────────────────────────────── */
+function CanvasApp() {
+  const [nodes, setNodes, onNodesChange] = useNodesState([]);
+  const [edges, setEdges, onEdgesChange] = useEdgesState([]);
+  const [selectedNode,    setSelectedNode]    = useState(null);
+  const [selectedEdge,    setSelectedEdge]    = useState(null);
+  const [edgeLabelInput,  setEdgeLabelInput]  = useState("");
+  const [currentGraph,    setCurrentGraph]    = useState(null);
+  const [graphName,       setGraphName]       = useState("Untitled Graph");
+  const [graphs,          setGraphs]          = useState([]);
+  const [showModal,       setShowModal]       = useState(false);
+  const [showTestModal,   setShowTestModal]   = useState(false);
+  const [showHistoryModal,   setShowHistoryModal]   = useState(false);
+  const [showPermissionsModal, setShowPermissionsModal] = useState(false);
+  const [currentUser,     setCurrentUser]     = useState(null);
+  const [workspaces,      setWorkspaces]      = useState([]);
+  const [activeWorkspace, setActiveWorkspace] = useState(null);
+  const [contextMenu,     setContextMenu]     = useState(null);
+  const [toast,           setToast]           = useState(null);
+  const [saving,          setSaving]          = useState(false);
+  const [isDirty,         setIsDirty]         = useState(false);
+  const [running,         setRunning]         = useState(false);
+  const [runError,        setRunError]        = useState(null);
+  const [showMap,         setShowMap]         = useState(true);
+  const [paletteSearch,   setPaletteSearch]   = useState("");
+  const [testPayload,     setTestPayload]     = useState("{}");
+  const [validationIssues,  setValidationIssues]  = useState(null);
+  const [inspectorRuns,   setInspectorRuns]   = useState([]);
+  const [inspectorRunId,  setInspectorRunId]  = useState(null);
+  const [credentials,     setCredentials]     = useState([]);
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const [showShortcuts,   setShowShortcuts]   = useState(false);
+  const [showSearch,      setShowSearch]      = useState(false);
+  const [replayEdit,      setReplayEdit]      = useState(null);
+
+  // Undo / redo
+  const histRef    = useRef([]);
+  const histIdx    = useRef(-1);
+  const restoring  = useRef(false);
+  const [histState, setHistState] = useState({ idx: -1, len: 0 });
+  function syncHistState() { setHistState({ idx: histIdx.current, len: histRef.current.length }); }
+
+  const reactFlowWrapper = useRef(null);
+  const importFileRef    = useRef(null);
+  const { screenToFlowPosition, setCenter } = useReactFlow();
+
+  const showToast = useCallback((msg, type = "success") => {
+    setToast({ msg, type, key: Date.now() });
+  }, []);
+
+  /* ── Jump viewport to a node ─────────────────────────────────────────── */
+  function jumpToNode(n) {
+    const x = n.position.x + (n.width  || 180) / 2;
+    const y = n.position.y + (n.height || 60)  / 2;
+    setCenter(x, y, { zoom: 1.2, duration: 400 });
+    setNodes(ns => ns.map(nd => ({ ...nd, selected: nd.id === n.id })));
+  }
+
+  /* ── Startup effects ─────────────────────────────────────────────────── */
+  useEffect(() => {
+    loadGraphList();
+    api("GET", "/api/credentials").then(setCredentials).catch(() => {});
+    api("GET", "/api/auth/me").then(setCurrentUser).catch(() => {});
+    api("GET", "/api/workspaces/my/list").then(list => {
+      setWorkspaces(list || []);
+      const wid = _getWorkspaceId();
+      const active = wid ? (list || []).find(w => String(w.id) === String(wid)) : null;
+      setActiveWorkspace(active || (list && list[0]) || null);
+    }).catch(() => {});
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /* ── Auto-open from sessionStorage or URL hash ───────────────────────── */
+  useEffect(() => {
+    const ssId      = sessionStorage.getItem("canvas_open_graph");
+    const slugMatch = window.location.hash.match(/^#flow-([a-f0-9]{8})/);
+    const idMatch   = window.location.hash.match(/^#graph-(\d+)$/);
+    const endpoint  = ssId
+      ? `/api/graphs/${ssId}`
+      : slugMatch
+        ? `/api/graphs/by-slug/${slugMatch[1]}`
+        : idMatch
+          ? `/api/graphs/${idMatch[1]}`
+          : null;
+    if (!endpoint) return;
+    sessionStorage.removeItem("canvas_open_graph");
+    api("GET", endpoint)
+      .then(full => {
+        const gd = full.graph_data || { nodes: [], edges: [] };
+        const newNodes = (gd.nodes || []).map(loadNode);
+        const newEdges = (gd.edges || []).map(styledEdge);
+        setNodes(newNodes); setEdges(newEdges);
+        setCurrentGraph(full); setGraphName(full.name);
+        setSelectedNode(null); setRunError(null);
+        histRef.current = []; histIdx.current = -1; syncHistState();
+        saveSnap(newNodes, newEdges);
+        setIsDirty(false);
+        window.location.hash = "flow-" + full.slug;
+        showToast(`Opened: ${full.name}`);
+      })
+      .catch(() => { window.location.hash = ""; });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /* ── Keyboard shortcuts ──────────────────────────────────────────────── */
+  const kbRef = useRef({});
+  kbRef.current = {
+    saveGraph, doUndo, doRedo,
+    setSelectedNode, setSelectedEdge, setContextMenu, setRunError,
+    setShowModal, setShowTestModal, setShowHistoryModal, setShowPermissionsModal,
+    setShowShortcuts, setShowSearch,
+  };
+  useEffect(() => {
+    function onKey(e) {
+      const kb  = kbRef.current;
+      const mac = e.metaKey, ctrl = e.ctrlKey;
+      if ((ctrl || mac) && e.key === "z" && !e.shiftKey) { e.preventDefault(); kb.doUndo(); return; }
+      if ((ctrl && e.key === "y") || (mac && e.shiftKey && e.key === "z")) { e.preventDefault(); kb.doRedo(); return; }
+      if ((ctrl || mac) && e.key === "s") { e.preventDefault(); kb.saveGraph(); return; }
+      if ((ctrl || mac) && e.key === "f") { e.preventDefault(); kb.setShowSearch(s => !s); return; }
+      const tag = document.activeElement?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || document.activeElement?.isContentEditable) return;
+      if (e.key === "Escape") {
+        kb.setContextMenu(null); kb.setSelectedEdge(null); kb.setRunError(null);
+        kb.setSelectedNode(null); kb.setShowModal(false); kb.setShowTestModal(false);
+        kb.setShowHistoryModal(false); kb.setShowPermissionsModal(false);
+        kb.setShowShortcuts(false); kb.setShowSearch(false);
+        return;
+      }
+      if (e.key === "?") { kb.setShowShortcuts(s => !s); }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  /* ── Dirty-state beforeunload guard ─────────────────────────────────── */
+  useEffect(() => {
+    if (!isDirty) return;
+    const h = e => { e.preventDefault(); e.returnValue = ""; };
+    window.addEventListener("beforeunload", h);
+    return () => window.removeEventListener("beforeunload", h);
+  }, [isDirty]);
+
+  /* ── Autosave (30 s after last change, existing graphs only) ─────────── */
+  const autosaveTimer = useRef(null);
+  useEffect(() => {
+    if (!isDirty || !currentGraph) return;
+    clearTimeout(autosaveTimer.current);
+    autosaveTimer.current = setTimeout(() => {
+      saveGraph();
+    }, 30000);
+    return () => clearTimeout(autosaveTimer.current);
+  }, [isDirty, currentGraph]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /* ── Undo / redo ─────────────────────────────────────────────────────── */
+  function saveSnap(ns, es) {
+    if (restoring.current) return;
+    histRef.current = histRef.current.slice(0, histIdx.current + 1);
+    histRef.current.push({
+      nodes: JSON.parse(JSON.stringify(ns)),
+      edges: JSON.parse(JSON.stringify(es)),
+    });
+    if (histRef.current.length > 60) histRef.current.shift();
+    histIdx.current = histRef.current.length - 1;
+    syncHistState();
+    setIsDirty(true);
+  }
+
+  function doUndo() {
+    if (histIdx.current <= 0) return;
+    histIdx.current--;
+    const snap = histRef.current[histIdx.current];
+    restoring.current = true;
+    setNodes(snap.nodes.map(n => ({ ...n })));
+    setEdges(snap.edges.map(e => ({ ...styledEdge(e) })));
+    setSelectedNode(null);
+    syncHistState();
+    setTimeout(() => { restoring.current = false; }, 50);
+  }
+
+  function doRedo() {
+    if (histIdx.current >= histRef.current.length - 1) return;
+    histIdx.current++;
+    const snap = histRef.current[histIdx.current];
+    restoring.current = true;
+    setNodes(snap.nodes.map(n => ({ ...n })));
+    setEdges(snap.edges.map(e => ({ ...styledEdge(e) })));
+    setSelectedNode(null);
+    syncHistState();
+    setTimeout(() => { restoring.current = false; }, 50);
+  }
+
+  /* ── Graph list ──────────────────────────────────────────────────────── */
+  async function loadGraphList() {
+    try { setGraphs(await api("GET", "/api/graphs")); } catch (e) { /* silent */ }
+  }
+
+  /* ── Edge events ─────────────────────────────────────────────────────── */
+  const onConnect = useCallback((params) => {
+    setEdges(eds => {
+      const ne = addEdge({ ...params, ...EDGE_STYLE, label: undefined }, eds);
+      saveSnap(nodes, ne);
+      return ne;
+    });
+  }, [nodes]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  function onEdgeClick(e, edge) {
+    setSelectedEdge(edge);
+    setEdgeLabelInput(edge.label || "");
+    setSelectedNode(null);
+    setContextMenu(null);
+  }
+
+  function updateEdgeLabel(label) {
+    setEdges(es => {
+      const updated = es.map(e => e.id === selectedEdge.id ? { ...e, label: label || undefined } : e);
+      saveSnap(nodes, updated);
+      return updated;
+    });
+    setSelectedEdge(null);
+  }
+
+  /* ── Node events ─────────────────────────────────────────────────────── */
+  function onNodeClick(e, node) { setSelectedNode(node); setContextMenu(null); }
+  function onPaneClick() { setSelectedNode(null); setContextMenu(null); setSelectedEdge(null); }
+
+  function onNodeContextMenu(e, node) {
+    e.preventDefault();
+    setContextMenu({ x: e.clientX, y: e.clientY, node });
+    setSelectedNode(node);
+  }
+
+  function ctxDuplicateNode(node) {
+    const newId = uid();
+    const newNode = {
+      ...node, id: newId,
+      position: { x: node.position.x + 40, y: node.position.y + 40 },
+      data: { ...node.data, label: (node.data.label || "") + " (copy)", _runStatus: undefined, _runOutput: undefined },
+      selected: false,
+    };
+    setNodes(ns => { const u = [...ns, newNode]; saveSnap(u, edges); return u; });
+    setSelectedNode(newNode);
+  }
+
+  function ctxToggleDisabled(id) {
+    setNodes(ns => {
+      const u = ns.map(n => n.id === id ? { ...n, data: { ...n.data, disabled: !n.data.disabled } } : n);
+      saveSnap(u, edges);
+      return u;
+    });
+    setSelectedNode(s => s && s.id === id ? { ...s, data: { ...s.data, disabled: !s.data.disabled } } : s);
+  }
+
+  function ctxCopyId(id) {
+    navigator.clipboard.writeText(id).catch(() => {});
+    showToast(`Copied: ${id}`);
+  }
+
+  function ctxRenameNode(node) {
+    const newLabel = window.prompt("Rename node:", node.data.label || (NODE_DEFS[node.data.type] || {}).label || "");
+    if (newLabel === null || newLabel.trim() === "") return;
+    onNodeChange(node.id, { ...node.data, label: newLabel.trim() });
+  }
+
+  function onNodeChange(id, newData) {
+    setNodes(ns => {
+      const updated = ns.map(n => n.id === id ? { ...n, data: newData } : n);
+      saveSnap(updated, edges);
+      return updated;
+    });
+    setSelectedNode(s => s && s.id === id ? { ...s, data: newData } : s);
+  }
+
+  function onDeleteNode(id) {
+    setNodes(ns => { const u = ns.filter(n => n.id !== id); saveSnap(u, edges); return u; });
+    setEdges(es => es.filter(e => e.source !== id && e.target !== id));
+    setSelectedNode(null);
+  }
+
+  /* ── Drag & drop from palette ────────────────────────────────────────── */
+  function onDragOver(e) { e.preventDefault(); e.dataTransfer.dropEffect = "move"; }
+
+  function onDrop(e) {
+    e.preventDefault();
+    const type = e.dataTransfer.getData("application/reactflow-type");
+    if (!type) return;
+    const def  = NODE_DEFS[type];
+    const pos  = screenToFlowPosition({ x: e.clientX, y: e.clientY });
+    const id   = uid();
+    const isNote = type === "note";
+    setNodes(ns => {
+      const updated = [...ns, {
+        id, type: "custom", position: pos,
+        ...(isNote ? { zIndex: -1 } : {}),
+        data: { type, label: def.label, config: {}, retry_max: 0, retry_delay: 5 },
+      }];
+      saveSnap(updated, edges);
+      return updated;
+    });
+  }
+
+  /* ── Build serialised graph_data ─────────────────────────────────────── */
+  function buildGraphData() {
+    return {
+      nodes: nodes.map(n => ({
+        id: n.id, type: n.data.type, position: n.position,
+        data: {
+          label:       n.data.label    || "",
+          config:      n.data.config   || {},
+          disabled:    !!n.data.disabled,
+          retry_max:   n.data.retry_max   || 0,
+          retry_delay: n.data.retry_delay || 5,
+          fail_mode:   n.data.fail_mode   || "abort",
+        },
+      })),
+      edges: edges.map(e => ({
+        id: e.id, source: e.source, target: e.target,
+        sourceHandle: e.sourceHandle || null,
+        targetHandle: e.targetHandle || null,
+        label: e.label,
+      })),
+    };
+  }
+
+  /* ── Auto-layout ─────────────────────────────────────────────────────── */
+  function doAutoLayout() {
+    setNodes(ns => {
+      const laid = computeAutoLayout(ns, edges);
+      saveSnap(laid, edges);
+      return laid;
+    });
+    showToast("Layout applied");
+  }
+
+  /* ── Save ────────────────────────────────────────────────────────────── */
+  async function saveGraph() {
+    setSaving(true);
+    try {
+      const gd = buildGraphData();
+      if (currentGraph) {
+        await api("PUT", `/api/graphs/${currentGraph.id}`, { name: graphName, graph_data: gd });
+        setIsDirty(false);
+        showToast("Graph saved!");
+        await loadGraphList();
+      } else {
+        const g = await api("POST", "/api/graphs", { name: graphName, description: "", graph_data: gd });
+        setCurrentGraph(g);
+        setIsDirty(false);
+        showToast("Graph created!");
+        await loadGraphList();
+      }
+    } catch (e) { showToast(e.message, "error"); }
+    setSaving(false);
+  }
+
+  /* ── Export / import ─────────────────────────────────────────────────── */
+  function exportFlow() {
+    if (!currentGraph) return;
+    const data = {
+      version: 8, name: graphName,
+      description: currentGraph.description || "",
+      graph_data:  buildGraphData(),
+      exported_at: new Date().toISOString(),
+    };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement("a");
+    a.href     = url;
+    a.download = `${graphName.replace(/[^a-z0-9]/gi, "_").toLowerCase()}.flow.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    showToast("Exported flow JSON");
+  }
+
+  async function importFlow(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    e.target.value = "";
+    try {
+      const text    = await file.text();
+      const data    = JSON.parse(text);
+      const name    = (data.name || file.name.replace(/\.flow\.json$/i, "").replace(/_/g, " ")) + " (imported)";
+      const gd      = data.graph_data || data;
+      const created = await api("POST", "/api/graphs", { name, description: data.description || "", graph_data: gd });
+      showToast(`Imported as "${created.name}"`);
+      await loadGraphList();
+      onSelectGraph(created);
+    } catch (err) { showToast("Import failed: " + err.message, "error"); }
+  }
+
+  /* ── Validate + run ──────────────────────────────────────────────────── */
+  async function validateAndRun(payload) {
+    let creds = [];
+    try { creds = await api("GET", "/api/credentials"); } catch (e) { /* ok */ }
+    const issues = validateFlow(nodes, edges, creds);
+    if (issues.length === 0) {
+      runGraph(payload);
+    } else {
+      setValidationIssues({ issues, payload });
+    }
+  }
+
+  async function runGraph(payload) {
+    if (!currentGraph) { showToast("Save the graph first", "error"); return; }
+    setRunning(true);
+    setRunError(null);
+    setNodes(ns => ns.map(n => ({
+      ...n, data: {
+        ...n.data,
+        _runStatus: n.data.type === "note" ? undefined : "pending",
+        _runOutput: undefined, _runInput: undefined,
+      },
+    })));
+    setSelectedNode(s => s ? { ...s, data: { ...s.data, _runStatus: "pending", _runOutput: undefined } } : s);
+
+    let taskId;
+    try {
+      let runPayload = {};
+      if (payload) {
+        try { runPayload = JSON.parse(payload); }
+        catch (e) { showToast("Invalid JSON in test payload", "error"); setRunning(false); return; }
+      }
+      const r = await api("POST", `/api/graphs/${currentGraph.id}/run`, { source: "canvas", payload: runPayload });
+      taskId = r.task_id;
+    } catch (e) { showToast(e.message, "error"); setRunning(false); return; }
+
+    const liveTraceMap = {};
+
+    function applyRunDone(status, errMsg) {
+      setRunning(false);
+      refreshInspectorRuns();
+      if (status === "succeeded") {
+        showToast("Run succeeded ✓");
+      } else if (status === "timeout") {
+        showToast("Run timed out", "error");
+      } else {
+        const err = errMsg || "";
+        let failedNodeId = null;
+        const m = err.match(/\[([a-zA-Z0-9_-]+)\]/);
+        if (m) failedNodeId = m[1];
+        let failedNodeName = failedNodeId;
+        setNodes(ns => {
+          const n = ns.find(x => x.id === failedNodeId);
+          if (n) failedNodeName = n.data?.label || failedNodeId;
+          return ns.map(nd => {
+            if (nd.data.type === "note") return nd;
+            const t  = liveTraceMap[nd.id];
+            if (t) {
+              const st = t.status === "ok" ? "ok" : t.status === "error" ? "err" : "skip";
+              return { ...nd, data: { ...nd.data, _runStatus: st, _runOutput: t.output, _runInput: t.input, _runDurationMs: t.duration_ms } };
+            }
+            return { ...nd, data: { ...nd.data, _runStatus: undefined } };
+          });
+        });
+        setRunError({ msg: err, nodeName: failedNodeName });
+      }
+      setNodes(ns => ns.map(nd => {
+        if (nd.data.type === "note") return nd;
+        const t  = liveTraceMap[nd.id];
+        if (t) {
+          const st = t.status === "ok" ? "ok" : t.status === "error" ? "err" : "skip";
+          return { ...nd, data: { ...nd.data, _runStatus: st, _runOutput: t.output, _runInput: t.input, _runDurationMs: t.duration_ms } };
+        }
+        return { ...nd, data: { ...nd.data, _runStatus: undefined } };
+      }));
+      setSelectedNode(s => {
+        if (!s) return s;
+        const t = liveTraceMap[s.id];
+        if (!t) return { ...s, data: { ...s.data, _runStatus: undefined } };
+        const st = t.status === "ok" ? "ok" : t.status === "error" ? "err" : "skip";
+        return { ...s, data: { ...s.data, _runStatus: st, _runOutput: t.output, _runInput: t.input, _runDurationMs: t.duration_ms } };
+      });
+    }
+
+    // ── SSE streaming ──────────────────────────────────────────────────────
+    let evtSource = null;
+    const safetyTimer = setTimeout(() => { if (evtSource) { evtSource.close(); applyRunDone("timeout"); } }, 300000);
+
+    try {
+      evtSource = new EventSource(`/api/runs/${taskId}/stream`);
+      evtSource.onmessage = (e) => {
+        let event;
+        try { event = JSON.parse(e.data); } catch { return; }
+        if (event.type === "node_start") {
+          setNodes(ns => ns.map(n => n.id !== event.node_id ? n : { ...n, data: { ...n.data, _runStatus: "running" } }));
+          setSelectedNode(s => s && s.id === event.node_id ? { ...s, data: { ...s.data, _runStatus: "running" } } : s);
+        }
+        if (event.type === "node_done") {
+          liveTraceMap[event.node_id] = event;
+          const st = event.status === "ok" ? "ok" : event.status === "error" ? "err" : "skip";
+          setNodes(ns => ns.map(n => n.id !== event.node_id ? n :
+            { ...n, data: { ...n.data, _runStatus: st, _runOutput: event.output, _runInput: event.input, _runDurationMs: event.duration_ms } }));
+          setSelectedNode(s => s && s.id === event.node_id
+            ? { ...s, data: { ...s.data, _runStatus: st, _runOutput: event.output, _runInput: event.input, _runDurationMs: event.duration_ms } } : s);
+        }
+        if (event.type === "run_done") {
+          clearTimeout(safetyTimer);
+          evtSource.close();
+          applyRunDone(event.status, event.error);
+        }
+      };
+      evtSource.onerror = () => {
+        evtSource.close();
+        clearTimeout(safetyTimer);
+        api("GET", `/api/runs/by-task/${taskId}`).then(run => {
+          if (!run) { setRunning(false); return; }
+          (run.traces || []).forEach(t => { if (t.node_id) liveTraceMap[t.node_id] = t; });
+          applyRunDone(run.status, (run.result || {}).error || run.error);
+        }).catch(() => setRunning(false));
+      };
+    } catch {
+      // EventSource not supported — polling fallback
+      clearTimeout(safetyTimer);
+      const poll = setInterval(async () => {
+        try {
+          const run = await api("GET", `/api/runs/by-task/${taskId}`);
+          if (!run || run.status === "running" || run.status === "queued") return;
+          clearInterval(poll);
+          (run.traces || []).forEach(t => { if (t.node_id) liveTraceMap[t.node_id] = t; });
+          applyRunDone(run.status, (run.result || {}).error || run.error);
+        } catch { /* keep polling */ }
+      }, 800);
+      setTimeout(() => { clearInterval(poll); setRunning(false); }, 300000);
+    }
+  }
+
+  /* ── Single-node test ────────────────────────────────────────────────── */
+  async function testNode(nodeId, testInput) {
+    if (!currentGraph) { showToast("Save the graph first", "error"); return; }
+    setSelectedNode(s => s ? { ...s, data: { ...s.data, _runStatus: "pending", _runOutput: undefined, _runInput: testInput } } : s);
+    setNodes(ns => ns.map(n => n.id !== nodeId ? n : { ...n, data: { ...n.data, _runStatus: "pending" } }));
+    try {
+      const result = await api("POST", `/api/graphs/${currentGraph.id}/nodes/${nodeId}/test`, { input: testInput });
+      const status = result.error ? "err" : "ok";
+      const out    = result.error ? { __error: result.error } : result.output;
+      setSelectedNode(s => s ? { ...s, data: { ...s.data, _runStatus: status, _runOutput: out, _runInput: testInput, _runDurationMs: result.duration_ms } } : s);
+      setNodes(ns => ns.map(n => n.id !== nodeId ? n : { ...n, data: { ...n.data, _runStatus: status, _runOutput: out, _runDurationMs: result.duration_ms } }));
+      showToast(result.error ? `Test failed: ${result.error}` : "Test succeeded ✓", result.error ? "error" : "success");
+    } catch (e) {
+      showToast(e.message || "Test request failed", "error");
+      setSelectedNode(s => s ? { ...s, data: { ...s.data, _runStatus: undefined } } : s);
+      setNodes(ns => ns.map(n => n.id !== nodeId ? n : { ...n, data: { ...n.data, _runStatus: undefined } }));
+    }
+  }
+
+  /* ── Pin node output ─────────────────────────────────────────────────── */
+  function pinNodeOutput(nodeId, output) {
+    setNodes(ns => ns.map(n => n.id !== nodeId ? n : { ...n, data: { ...n.data, _pinnedOutput: output || undefined } }));
+    setSelectedNode(s => s && s.id === nodeId ? { ...s, data: { ...s.data, _pinnedOutput: output || undefined } } : s);
+    showToast(output ? "Output pinned 📌" : "Output unpinned", "success");
+  }
+
+  /* ── Run inspector / replay ──────────────────────────────────────────── */
+  function _getInspectorRunDbId() {
+    if (!inspectorRunId) return null;
+    const run = inspectorRuns.find(r => String(r.id) === inspectorRunId || r.task_id === inspectorRunId);
+    return run?.id || null;
+  }
+
+  async function replayInspectorRun() {
+    const dbId = _getInspectorRunDbId();
+    if (!dbId) return;
+    try { await api("POST", `/api/runs/${dbId}/replay`); showToast("Queued for replay"); }
+    catch (e) { showToast(e.message, "error"); }
+  }
+
+  async function openReplayEditCanvas() {
+    const dbId = _getInspectorRunDbId();
+    if (!dbId) return;
+    try {
+      const data = await api("GET", `/api/runs/${dbId}/payload`);
+      setReplayEdit({ runId: dbId, payload: JSON.stringify(data.payload || {}, null, 2) });
+    } catch (e) { showToast(e.message, "error"); }
+  }
+
+  async function submitReplayEditCanvas(runId, payloadStr) {
+    try {
+      let payload;
+      try { payload = JSON.parse(payloadStr); } catch { showToast("Invalid JSON", "error"); return; }
+      await api("POST", `/api/runs/${runId}/replay`, { payload });
+      showToast("Queued for replay with custom payload");
+      setReplayEdit(null);
+    } catch (e) { showToast(e.message, "error"); }
+  }
+
+  async function refreshInspectorRuns() {
+    if (!currentGraph) { setInspectorRuns([]); return; }
+    try {
+      const allRuns = await api("GET", "/api/runs");
+      const graphRuns = allRuns
+        .filter(r => r.workflow === currentGraph.name || String(r.graph_id) === String(currentGraph.id))
+        .slice(0, 20);
+      setInspectorRuns(graphRuns);
+    } catch { /* silent */ }
+  }
+
+  async function loadInspectorRun(runId) {
+    setInspectorRunId(runId);
+    if (!runId) {
+      setNodes(ns => ns.map(n => ({ ...n, data: { ...n.data, _runStatus: undefined, _runOutput: undefined, _runInput: undefined } })));
+      setSelectedNode(s => s ? { ...s, data: { ...s.data, _runStatus: undefined, _runOutput: undefined, _runInput: undefined } } : s);
+      return;
+    }
+    try {
+      const allRuns = await api("GET", "/api/runs");
+      const run = allRuns.find(r => String(r.id) === String(runId) || r.task_id === runId);
+      if (!run) { showToast("Run not found", "error"); return; }
+      const traceMap = {};
+      (run.traces || []).forEach(t => { if (t.node_id) traceMap[t.node_id] = t; });
+      setNodes(ns => ns.map(n => {
+        if (n.data.type === "note") return n;
+        const t = traceMap[n.id];
+        if (!t) return n;
+        const st = t.status === "ok" ? "ok" : t.status === "error" ? "err" : "skip";
+        return { ...n, data: { ...n.data, _runStatus: st, _runOutput: t.output, _runInput: t.input, _runDurationMs: t.duration_ms, _runAttempts: t.attempts } };
+      }));
+      setSelectedNode(s => {
+        if (!s) return s;
+        const t = traceMap[s.id];
+        if (!t) return s;
+        const st = t.status === "ok" ? "ok" : t.status === "error" ? "err" : "skip";
+        return { ...s, data: { ...s.data, _runStatus: st, _runOutput: t.output, _runInput: t.input, _runDurationMs: t.duration_ms, _runAttempts: t.attempts } };
+      });
+      showToast(`Loaded run #${run.id || runId.slice(0, 8)}`);
+    } catch (e) { showToast("Failed to load run: " + e.message, "error"); }
+  }
+
+  /* ── Graph CRUD ──────────────────────────────────────────────────────── */
+  async function onSelectGraph(g) {
+    try {
+      const full = await api("GET", `/api/graphs/${g.id}`);
+      const gd   = full.graph_data || { nodes: [], edges: [] };
+      const newNodes = (gd.nodes || []).map(loadNode);
+      const newEdges = (gd.edges || []).map(styledEdge);
+      setNodes(newNodes); setEdges(newEdges);
+      setCurrentGraph(full); setGraphName(full.name);
+      setSelectedNode(null); setShowModal(false);
+      setRunError(null); setInspectorRunId(null); setInspectorRuns([]);
+      histRef.current = []; histIdx.current = -1; syncHistState();
+      saveSnap(newNodes, newEdges);
+      setIsDirty(false);
+      window.location.hash = "flow-" + full.slug;
+      showToast(`Loaded: ${full.name}`);
+      // Auto-load latest run traces
+      try {
+        const allRuns = await api("GET", "/api/runs");
+        const graphRuns = allRuns.filter(r => r.workflow === full.name || String(r.graph_id) === String(full.id));
+        if (graphRuns.length > 0) {
+          const latest = graphRuns[0];
+          setInspectorRuns(graphRuns.slice(0, 20));
+          setInspectorRunId(String(latest.id || latest.task_id));
+          const traceMap = {};
+          (latest.traces || []).forEach(t => { if (t.node_id) traceMap[t.node_id] = t; });
+          setNodes(ns => ns.map(n => {
+            if (n.data.type === "note") return n;
+            const t = traceMap[n.id];
+            if (!t) return n;
+            const st = t.status === "ok" ? "ok" : t.status === "error" ? "err" : "skip";
+            return { ...n, data: { ...n.data, _runStatus: st, _runOutput: t.output, _runInput: t.input, _runDurationMs: t.duration_ms, _runAttempts: t.attempts } };
+          }));
+        }
+      } catch { /* non-fatal */ }
+    } catch (err) { showToast(err.message, "error"); }
+  }
+
+  function onNewGraph(name) {
+    setNodes([]); setEdges([]); setCurrentGraph(null);
+    setGraphName(name); setSelectedNode(null); setShowModal(false); setRunError(null);
+    histRef.current = []; histIdx.current = -1; syncHistState();
+    window.location.hash = "";
+  }
+
+  async function onFromTemplate(created) {
+    try {
+      await loadGraphList();
+      showToast(`Created "${created.name}" from template`);
+      setShowModal(false);
+      const full = await api("GET", `/api/graphs/${created.id}`);
+      onSelectGraph(full);
+    } catch (e) { showToast(e.message, "error"); }
+  }
+
+  async function duplicateGraph(g) {
+    try {
+      const full = await api("GET", `/api/graphs/${g.id}`);
+      const copy = await api("POST", "/api/graphs", {
+        name: full.name.replace(/^[📧🤖🔄⚠🔍📊⚡🧪🐍⏰💻📁]/u, "").trim() + " (copy)",
+        description: full.description || "",
+        graph_data:  full.graph_data || {},
+      });
+      showToast(`Duplicated as "${copy.name}"`);
+      await loadGraphList();
+    } catch (e) { showToast(e.message, "error"); }
+  }
+
+  async function renameGraph(g) {
+    const newName = window.prompt("Rename flow:", g.name);
+    if (!newName || newName.trim() === g.name) return;
+    try {
+      await api("PUT", `/api/graphs/${g.id}`, { name: newName.trim() });
+      showToast(`Renamed to "${newName.trim()}"`);
+      if (currentGraph && currentGraph.id === g.id) setGraphName(newName.trim());
+      await loadGraphList();
+    } catch (e) { showToast(e.message, "error"); }
+  }
+
+  async function deleteGraph(id, name) {
+    try {
+      await api("DELETE", `/api/graphs/${id}`);
+      showToast(`Deleted "${name}"`);
+      if (currentGraph && currentGraph.id === id) {
+        setNodes([]); setEdges([]); setCurrentGraph(null);
+        setGraphName("Untitled Graph"); setSelectedNode(null); setRunError(null);
+        histRef.current = []; histIdx.current = -1; syncHistState();
+        window.location.hash = "";
+      }
+      await loadGraphList();
+    } catch (e) { showToast(e.message, "error"); }
+  }
+
+  /* ── Restore from version history ────────────────────────────────────── */
+  function onRestored(restoredGraph) {
+    const gd = restoredGraph.graph_data || { nodes: [], edges: [] };
+    const newNodes = (gd.nodes || []).map(loadNode);
+    const newEdges = (gd.edges || []).map(styledEdge);
+    setNodes(newNodes); setEdges(newEdges);
+    setCurrentGraph(restoredGraph); setGraphName(restoredGraph.name);
+    setSelectedNode(null); setRunError(null); setIsDirty(false);
+    histRef.current = []; histIdx.current = -1; syncHistState();
+    saveSnap(newNodes, newEdges);
+  }
+
+  /* ─────────────────────────────────────────────────────────────────────── */
+  const isAdmin = currentUser && (currentUser.role === "admin" || currentUser.role === "owner");
+
+  return (
+    <>
+      {/* Hidden import file input */}
+      <input type="file" accept=".json" style={{ display: "none" }} ref={importFileRef} onChange={importFlow} />
+
+      {/* ── Top bar ── */}
+      <div className="topbar">
+        <span className="logo">⚡ HiveRunr</span>
+        <div className="tb-divider"/>
+        <button className="btn btn-ghost btn-sm" onClick={() => setShowModal(true)}>📂 Open</button>
+        <MoreMenu
+          onExport={exportFlow}
+          onImport={() => importFileRef.current && importFileRef.current.click()}
+          onLayout={doAutoLayout}
+          onValidate={() => validateAndRun()}
+          onHistory={() => setShowHistoryModal(true)}
+          onPermissions={() => setShowPermissionsModal(true)}
+          onTest={() => setShowTestModal(true)}
+          onAdmin={() => { window.location.href = "/"; }}
+          onShortcuts={() => setShowShortcuts(s => !s)}
+          onSearch={() => setShowSearch(s => !s)}
+          onToggleMap={() => setShowMap(m => !m)}
+          showMap={showMap}
+          onUndo={doUndo}
+          onRedo={doRedo}
+          undoDisabled={histState.idx <= 0}
+          redoDisabled={histState.idx >= histState.len - 1}
+          isAdmin={isAdmin}
+          disabled={!currentGraph}
+        />
+        <div className="tb-divider"/>
+        <input
+          className="name-input"
+          value={graphName}
+          onChange={e => setGraphName(e.target.value)}
+          placeholder="Flow name…"
+        />
+        {/* Mobile: node palette toggle */}
+        <button
+          className="topbar-mobile-only btn btn-ghost btn-sm"
+          onClick={() => setMobileSidebarOpen(o => !o)}
+          title="Toggle node palette" aria-label="Toggle node palette"
+          style={{ fontSize: 15, padding: "4px 8px" }}
+        >
+          {mobileSidebarOpen ? "✕" : "📦"}
+        </button>
+
+        {/* Desktop secondary controls */}
+        <div className="topbar-secondary">
+          {currentGraph && (
+            <span style={{ fontSize: 10, color: "#475569", whiteSpace: "nowrap" }}>
+              #{currentGraph.id}
+            </span>
+          )}
+        </div>
+        <div className="topbar-spacer"/>
+        <div className="topbar-secondary">
+          <button className="btn btn-ghost btn-sm" onClick={doUndo}
+            disabled={histState.idx <= 0} title="Undo (Ctrl+Z)">↩</button>
+          <button className="btn btn-ghost btn-sm" onClick={doRedo}
+            disabled={histState.idx >= histState.len - 1} title="Redo (Ctrl+Y)">↪</button>
+          <div className="tb-divider"/>
+          <button className="btn btn-ghost btn-sm" onClick={() => setShowSearch(s => !s)}
+            title="Search nodes (Ctrl+F)" style={{ opacity: showSearch ? 1 : 0.65 }}>🔍</button>
+          <button className="btn btn-ghost btn-sm" onClick={() => setShowMap(m => !m)}
+            title="Toggle minimap" style={{ opacity: showMap ? 1 : 0.45 }}>🗺</button>
+          <div className="tb-divider"/>
+          {/* Run inspector */}
+          <select
+            className="btn btn-ghost btn-sm"
+            style={{ cursor: "pointer", maxWidth: 165, padding: "2px 6px" }}
+            title="Load a past run to inspect node inputs/outputs"
+            value={inspectorRunId || ""}
+            onClick={refreshInspectorRuns}
+            onChange={e => loadInspectorRun(e.target.value || null)}
+            disabled={!currentGraph}
+          >
+            <option value="">🔬 Inspect run…</option>
+            {inspectorRuns.map(r => (
+              <option key={r.task_id || r.id} value={r.task_id || r.id}>
+                #{r.id} {r.status === "succeeded" ? "✓" : r.status === "failed" ? "✗" : "⟳"} {r.created_at ? new Date(r.created_at).toLocaleTimeString() : ""}
+              </option>
+            ))}
+          </select>
+          {inspectorRunId && (<>
+            <button className="btn btn-ghost btn-sm" style={{ fontSize: 11 }} onClick={replayInspectorRun} title="Replay with original payload">▶</button>
+            <button className="btn btn-ghost btn-sm" style={{ fontSize: 11 }} onClick={openReplayEditCanvas} title="Replay with custom payload">✏</button>
+            <button className="btn btn-ghost btn-sm" style={{ color: "#f87171" }} onClick={() => loadInspectorRun(null)} title="Clear run overlay">✕</button>
+          </>)}
+          <div className="tb-divider"/>
+          {/* Workspace selector */}
+          {workspaces.length > 1 && (
+            <select
+              className="btn btn-ghost btn-sm"
+              style={{ cursor: "pointer", maxWidth: 160, padding: "2px 6px", color: "#a78bfa" }}
+              title="Switch workspace"
+              value={activeWorkspace?.id || ""}
+              onChange={async e => {
+                const wid = parseInt(e.target.value);
+                if (!wid) return;
+                try {
+                  const res = await api("POST", `/api/workspaces/${wid}/switch`);
+                  setActiveWorkspace(res.workspace);
+                  loadGraphList();
+                  showToast(`Switched to ${res.workspace.name}`);
+                } catch (err) { showToast(err.message, "error"); }
+              }}
+            >
+              {workspaces.map(w => (
+                <option key={w.id} value={w.id}>🏢 {w.name}</option>
+              ))}
+            </select>
+          )}
+          {workspaces.length === 1 && activeWorkspace && (
+            <span style={{ fontSize: 11, color: "#6366f1", whiteSpace: "nowrap", padding: "0 4px" }}
+              title={`Workspace: ${activeWorkspace.name}`}>
+              🏢 {activeWorkspace.name}
+            </span>
+          )}
+          <a href="/" className="btn btn-ghost btn-sm">← Admin</a>
+          <button className="btn btn-ghost btn-sm" onClick={() => setShowTestModal(true)} disabled={!currentGraph}>🧪 Test</button>
+        </div>
+        <button className="btn btn-ghost btn-sm" onClick={saveGraph} disabled={saving} title="Save (Ctrl+S)">
+          {saving
+            ? <><span style={{ animation: "spin .8s linear infinite", display: "inline-block" }}>⟳</span> Saving…</>
+            : isDirty ? "💾 Save ●" : "💾 Save"}
+        </button>
+        <button className="btn btn-success btn-sm" onClick={() => runGraph()} disabled={running || !currentGraph}>
+          {running
+            ? <><span style={{ animation: "spin .8s linear infinite", display: "inline-block" }}>⟳</span> Running…</>
+            : "▶ Run"}
+        </button>
+      </div>
+
+      {/* ── Error banner ── */}
+      {runError && (
+        <div className="error-banner">
+          <span className="eb-icon">✗</span>
+          <div className="eb-body">
+            <div className="eb-title">Run failed{runError.nodeName ? ` — node "${runError.nodeName}"` : ""}</div>
+            <div className="eb-msg">{runError.msg}</div>
+          </div>
+          <button className="eb-close" onClick={() => setRunError(null)}>✕</button>
+        </div>
+      )}
+
+      {/* ── Main canvas layout ── */}
+      {mobileSidebarOpen && (
+        <div className="sidebar-backdrop" onClick={() => setMobileSidebarOpen(false)} aria-hidden="true"/>
+      )}
+      <div className="canvas-layout">
+        <Palette search={paletteSearch} onSearch={setPaletteSearch} open={mobileSidebarOpen}/>
+        <div className="flow-wrap" ref={reactFlowWrapper}>
+          <ReactFlow
+            nodes={nodes}
+            edges={edges}
+            onNodesChange={onNodesChange}
+            onEdgesChange={onEdgesChange}
+            onConnect={onConnect}
+            onNodeClick={onNodeClick}
+            onPaneClick={onPaneClick}
+            onNodeContextMenu={onNodeContextMenu}
+            onEdgeClick={onEdgeClick}
+            onMoveStart={() => setContextMenu(null)}
+            onDrop={onDrop}
+            onDragOver={onDragOver}
+            nodeTypes={nodeTypes}
+            fitView
+            deleteKeyCode="Delete"
+            style={{ background: "#0f1117" }}
+          >
+            <Background variant={BackgroundVariant.Dots} color="#2a2d3e" gap={20} size={1}/>
+            <Controls/>
+            {showMap && (
+              <MiniMap
+                nodeColor={n => { const def = NODE_DEFS[n.data?.type]; return def ? def.color : "#475569"; }}
+                nodeStrokeWidth={0}
+                maskColor="#0f11178a"
+                pannable
+                zoomable
+                style={{
+                  background: "#1a1d2e", border: "1px solid #374151",
+                  borderRadius: 10, boxShadow: "0 4px 16px rgba(0,0,0,.5)",
+                  height: 120, width: 180,
+                }}
+              />
+            )}
+          </ReactFlow>
+        </div>
+        <ConfigPanel node={null} onChange={onNodeChange} onDelete={onDeleteNode} edges={edges}/>
+      </div>
+
+      {/* ── Node editor modal (slide-in panel when node selected) ── */}
+      {selectedNode && (
+        <NodeEditorModal
+          key={selectedNode.id}
+          node={selectedNode}
+          onChange={onNodeChange}
+          onDelete={onDeleteNode}
+          onClose={() => setSelectedNode(null)}
+          edges={edges}
+          allNodes={nodes}
+          credentials={credentials}
+          onTestNode={testNode}
+          onPinOutput={pinNodeOutput}
+          currentGraph={currentGraph}
+        />
+      )}
+
+      {showModal && (
+        <OpenModal
+          graphs={graphs}
+          onClose={() => setShowModal(false)}
+          onSelect={onSelectGraph}
+          onNew={onNewGraph}
+          onDuplicate={duplicateGraph}
+          onDelete={deleteGraph}
+          onRename={renameGraph}
+          onFromTemplate={onFromTemplate}
+        />
+      )}
+
+      <TestPayloadModal
+        isOpen={showTestModal}
+        onClose={() => setShowTestModal(false)}
+        onRun={runGraph}
+        testPayload={testPayload}
+        onPayloadChange={setTestPayload}
+      />
+
+      <PermissionsModal
+        isOpen={showPermissionsModal}
+        onClose={() => setShowPermissionsModal(false)}
+        graphId={currentGraph?.id}
+        showToast={showToast}
+      />
+
+      <HistoryModal
+        isOpen={showHistoryModal}
+        onClose={() => setShowHistoryModal(false)}
+        graphId={currentGraph?.id}
+        showToast={showToast}
+        onRestored={onRestored}
+      />
+
+      {selectedEdge && (
+        <EdgeLabelModal
+          edge={selectedEdge}
+          value={edgeLabelInput}
+          onChange={setEdgeLabelInput}
+          onConfirm={updateEdgeLabel}
+          onClose={() => setSelectedEdge(null)}
+        />
+      )}
+
+      {validationIssues && (
+        <ValidationModal
+          issues={validationIssues.issues}
+          onClose={() => setValidationIssues(null)}
+          onRunAnyway={() => { runGraph(validationIssues.payload); setValidationIssues(null); }}
+        />
+      )}
+
+      {contextMenu && (
+        <NodeContextMenu
+          menu={contextMenu}
+          onClose={() => setContextMenu(null)}
+          onDuplicate={ctxDuplicateNode}
+          onDelete={id => { onDeleteNode(id); setContextMenu(null); }}
+          onToggleDisabled={ctxToggleDisabled}
+          onCopyId={ctxCopyId}
+          onRename={ctxRenameNode}
+        />
+      )}
+
+      {showShortcuts && <ShortcutsModal onClose={() => setShowShortcuts(false)}/>}
+
+      {showSearch && (
+        <NodeSearchBar
+          nodes={nodes}
+          onJump={jumpToNode}
+          onClose={() => setShowSearch(false)}
+        />
+      )}
+
+      {replayEdit && (
+        <ReplayEditModal
+          runId={replayEdit.runId}
+          payload={replayEdit.payload}
+          onClose={() => setReplayEdit(null)}
+          onSubmit={submitReplayEditCanvas}
+        />
+      )}
+
+      {toast && <Toast key={toast.key} msg={toast.msg} type={toast.type} onDone={() => setToast(null)}/>}
+    </>
+  );
+}
+
+/* ── Root wrapper with ReactFlowProvider ───────────────────────────────── */
+export function CanvasRoot() {
+  return (
+    <ReactFlowProvider>
+      <CanvasApp/>
+    </ReactFlowProvider>
+  );
+}

@@ -1,9 +1,10 @@
-// Entry point for the canvas editor — implemented in F9.
-import React from 'react'
-import ReactDOM from 'react-dom/client'
+import React from "react";
+import ReactDOM from "react-dom/client";
+import "./canvas.css";
+import { CanvasRoot } from "../pages/canvas/CanvasApp.jsx";
 
-ReactDOM.createRoot(document.getElementById('root')).render(
+ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
-    <div />
+    <CanvasRoot/>
   </React.StrictMode>
-)
+);

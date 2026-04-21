@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { api } from "../../api/client.js";
-import ConfirmModal from "../../components/ConfirmModal.jsx";
+import { ConfirmModal } from "../../components/ConfirmModal.jsx";
 
 function fmtDate(iso) {
   try {
