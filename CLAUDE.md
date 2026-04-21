@@ -283,6 +283,7 @@ OWNER_EMAIL=
 | F4 | Admin: Dashboard + Metrics + Flows + Logs — full React ports of four pages from admin.html; `GraphRow.jsx` sub-component with inline HistoryModal + AlertSettingsModal; 65 modules, 118 tests passing |
 | F5 | Admin: Credentials + Schedules — `Credentials.jsx` with `CRED_SCHEMAS`, inline edit, OAuth connect card, test-connection pill; `Schedules.jsx` with `FlowPicker`, `CronBuilder`, `DateTimePicker`, `TimezoneSelect`, `CronNextRun`; 71 modules, 118 tests passing |
 | F6 | Admin: remaining pages + delete admin.html — `Settings.jsx`, `AuditLog.jsx`, `System.jsx`, `Users.jsx`, `Workspaces.jsx`, `Templates.jsx`; `admin.html` added to `_MIGRATED_PAGES` + removed from git; dist updated; 73 modules, 118 tests passing |
+| F7 | Canvas: node defs + primitives — `nodeDefs.js` (all NODE_DEFS + GROUPS, 40 node types incl. P1 nodes trigger.email/file_watch/action.postgres/s3); `StickyNote.jsx` (NOTE_COLORS palette); `CustomNode.jsx` (CustomNode + nodeTypes export, Handle logic for condition/loop/trigger); `NodeContextMenu.jsx`; `Palette.jsx` (grouped draggable sidebar); `ConfigPanel.jsx` (JsonSchemaTree, NioBody, NodeIOPanel, all node hint panels, retry policy, drag-to-insert); `reactflow@11` added to package.json; 73 modules, 118 tests passing |
 
 ---
 
@@ -430,7 +431,7 @@ directory structure changed.
 
 47. ~~**F6 — Admin: remaining pages + delete admin.html**~~ ✓ Done
 
-48. **F7 — Canvas: node defs + primitives** — `src/pages/canvas/nodeDefs.js` (all NODE_DEFS out of canvas.html); `CustomNode.jsx`, `StickyNote.jsx`, `NodeContextMenu.jsx`, `Palette.jsx`, `ConfigPanel.jsx`.
+48. ~~**F7 — Canvas: node defs + primitives**~~ ✓ Done
 
 49. **F8 — Canvas: modals** — `NodeEditorModal.jsx` (with TestPanel + VariableInserter), `HistoryModal.jsx`, `OpenModal.jsx`, `TestPayloadModal.jsx`, `ValidationModal.jsx`, `EdgeLabelModal.jsx`, `PermissionsModal.jsx`.
 
