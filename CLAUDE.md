@@ -282,6 +282,7 @@ OWNER_EMAIL=
 | F3 | Admin shell + routing — `src/admin/App.jsx` (AuthProvider + WorkspaceProvider + BrowserRouter + 13 routes); `AdminLayout.jsx` (sidebar, workspace switcher, NavLink nav, update banner, keyboard shortcuts modal, user info + sign-out); `src/admin/index.jsx` entry point; 13 stub page components in `src/pages/admin/`; 60 modules, 118 tests passing |
 | F4 | Admin: Dashboard + Metrics + Flows + Logs — full React ports of four pages from admin.html; `GraphRow.jsx` sub-component with inline HistoryModal + AlertSettingsModal; 65 modules, 118 tests passing |
 | F5 | Admin: Credentials + Schedules — `Credentials.jsx` with `CRED_SCHEMAS`, inline edit, OAuth connect card, test-connection pill; `Schedules.jsx` with `FlowPicker`, `CronBuilder`, `DateTimePicker`, `TimezoneSelect`, `CronNextRun`; 71 modules, 118 tests passing |
+| F6 | Admin: remaining pages + delete admin.html — `Settings.jsx`, `AuditLog.jsx`, `System.jsx`, `Users.jsx`, `Workspaces.jsx`, `Templates.jsx`; `admin.html` added to `_MIGRATED_PAGES` + removed from git; dist updated; 73 modules, 118 tests passing |
 
 ---
 
@@ -427,7 +428,7 @@ directory structure changed.
 
 46. ~~**F5 — Admin: Credentials + Schedules**~~ ✓ Done
 
-47. **F6 — Admin: remaining pages + delete admin.html** — `Settings.jsx`, `AuditLog.jsx`, `SystemDiagnostics.jsx`, `Users.jsx`, `WorkspacesPage.jsx`, `Templates.jsx`; delete `app/static/admin.html`.
+47. ~~**F6 — Admin: remaining pages + delete admin.html**~~ ✓ Done
 
 48. **F7 — Canvas: node defs + primitives** — `src/pages/canvas/nodeDefs.js` (all NODE_DEFS out of canvas.html); `CustomNode.jsx`, `StickyNote.jsx`, `NodeContextMenu.jsx`, `Palette.jsx`, `ConfigPanel.jsx`.
 
