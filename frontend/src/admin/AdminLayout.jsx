@@ -170,17 +170,19 @@ export function AdminLayout({ showToast }) {
           </div>
         )}
 
-        {/* Nav links */}
-        {PAGES.map(p => (
-          <NavLink key={p.id} to={p.path} end={p.path === "/"}
-            className={({ isActive }) => `nav-item${isActive ? " active" : ""}`}
-            onClick={() => setSidebarOpen(false)}
-            role="menuitem">
-            <span className="nav-icon" aria-hidden="true">{p.icon}</span>{p.label}
-          </NavLink>
-        ))}
+        {/* Nav links — scrollable so footer stays pinned */}
+        <div className="sidebar-nav">
+          {PAGES.map(p => (
+            <NavLink key={p.id} to={p.path} end={p.path === "/"}
+              className={({ isActive }) => `nav-item${isActive ? " active" : ""}`}
+              onClick={() => setSidebarOpen(false)}
+              role="menuitem">
+              <span className="nav-icon" aria-hidden="true">{p.icon}</span>{p.label}
+            </NavLink>
+          ))}
+        </div>
 
-        {/* Footer */}
+        {/* Footer — pinned at bottom */}
         <div className="sidebar-footer">
           <div className="footer-label" style={{ display: "flex", alignItems: "center", padding: "0 8px", marginBottom: 8 }}>
             Quick links

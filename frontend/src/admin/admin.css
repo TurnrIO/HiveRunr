@@ -8,14 +8,19 @@ body{font-family:'Inter',system-ui,sans-serif;background:#0f1117;color:#e2e8f0;m
 #root{display:flex;min-height:100vh}
 .sidebar{width:220px;background:#1a1d2e;border-right:1px solid #2a2d3e;display:flex;flex-direction:column;padding:20px 0;flex-shrink:0;position:fixed;height:100vh;z-index:10}
 .sidebar .logo{font-size:16px;font-weight:700;color:#a78bfa;padding:0 20px 24px;letter-spacing:-.3px}
-.nav-item{display:flex;align-items:center;gap:10px;padding:10px 20px;cursor:pointer;color:#94a3b8;font-size:13px;font-weight:500;border-radius:0;transition:all .15s;border-left:3px solid transparent}
-.nav-item:hover{background:#252840;color:#e2e8f0}
-.nav-item.active{background:#252840;color:#a78bfa;border-left-color:#7c3aed}
+.nav-item{display:flex;align-items:center;gap:10px;padding:10px 20px;cursor:pointer;color:#94a3b8;font-size:13px;font-weight:500;border-radius:0;transition:all .15s;border-left:3px solid transparent;text-decoration:none}
+.nav-item:hover{background:#252840;color:#e2e8f0;text-decoration:none}
+.nav-item.active{background:#252840;color:#a78bfa;border-left-color:#7c3aed;text-decoration:none}
 .nav-icon{font-size:16px;width:20px;text-align:center}
-.sidebar-footer{margin-top:auto;border-top:1px solid #2a2d3e;padding:14px 12px 10px}
+/* Scrollable nav area — lets footer stay pinned while links scroll */
+.sidebar-nav{flex:1;overflow-y:auto;display:flex;flex-direction:column}
+.sidebar-nav::-webkit-scrollbar{width:3px}
+.sidebar-nav::-webkit-scrollbar-thumb{background:#2a2d3e;border-radius:3px}
+.sidebar-footer{border-top:1px solid #2a2d3e;padding:14px 12px 10px;flex-shrink:0}
 .sidebar-footer .footer-label{font-size:10px;color:#4b5563;padding:0 8px;margin-bottom:8px;text-transform:uppercase;letter-spacing:.07em;font-weight:600}
 .version-chip{display:inline-flex;align-items:center;gap:4px;font-size:10px;color:#64748b;padding:2px 7px;border-radius:999px;border:1px solid #2a2d3e;margin-left:auto;white-space:nowrap}
 .version-chip.update-avail{color:#fbbf24;border-color:#fbbf2455;background:#fbbf2408;cursor:pointer;text-decoration:none}
+a{text-decoration:none}
 .version-chip.update-avail:hover{background:#fbbf2418}
 .update-banner{display:flex;align-items:center;gap:10px;padding:9px 14px;background:#fbbf2412;border-bottom:1px solid #fbbf2435;font-size:12px;color:#fbbf24;flex-shrink:0}
 .ext-link{display:flex;align-items:center;gap:9px;padding:8px 10px;border-radius:7px;color:#64748b;font-size:12px;font-weight:500;text-decoration:none;transition:all .15s;cursor:pointer}
