@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, Fragment } from "react";
 import { Outlet, NavLink, useNavigate } from "react-router-dom";
 import { useWorkspace } from "../contexts/WorkspaceContext.jsx";
 import { useAuth } from "../contexts/AuthContext.jsx";
@@ -43,14 +43,14 @@ function AdminShortcutsModal({ onClose }) {
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: "10px 18px", alignItems: "center" }}>
           {ADMIN_SHORTCUTS.map(({ key, desc }) => (
-            <React.Fragment key={key}>
+            <Fragment key={key}>
               <kbd style={{ background: "#0f1117", border: "1px solid #374151", borderRadius: 5,
                 padding: "3px 8px", fontSize: 11, color: "#a78bfa", fontFamily: "monospace",
                 whiteSpace: "nowrap", boxShadow: "0 1px 0 #374151" }}>
                 {key}
               </kbd>
               <span style={{ color: "#94a3b8", fontSize: 13 }}>{desc}</span>
-            </React.Fragment>
+            </Fragment>
           ))}
         </div>
         <div style={{ marginTop: 16, paddingTop: 12, borderTop: "1px solid #2a2d3e",
