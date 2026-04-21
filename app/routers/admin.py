@@ -16,8 +16,12 @@ TEMPLATES_DIR = Path(__file__).parent.parent / 'templates'
 router = APIRouter()
 
 
-# ── Prometheus /metrics ───────────────────────────────────────────────────────
-@router.get("/metrics", include_in_schema=False)
+# ── Prometheus metrics scrape endpoint ───────────────────────────────────────
+# Moved from /metrics → /api/prometheus to avoid conflicting with the admin
+# SPA page at /metrics (React Router route served by FastAPI catch-all).
+# Update your prometheus.yml scrape_configs target accordingly.
+@router.get("/api/prometheus", include_in_schema=False)
+@router.get("/api/prometheus/metrics", include_in_schema=False)
 def prometheus_metrics(request: Request):
     """Prometheus text exposition — auth-gated so metrics aren't public."""
     _check_admin(request)

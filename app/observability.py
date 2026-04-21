@@ -5,12 +5,9 @@ Usage (in app/main.py):
     configure_logging()
     app.add_middleware(PrometheusMiddleware)
 
-Prometheus /metrics endpoint (in app/routers/admin.py):
-    from app.observability import metrics_response
-    @router.get("/metrics", include_in_schema=False)
-    def prometheus_metrics(request: Request):
-        _check_admin(request)
-        return metrics_response()
+Prometheus scrape endpoint (in app/routers/admin.py):
+    Served at GET /api/prometheus  (and /api/prometheus/metrics as alias).
+    Moved from /metrics to avoid conflicting with the admin SPA page route.
 """
 import logging
 import time
