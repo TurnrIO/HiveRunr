@@ -281,6 +281,7 @@ OWNER_EMAIL=
 | F2 | Auth pages — `frontend/src/pages/auth/`: `login.jsx` (sign-in + forgot-password toggle), `signup.jsx` (self-serve), `reset.jsx` (token-based), `invite.jsx` (accept + new-user signup); shared `AuthCard.jsx` layout; `_MIGRATED_PAGES` in `main.py` updated; legacy static HTML files removed from git; 36 modules, 14 chunks |
 | F3 | Admin shell + routing — `src/admin/App.jsx` (AuthProvider + WorkspaceProvider + BrowserRouter + 13 routes); `AdminLayout.jsx` (sidebar, workspace switcher, NavLink nav, update banner, keyboard shortcuts modal, user info + sign-out); `src/admin/index.jsx` entry point; 13 stub page components in `src/pages/admin/`; 60 modules, 118 tests passing |
 | F4 | Admin: Dashboard + Metrics + Flows + Logs — full React ports of four pages from admin.html; `GraphRow.jsx` sub-component with inline HistoryModal + AlertSettingsModal; 65 modules, 118 tests passing |
+| F5 | Admin: Credentials + Schedules — `Credentials.jsx` with `CRED_SCHEMAS`, inline edit, OAuth connect card, test-connection pill; `Schedules.jsx` with `FlowPicker`, `CronBuilder`, `DateTimePicker`, `TimezoneSelect`, `CronNextRun`; 71 modules, 118 tests passing |
 
 ---
 
@@ -424,7 +425,7 @@ directory structure changed.
 
 45. ~~**F4 — Admin: Dashboard + Flows + Runs**~~ ✓ Done
 
-46. **F5 — Admin: Credentials + Schedules** — `Credentials.jsx` + `OAuthConnectModal.jsx`; `Schedules.jsx` + `CronBuilder.jsx`, `DateTimePicker.jsx`, `TimezoneSelect.jsx`, `FlowPicker.jsx`, `CronNextRun.jsx`.
+46. ~~**F5 — Admin: Credentials + Schedules**~~ ✓ Done
 
 47. **F6 — Admin: remaining pages + delete admin.html** — `Settings.jsx`, `AuditLog.jsx`, `SystemDiagnostics.jsx`, `Users.jsx`, `WorkspacesPage.jsx`, `Templates.jsx`; delete `app/static/admin.html`.
 
