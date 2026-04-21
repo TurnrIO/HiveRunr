@@ -237,12 +237,21 @@ def root(request: Request):
 
 
 @app.get("/admin")
-@app.get("/admin/{rest:path}")
-def admin_page(request: Request, rest: str = ""):
+def admin_redirect(request: Request):
+    """Redirect /admin → / so the React SPA routes work correctly."""
     redir = _auth_redirect(request)
     if redir:
         return redir
-    return _serve_page("admin.html")
+    return RedirectResponse("/", status_code=302)
+
+
+@app.get("/admin/{rest:path}")
+def admin_path_redirect(request: Request, rest: str = ""):
+    """Redirect /admin/<path> → /<path> (e.g. /admin/graphs → /graphs)."""
+    redir = _auth_redirect(request)
+    if redir:
+        return redir
+    return RedirectResponse(f"/{rest}", status_code=302)
 
 
 # Admin SPA sub-routes — direct navigation / page refresh support.
