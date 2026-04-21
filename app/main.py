@@ -245,6 +245,27 @@ def admin_page(request: Request, rest: str = ""):
     return _serve_page("admin.html")
 
 
+# Admin SPA sub-routes — direct navigation / page refresh support.
+# React Router handles these client-side; FastAPI must serve admin.html for each.
+_ADMIN_SPA_PATHS = [
+    "graphs", "templates", "metrics", "scripts", "credentials",
+    "schedules", "logs", "users", "audit", "settings", "workspaces", "system",
+]
+
+
+def _make_admin_spa_handler():
+    def handler(request: Request):
+        redir = _auth_redirect(request)
+        if redir:
+            return redir
+        return _serve_page("admin.html")
+    return handler
+
+
+for _path in _ADMIN_SPA_PATHS:
+    app.add_api_route(f"/{_path}", _make_admin_spa_handler(), methods=["GET"], include_in_schema=False)
+
+
 @app.get("/reset-password")
 def reset_password_page():
     return _serve_page("reset.html")

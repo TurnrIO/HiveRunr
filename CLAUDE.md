@@ -284,6 +284,7 @@ OWNER_EMAIL=
 | F5 | Admin: Credentials + Schedules — `Credentials.jsx` with `CRED_SCHEMAS`, inline edit, OAuth connect card, test-connection pill; `Schedules.jsx` with `FlowPicker`, `CronBuilder`, `DateTimePicker`, `TimezoneSelect`, `CronNextRun`; 71 modules, 118 tests passing |
 | F6 | Admin: remaining pages + delete admin.html — `Settings.jsx`, `AuditLog.jsx`, `System.jsx`, `Users.jsx`, `Workspaces.jsx`, `Templates.jsx`; `admin.html` added to `_MIGRATED_PAGES` + removed from git; dist updated; 73 modules, 118 tests passing |
 | F7 | Canvas: node defs + primitives — `nodeDefs.js` (all NODE_DEFS + GROUPS, 40 node types incl. P1 nodes trigger.email/file_watch/action.postgres/s3); `StickyNote.jsx` (NOTE_COLORS palette); `CustomNode.jsx` (CustomNode + nodeTypes export, Handle logic for condition/loop/trigger); `NodeContextMenu.jsx`; `Palette.jsx` (grouped draggable sidebar); `ConfigPanel.jsx` (JsonSchemaTree, NioBody, NodeIOPanel, all node hint panels, retry policy, drag-to-insert); `reactflow@11` added to package.json; 73 modules, 118 tests passing |
+| F8 | Canvas: modals — `NodeEditorModal.jsx` (3-col n8n-style editor, TestPanel, VarField autocomplete), `HistoryModal.jsx`, `OpenModal.jsx`, `TestPayloadModal.jsx`, `ValidationModal.jsx`, `EdgeLabelModal.jsx`, `PermissionsModal.jsx`, `ShortcutsModal.jsx`, `NodeSearchBar.jsx`; shared `canvasHelpers.js` (`isTemplate`, `validateFlow`, `computeAutoLayout`, `buildVarList`, `flattenVarPaths`); `VarField.jsx` (`{{` template autocomplete); `NioBody`/`JsonSchemaTree`/`NodeIOPanel` exported from `ConfigPanel.jsx`; SPA direct-nav routes added to `main.py`; `vite.config.js` `emptyOutDir:false` for bind-mount compat; 83 modules built cleanly |
 
 ---
 
@@ -433,7 +434,7 @@ directory structure changed.
 
 48. ~~**F7 — Canvas: node defs + primitives**~~ ✓ Done
 
-49. **F8 — Canvas: modals** — `NodeEditorModal.jsx` (with TestPanel + VariableInserter), `HistoryModal.jsx`, `OpenModal.jsx`, `TestPayloadModal.jsx`, `ValidationModal.jsx`, `EdgeLabelModal.jsx`, `PermissionsModal.jsx`.
+49. ~~**F8 — Canvas: modals**~~ ✓ Done — `NodeEditorModal.jsx` (3-col n8n-style, TestPanel, VarField autocomplete), `HistoryModal.jsx`, `OpenModal.jsx`, `TestPayloadModal.jsx`, `ValidationModal.jsx`, `EdgeLabelModal.jsx`, `PermissionsModal.jsx`, `ShortcutsModal.jsx`, `NodeSearchBar.jsx`; shared helpers in `canvasHelpers.js` + `VarField.jsx`; `NioBody`/`JsonSchemaTree`/`NodeIOPanel` exported from `ConfigPanel.jsx`; direct-navigation SPA routes added to `main.py` (`/settings`, `/graphs`, etc.).
 
 50. **F9 — Canvas: main app + delete canvas.html** — `CanvasApp.jsx` (ReactFlow root, SSE streaming, keyboard shortcuts, minimap, autosave, dirty-state); `NodeSearchBar.jsx`; delete `app/static/canvas.html`.
 

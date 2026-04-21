@@ -4,7 +4,7 @@ import { NOTE_COLORS } from "./StickyNote.jsx";
 
 // ── JsonSchemaTree ─────────────────────────────────────────────────────────────
 // Renders a JSON value as a collapsible schema tree with drag-to-insert support.
-function JsonSchemaTree({ data, depth, sourceNodeId, fieldPath }) {
+export function JsonSchemaTree({ data, depth, sourceNodeId, fieldPath }) {
   depth     = depth     || 0;
   fieldPath = fieldPath || null;
   const [collapsed, setCollapsed] = useState(depth > 1);
@@ -123,7 +123,7 @@ function JsonSchemaTree({ data, depth, sourceNodeId, fieldPath }) {
 // ── NioBody ────────────────────────────────────────────────────────────────────
 const NIO_DISPLAY_LINES = 500;
 
-function NioBody({ data, view, sourceNodeId, isTruncated }) {
+export function NioBody({ data, view, sourceNodeId, isTruncated }) {
   if (isTruncated) {
     const kb = data.__size ? Math.round(data.__size / 1024) : "?";
     return (
@@ -182,7 +182,7 @@ function NioBody({ data, view, sourceNodeId, isTruncated }) {
 }
 
 // ── NodeIOPanel ────────────────────────────────────────────────────────────────
-function NodeIOPanel({ runInput, runOutput, runStatus, runDurationMs, runAttempts, nodeId, upstreamNodeId, nodeLabel }) {
+export function NodeIOPanel({ runInput, runOutput, runStatus, runDurationMs, runAttempts, nodeId, upstreamNodeId, nodeLabel }) {
   const [side, setSide]         = useState("output");
   const [view, setView]         = useState("schema");
   const [expanded, setExpanded] = useState(false);

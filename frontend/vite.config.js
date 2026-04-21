@@ -16,7 +16,9 @@ export default defineConfig({
 
   build: {
     outDir: resolve(__dirname, '../app/static/dist'),
-    emptyOutDir: true,
+    // emptyOutDir disabled: bind-mounted dist/ doesn't support file deletion in dev.
+    // Docker multi-stage builds write to a clean layer so this is fine in CI/prod.
+    emptyOutDir: false,
 
     rollupOptions: {
       // Entry points are added here as each F-sprint migrates a page.
