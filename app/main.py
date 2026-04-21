@@ -57,6 +57,8 @@ _MIGRATED_PAGES: set[str] = {
     "signup.html",
     "reset.html",
     "invite.html",
+    # F6 — admin SPA migrated to Vite + React
+    "admin.html",
 }
 
 
