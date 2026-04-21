@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import ReactFlow, {
   ReactFlowProvider, addEdge, Background, Controls, MiniMap,
   useNodesState, useEdgesState, useReactFlow,
-  MarkerType, BackgroundVariant,
+  MarkerType, BackgroundVariant, SelectionMode,
 } from "reactflow";
 import "reactflow/dist/style.css";
 
@@ -153,6 +153,7 @@ function CanvasApp() {
 
   const reactFlowWrapper = useRef(null);
   const importFileRef    = useRef(null);
+  const clipboardRef     = useRef(null);   // { nodes, edges } last Ctrl+C selection
   const { screenToFlowPosition, setCenter } = useReactFlow();
 
   const showToast = useCallback((msg, type = "success") => {
@@ -214,7 +215,7 @@ function CanvasApp() {
   /* ── Keyboard shortcuts ──────────────────────────────────────────────── */
   const kbRef = useRef({});
   kbRef.current = {
-    saveGraph, doUndo, doRedo,
+    saveGraph, doUndo, doRedo, doCopy, doPaste, doDuplicate, doSelectAll,
     setSelectedNode, setSelectedEdge, setContextMenu, setRunError,
     setShowModal, setShowTestModal, setShowHistoryModal, setShowPermissionsModal,
     setShowShortcuts, setShowSearch,
@@ -227,6 +228,10 @@ function CanvasApp() {
       if ((ctrl && e.key === "y") || (mac && e.shiftKey && e.key === "z")) { e.preventDefault(); kb.doRedo(); return; }
       if ((ctrl || mac) && e.key === "s") { e.preventDefault(); kb.saveGraph(); return; }
       if ((ctrl || mac) && e.key === "f") { e.preventDefault(); kb.setShowSearch(s => !s); return; }
+      if ((ctrl || mac) && e.key === "c") { kb.doCopy(); return; }
+      if ((ctrl || mac) && e.key === "v") { e.preventDefault(); kb.doPaste(); return; }
+      if ((ctrl || mac) && e.key === "d") { e.preventDefault(); kb.doDuplicate(); return; }
+      if ((ctrl || mac) && e.key === "a") { e.preventDefault(); kb.doSelectAll(); return; }
       const tag = document.activeElement?.tagName;
       if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || document.activeElement?.isContentEditable) return;
       if (e.key === "Escape") {
@@ -297,6 +302,80 @@ function CanvasApp() {
     setSelectedNode(null);
     syncHistState();
     setTimeout(() => { restoring.current = false; }, 50);
+  }
+
+  /* ── Copy / paste / duplicate / select-all ───────────────────────────── */
+  function doCopy() {
+    const selected = nodes.filter(n => n.selected);
+    if (selected.length === 0) return;
+    const ids = new Set(selected.map(n => n.id));
+    clipboardRef.current = {
+      nodes: selected.map(n => JSON.parse(JSON.stringify(n))),
+      edges: edges.filter(e => ids.has(e.source) && ids.has(e.target))
+                  .map(e => JSON.parse(JSON.stringify(e))),
+    };
+    showToast(`Copied ${selected.length} node${selected.length !== 1 ? "s" : ""}`);
+  }
+
+  function doPaste() {
+    const cb = clipboardRef.current;
+    if (!cb || cb.nodes.length === 0) return;
+    const OFFSET = 60;
+    const idMap = {};
+    cb.nodes.forEach(n => { idMap[n.id] = uid(); });
+    const pastedNodes = cb.nodes.map(n => ({
+      ...n,
+      id: idMap[n.id],
+      position: { x: n.position.x + OFFSET, y: n.position.y + OFFSET },
+      selected: true,
+      data: { ...n.data, _runStatus: undefined, _runOutput: undefined, _runInput: undefined },
+    }));
+    const pastedEdges = cb.edges.map(e => ({
+      ...styledEdge(e), id: uid(),
+      source: idMap[e.source], target: idMap[e.target],
+    }));
+    // Advance clipboard offset so repeated pastes stagger
+    clipboardRef.current = {
+      nodes: cb.nodes.map(n => ({ ...n, position: { x: n.position.x + OFFSET, y: n.position.y + OFFSET } })),
+      edges: cb.edges,
+    };
+    setNodes(ns => {
+      const updated = [...ns.map(n => ({ ...n, selected: false })), ...pastedNodes];
+      saveSnap(updated, [...edges, ...pastedEdges]);
+      return updated;
+    });
+    setEdges(es => [...es, ...pastedEdges]);
+    showToast(`Pasted ${pastedNodes.length} node${pastedNodes.length !== 1 ? "s" : ""}`);
+  }
+
+  function doDuplicate() {
+    const selected = nodes.filter(n => n.selected);
+    if (selected.length === 0) return;
+    const ids = new Set(selected.map(n => n.id));
+    const OFFSET = 40;
+    const idMap = {};
+    selected.forEach(n => { idMap[n.id] = uid(); });
+    const dupNodes = selected.map(n => ({
+      ...n,
+      id: idMap[n.id],
+      position: { x: n.position.x + OFFSET, y: n.position.y + OFFSET },
+      selected: true,
+      data: { ...n.data, _runStatus: undefined, _runOutput: undefined, _runInput: undefined },
+    }));
+    const dupEdges = edges
+      .filter(e => ids.has(e.source) && ids.has(e.target))
+      .map(e => ({ ...styledEdge(e), id: uid(), source: idMap[e.source], target: idMap[e.target] }));
+    setNodes(ns => {
+      const updated = [...ns.map(n => ({ ...n, selected: false })), ...dupNodes];
+      saveSnap(updated, [...edges, ...dupEdges]);
+      return updated;
+    });
+    setEdges(es => [...es, ...dupEdges]);
+    showToast(`Duplicated ${dupNodes.length} node${dupNodes.length !== 1 ? "s" : ""}`);
+  }
+
+  function doSelectAll() {
+    setNodes(ns => ns.map(n => ({ ...n, selected: true })));
   }
 
   /* ── Graph list ──────────────────────────────────────────────────────── */
@@ -1011,6 +1090,10 @@ function CanvasApp() {
             nodeTypes={nodeTypes}
             fitView
             deleteKeyCode="Delete"
+            multiSelectionKeyCode="Shift"
+            selectionOnDrag
+            panOnDrag={[1, 2]}
+            selectionMode={SelectionMode.Partial}
             style={{ background: "#0f1117" }}
           >
             <Background variant={BackgroundVariant.Dots} color="#2a2d3e" gap={20} size={1}/>
@@ -1114,6 +1197,9 @@ function CanvasApp() {
           onToggleDisabled={ctxToggleDisabled}
           onCopyId={ctxCopyId}
           onRename={ctxRenameNode}
+          onCopy={doCopy}
+          onPaste={clipboardRef.current ? doPaste : null}
+          selectedCount={nodes.filter(n => n.selected).length || 1}
         />
       )}
 

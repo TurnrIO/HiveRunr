@@ -1,10 +1,11 @@
 import { useEffect } from "react";
 import { NODE_DEFS } from "./nodeDefs.js";
 
-export function NodeContextMenu({ menu, onClose, onDuplicate, onDelete, onToggleDisabled, onCopyId, onRename }) {
+export function NodeContextMenu({ menu, onClose, onDuplicate, onDelete, onToggleDisabled, onCopyId, onRename, onCopy, onPaste, selectedCount }) {
   const node       = menu.node;
   const isDisabled = !!node.data.disabled;
   const isNote     = node.data.type === "note";
+  const multi      = selectedCount > 1;
 
   useEffect(() => {
     const close = (e) => { if (!e.target.closest(".ctx-menu")) onClose(); };
@@ -30,8 +31,17 @@ export function NodeContextMenu({ menu, onClose, onDuplicate, onDelete, onToggle
         📋 Copy ID
       </div>
       <div className="ctx-divider" />
+      <div className="ctx-item" onClick={() => { onCopy(); onClose(); }}>
+        {multi ? `⧉ Copy ${selectedCount} nodes (Ctrl+C)` : "⧉ Copy node (Ctrl+C)"}
+      </div>
+      {onPaste && (
+        <div className="ctx-item" onClick={() => { onPaste(); onClose(); }}>
+          📋 Paste (Ctrl+V)
+        </div>
+      )}
+      <div className="ctx-divider" />
       <div className="ctx-item" onClick={() => { onDuplicate(node); onClose(); }}>
-        ⧉ Duplicate node
+        {multi ? `⊞ Duplicate ${selectedCount} nodes (Ctrl+D)` : "⊞ Duplicate node (Ctrl+D)"}
       </div>
       {!isNote && (
         <div className="ctx-item" onClick={() => { onToggleDisabled(node.id); onClose(); }}>
