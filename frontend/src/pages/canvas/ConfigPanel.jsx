@@ -631,6 +631,30 @@ export function ConfigPanel({ node, onChange, onDelete, edges }) {
             Output: <code style={{ color: "#a78bfa" }}>{"{ rows[], count, row (first row), columns, affected }"}</code>
           </div>
         )}
+        {node.data.type === "action.mysql" && (
+          <div style={{ background: "#0f1117", border: "1px solid #2a2d3e", borderRadius: 6, padding: "8px 10px", fontSize: 10, color: "#94a3b8", marginTop: 6, lineHeight: 1.8 }}>
+            <div style={{ color: "#00758f", fontWeight: 600, marginBottom: 4 }}>🐬 MySQL / MariaDB</div>
+            Create a credential with <code style={{ color: "#a78bfa" }}>host</code>, <code style={{ color: "#a78bfa" }}>port</code>, <code style={{ color: "#a78bfa" }}>username</code>, <code style={{ color: "#a78bfa" }}>password</code>, <code style={{ color: "#a78bfa" }}>database</code> fields — or a single <code style={{ color: "#a78bfa" }}>dsn</code> string (e.g. <code>mysql://user:pass@host/db</code>).<br />
+            Requires <code style={{ color: "#a78bfa" }}>pymysql</code> — install with <code>pip install pymysql</code>.<br />
+            Use <code style={{ color: "#a78bfa" }}>%s</code> placeholders with the <strong>params</strong> JSON array for safe parameterised queries.<br />
+            Output: <code style={{ color: "#a78bfa" }}>{"{ rows[], count, row (first), columns, affected, last_insert_id }"}</code>
+          </div>
+        )}
+        {node.data.type === "action.jira" && (
+          <div style={{ background: "#0f1117", border: "1px solid #2a2d3e", borderRadius: 6, padding: "8px 10px", fontSize: 10, color: "#94a3b8", marginTop: 6, lineHeight: 1.8 }}>
+            <div style={{ color: "#0052cc", fontWeight: 600, marginBottom: 4 }}>🔵 Jira REST API v3</div>
+            Create a credential with <code style={{ color: "#a78bfa" }}>base_url</code> (e.g. <code>https://yourco.atlassian.net</code>), <code style={{ color: "#a78bfa" }}>email</code>, and <code style={{ color: "#a78bfa" }}>api_token</code> (from id.atlassian.com/manage/api-tokens).<br />
+            <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: "0 10px", marginTop: 6 }}>
+              <code style={{ color: "#4ade80" }}>get-issue</code><span>→ {"{ issue{key,summary,status,…}, key, id }"}</span>
+              <code style={{ color: "#60a5fa" }}>create-issue</code><span>→ requires project_key + summary; issue_type defaults to Task</span>
+              <code style={{ color: "#a78bfa" }}>update-issue</code><span>→ pass fields as JSON {"{ summary, priority:{name}, … }"}</span>
+              <code style={{ color: "#fbbf24" }}>add-comment</code><span>→ appends text comment; returns comment id</span>
+              <code style={{ color: "#f87171" }}>search</code><span>→ JQL query → {"{ issues[], count, total }"}</span>
+              <code style={{ color: "#94a3b8" }}>get-transitions</code><span>→ {"{ transitions[{id, name, to_status}] }"}</span>
+              <code style={{ color: "#64748b" }}>transition-issue</code><span>→ move to status by transition_id</span>
+            </div>
+          </div>
+        )}
         {node.data.type === "action.s3" && (
           <div style={{ background: "#0f1117", border: "1px solid #2a2d3e", borderRadius: 6, padding: "8px 10px", fontSize: 10, color: "#94a3b8", marginTop: 6, lineHeight: 1.8 }}>
             <div style={{ color: "#FF9900", fontWeight: 600, marginBottom: 4 }}>🪣 S3 Storage</div>
