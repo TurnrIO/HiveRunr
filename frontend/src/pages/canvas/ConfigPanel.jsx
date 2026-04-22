@@ -501,6 +501,18 @@ export function ConfigPanel({ node, onChange, onDelete, edges }) {
             </div>
           </div>
         )}
+        {node.data.type === "action.wait_for_approval" && (
+          <div style={{ background: "#0f1117", border: "1px solid #2a2d3e", borderRadius: 6, padding: "8px 10px", fontSize: 10, color: "#94a3b8", marginTop: 6, lineHeight: 1.9 }}>
+            <div style={{ color: "#d97706", fontWeight: 600, marginBottom: 4 }}>🔔 Human-in-the-loop gate</div>
+            Sends an email to <strong>Approver Email</strong> with <strong>Approve</strong> and <strong>Reject</strong> buttons.
+            The flow pauses here until a decision is made or the timeout elapses.<br />
+            <div style={{ marginTop: 6 }}>Output: <code style={{ color: "#a78bfa" }}>{"{ approved, decision, token, approve_url, reject_url }"}</code></div>
+            <div style={{ marginTop: 4, color: "#64748b" }}>
+              Requires <strong>AGENTMAIL_API_KEY</strong> + <strong>AGENTMAIL_FROM</strong> to be set.
+              Without email, approve/reject URLs are logged to the run output so you can trigger them manually.
+            </div>
+          </div>
+        )}
         {node.data.type === "action.send_email" && (
           <div style={{ background: "#0f1117", border: "1px solid #2a2d3e", borderRadius: 6, padding: "8px 10px", fontSize: 10, color: "#94a3b8", marginTop: 6, lineHeight: 1.9 }}>
             <div style={{ color: "#a78bfa", fontWeight: 600, marginBottom: 4 }}>💡 Credential shortcut</div>
