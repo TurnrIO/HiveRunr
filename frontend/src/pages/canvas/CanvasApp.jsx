@@ -21,8 +21,9 @@ import { TestPayloadModal } from "./TestPayloadModal.jsx";
 import { ValidationModal }  from "./ValidationModal.jsx";
 import { HistoryModal }     from "./HistoryModal.jsx";
 import { PermissionsModal } from "./PermissionsModal.jsx";
-import { ShortcutsModal }   from "./ShortcutsModal.jsx";
-import { NodeSearchBar }    from "./NodeSearchBar.jsx";
+import { ShortcutsModal }     from "./ShortcutsModal.jsx";
+import { NodeSearchBar }      from "./NodeSearchBar.jsx";
+import { AlignmentToolbar }   from "./AlignmentToolbar.jsx";
 import { EdgeLabelModal }   from "./EdgeLabelModal.jsx";
 import { validateFlow, computeAutoLayout } from "./canvasHelpers.js";
 
@@ -1073,7 +1074,14 @@ function CanvasApp() {
       )}
       <div className="canvas-layout">
         <Palette search={paletteSearch} onSearch={setPaletteSearch} open={mobileSidebarOpen}/>
-        <div className="flow-wrap" ref={reactFlowWrapper}>
+        <div className="flow-wrap" ref={reactFlowWrapper} style={{ position: "relative" }}>
+          {/* ── Alignment toolbar (shown when ≥2 nodes selected) ── */}
+          <AlignmentToolbar
+            nodes={nodes}
+            edges={edges}
+            setNodes={setNodes}
+            onSaveSnap={saveSnap}
+          />
           <ReactFlow
             nodes={nodes}
             edges={edges}
