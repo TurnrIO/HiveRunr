@@ -6,6 +6,21 @@ import { ConfirmModal } from "../../components/ConfirmModal.jsx";
  * GraphRow — one row in the Flows list.
  * Includes inline HistoryModal and AlertSettingsModal.
  */
+/* ── Tag colour palette (cycles through 6 hues) ─────────────────────────── */
+const TAG_COLOURS = [
+  { bg: "#1e1b4b", border: "#4338ca", text: "#a5b4fc" },
+  { bg: "#0c4a6e", border: "#0369a1", text: "#7dd3fc" },
+  { bg: "#064e3b", border: "#059669", text: "#6ee7b7" },
+  { bg: "#4a1942", border: "#9333ea", text: "#d8b4fe" },
+  { bg: "#78350f", border: "#d97706", text: "#fcd34d" },
+  { bg: "#7f1d1d", border: "#dc2626", text: "#fca5a5" },
+];
+function tagColour(tag) {
+  let h = 0;
+  for (let i = 0; i < tag.length; i++) h = (h * 31 + tag.charCodeAt(i)) & 0xffff;
+  return TAG_COLOURS[h % TAG_COLOURS.length];
+}
+
 export function GraphRow({ g, running, onRun, onToggle, onDuplicate, onDelete, onRename, showToast, load, isExample, ro }) {
   const [open, setOpen]                     = useState(false);
   const [showVersions, setShowVersions]     = useState(false);
@@ -17,8 +32,34 @@ export function GraphRow({ g, running, onRun, onToggle, onDuplicate, onDelete, o
   const [showAlerts, setShowAlerts]         = useState(false);
   const [alertCfg, setAlertCfg]             = useState({ alert_emails: "", alert_webhook: "", alert_on_success: false });
   const [savingAlerts, setSavingAlerts]     = useState(false);
+  const [editingTags,  setEditingTags]      = useState(false);
+  const [tagInput,     setTagInput]         = useState("");
 
   const nodeCount = ((g.graph_data?.nodes) || []).filter(n => n.type !== "note").length;
+  const tags = Array.isArray(g.tags) ? g.tags : [];
+
+  async function addTag(tag) {
+    const t = tag.trim().toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
+    if (!t || tags.includes(t)) return;
+    try { await api("PUT", `/api/graphs/${g.id}`, { tags: [...tags, t] }); load(); }
+    catch (e) { showToast(e.message, "error"); }
+  }
+
+  async function removeTag(tag) {
+    try { await api("PUT", `/api/graphs/${g.id}`, { tags: tags.filter(t => t !== tag) }); load(); }
+    catch (e) { showToast(e.message, "error"); }
+  }
+
+  function handleTagKeyDown(e) {
+    if (e.key === "Enter" || e.key === ",") {
+      e.preventDefault();
+      addTag(tagInput);
+      setTagInput("");
+    } else if (e.key === "Escape") {
+      setEditingTags(false);
+      setTagInput("");
+    }
+  }
 
   useEffect(() => {
     if (!showVersions) return;
@@ -99,6 +140,19 @@ export function GraphRow({ g, running, onRun, onToggle, onDuplicate, onDelete, o
               <span style={{ fontSize: 11, color: "#4b5563" }}>#{g.id} · {nodeCount} node{nodeCount !== 1 ? "s" : ""}</span>
             </div>
             {g.description && <div style={{ fontSize: 12, color: "#64748b" }}>{g.description}</div>}
+            {tags.length > 0 && (
+              <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginTop: 4 }}>
+                {tags.map(t => {
+                  const c = tagColour(t);
+                  return (
+                    <span key={t} style={{
+                      background: c.bg, border: `1px solid ${c.border}`, color: c.text,
+                      borderRadius: 4, padding: "1px 7px", fontSize: 10, fontWeight: 500,
+                    }}>{t}</span>
+                  );
+                })}
+              </div>
+            )}
           </div>
           <div style={{ display: "flex", gap: 6, flex: "none" }}>
             <a className="btn btn-ghost" href={`/canvas#graph-${g.id}`}>{ro ? "👁 View" : "✏️ Edit"}</a>
@@ -120,6 +174,7 @@ export function GraphRow({ g, running, onRun, onToggle, onDuplicate, onDelete, o
             <button className="btn btn-ghost" onClick={() => onDuplicate(g)}>📋 Duplicate</button>
             <button className="btn btn-ghost" onClick={openVersionHistory} disabled={loadingVersions}>📜 History</button>
             <button className="btn btn-ghost" onClick={openAlerts}>🔔 Alerts</button>
+            <button className="btn btn-ghost" onClick={() => { setEditingTags(t => !t); setTagInput(""); }}>🏷 Tags</button>
             <button className="btn btn-ghost" onClick={() => onToggle(g.id, g.enabled)}>{g.enabled ? "⏸ Disable" : "▶ Enable"}</button>
             <div style={{ flex: 1 }} />
             <div style={{ fontSize: 11, color: "#4b5563", alignSelf: "center", display: "flex", gap: 8, alignItems: "center" }}>
@@ -133,6 +188,43 @@ export function GraphRow({ g, running, onRun, onToggle, onDuplicate, onDelete, o
               title={isExample ? "⚠ This is an example flow — use ↺ Restore examples to get it back" : undefined}>
               🗑 Delete{isExample ? " (example)" : ""}
             </button>
+          </div>
+        )}
+
+        {open && editingTags && (
+          <div style={{ marginTop: 8, padding: "10px 12px", background: "#0f1117", borderRadius: 6, border: "1px solid #2a2d3e" }}>
+            <div style={{ fontSize: 11, color: "#64748b", marginBottom: 6 }}>
+              🏷 Tags — press <kbd style={{ background: "#1e2235", borderRadius: 3, padding: "1px 4px", fontSize: 10 }}>Enter</kbd> or <kbd style={{ background: "#1e2235", borderRadius: 3, padding: "1px 4px", fontSize: 10 }}>,</kbd> to add · click pill to remove
+            </div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 5, alignItems: "center" }}>
+              {tags.map(t => {
+                const c = tagColour(t);
+                return (
+                  <span key={t} style={{
+                    background: c.bg, border: `1px solid ${c.border}`, color: c.text,
+                    borderRadius: 4, padding: "2px 8px", fontSize: 11, fontWeight: 500,
+                    cursor: "pointer", display: "flex", alignItems: "center", gap: 4,
+                  }}
+                    onClick={() => removeTag(t)}
+                    title="Click to remove"
+                  >
+                    {t} <span style={{ opacity: 0.6, fontSize: 10 }}>✕</span>
+                  </span>
+                );
+              })}
+              <input
+                value={tagInput}
+                onChange={e => setTagInput(e.target.value)}
+                onKeyDown={handleTagKeyDown}
+                onBlur={() => { if (tagInput) { addTag(tagInput); setTagInput(""); } }}
+                placeholder="Add tag…"
+                autoFocus
+                style={{
+                  background: "transparent", border: "none", outline: "none",
+                  color: "#e2e8f0", fontSize: 12, width: 100, padding: "2px 0",
+                }}
+              />
+            </div>
           </div>
         )}
       </div>

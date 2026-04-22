@@ -13,6 +13,7 @@ export function Flows({ showToast }) {
   const [loading, setLoading]         = useState(true);
   const [running, setRunning]         = useState(null);
   const [search, setSearch]           = useState("");
+  const [activeTag, setActiveTag]     = useState(null);
   const [reseeding, setReseeding]     = useState(false);
   const [confirmState, setConfirmState] = useState(null);
 
@@ -74,9 +75,16 @@ export function Flows({ showToast }) {
     });
   }
 
+  // Collect all unique tags across all flows
+  const allTags = [...new Set(graphs.flatMap(g => Array.isArray(g.tags) ? g.tags : []))].sort();
+
   const isExample = name => EXAMPLE_RE.test(name);
   const q = search.toLowerCase();
-  const filtered = graphs.filter(g => !q || g.name.toLowerCase().includes(q) || (g.description || "").toLowerCase().includes(q));
+  const filtered = graphs.filter(g => {
+    if (q && !g.name.toLowerCase().includes(q) && !(g.description || "").toLowerCase().includes(q)) return false;
+    if (activeTag && !(Array.isArray(g.tags) ? g.tags : []).includes(activeTag)) return false;
+    return true;
+  });
   const exampleFlows = filtered.filter(g => isExample(g.name));
   const userFlows    = filtered.filter(g => !isExample(g.name));
   const ro = user?.role === "viewer";
@@ -96,7 +104,7 @@ export function Flows({ showToast }) {
         )}
       </div>
 
-      <div style={{ marginBottom: 16 }}>
+      <div style={{ marginBottom: allTags.length > 0 ? 8 : 16 }}>
         <input
           style={{ width: "100%", background: "#1a1d2e", color: "#e2e8f0", border: "1px solid #2a2d3e", borderRadius: 8, padding: "8px 12px", fontSize: 13 }}
           placeholder="🔍  Search flows…"
@@ -104,6 +112,33 @@ export function Flows({ showToast }) {
           onChange={e => setSearch(e.target.value)}
         />
       </div>
+
+      {allTags.length > 0 && (
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 16, alignItems: "center" }}>
+          <span style={{ fontSize: 11, color: "#4b5563" }}>Filter:</span>
+          <button
+            onClick={() => setActiveTag(null)}
+            style={{
+              background: !activeTag ? "#4338ca" : "#1e2235",
+              border: `1px solid ${!activeTag ? "#6366f1" : "#2a2d3e"}`,
+              color: !activeTag ? "#fff" : "#94a3b8",
+              borderRadius: 5, padding: "2px 10px", fontSize: 11, cursor: "pointer",
+            }}
+          >All</button>
+          {allTags.map(tag => (
+            <button key={tag}
+              onClick={() => setActiveTag(activeTag === tag ? null : tag)}
+              style={{
+                background: activeTag === tag ? "#1e1b4b" : "#13152a",
+                border: `1px solid ${activeTag === tag ? "#4338ca" : "#2a2d3e"}`,
+                color: activeTag === tag ? "#a5b4fc" : "#64748b",
+                borderRadius: 5, padding: "2px 10px", fontSize: 11, cursor: "pointer",
+                transition: "all .12s",
+              }}
+            >{tag}</button>
+          ))}
+        </div>
+      )}
 
       {loading ? (
         <div className="empty-state">Loading…</div>

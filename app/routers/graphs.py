@@ -50,11 +50,13 @@ def _is_admin_or_owner(user: dict) -> bool:
 # ── Graph CRUD ────────────────────────────────────────────────────────────────
 class GraphCreate(BaseModel):
     name: str; description: str = ""; graph_data: dict = {}
+    tags: list[str] = []
 
 
 class GraphUpdate(BaseModel):
     name: Optional[str] = None; description: Optional[str] = None
     graph_data: Optional[dict] = None; enabled: Optional[bool] = None
+    tags: Optional[list[str]] = None
 
 
 @router.get("/api/graphs")
@@ -75,7 +77,7 @@ def api_graph_create(body: GraphCreate, request: Request):
     if not _is_admin_or_owner(user):
         raise HTTPException(403, "Creating flows requires admin or owner role")
     workspace_id = _resolve_workspace(request, user)
-    g = create_graph(body.name, body.description, json.dumps(body.graph_data), workspace_id=workspace_id)
+    g = create_graph(body.name, body.description, json.dumps(body.graph_data), workspace_id=workspace_id, tags=body.tags)
     _sync_cron_triggers(g['id'], body.graph_data)
     save_graph_version(g['id'], body.name, json.dumps(body.graph_data), note="Initial version")
     log_audit(user["username"], "graph.create", "graph", g["id"],
@@ -116,7 +118,7 @@ def api_graph_update(graph_id: int, body: GraphUpdate, request: Request):
         _check_flow_access(request, graph_id, "editor")
     update_graph(graph_id, name=body.name, description=body.description,
                  graph_json=json.dumps(body.graph_data) if body.graph_data is not None else None,
-                 enabled=body.enabled)
+                 enabled=body.enabled, tags=body.tags)
     if body.graph_data is not None:
         _sync_cron_triggers(graph_id, body.graph_data)
         gname = body.name or g['name']

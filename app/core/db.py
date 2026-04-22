@@ -529,7 +529,7 @@ def list_graphs(workspace_id: int | None = None):
             cur.execute("SELECT * FROM graph_workflows ORDER BY id")
         return [dict(r) for r in cur.fetchall()]
 
-def create_graph(name, description, graph_json, workspace_id: int | None = None):
+def create_graph(name, description, graph_json, workspace_id: int | None = None, tags: list | None = None):
     import secrets as _sec
     with get_conn() as conn:
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
@@ -540,8 +540,8 @@ def create_graph(name, description, graph_json, workspace_id: int | None = None)
             if not cur.fetchone():
                 break
         cur.execute(
-            "INSERT INTO graph_workflows(name,description,graph_json,slug,workspace_id) VALUES(%s,%s,%s,%s,%s) RETURNING *",
-            (name, description, graph_json, slug, workspace_id)
+            "INSERT INTO graph_workflows(name,description,graph_json,slug,workspace_id,tags) VALUES(%s,%s,%s,%s,%s,%s) RETURNING *",
+            (name, description, graph_json, slug, workspace_id, tags or [])
         )
         return dict(cur.fetchone())
 
@@ -573,13 +573,14 @@ def get_graph_by_token(token):
         row = cur.fetchone()
         return dict(row) if row else None
 
-def update_graph(graph_id, name=None, description=None, graph_json=None, enabled=None):
+def update_graph(graph_id, name=None, description=None, graph_json=None, enabled=None, tags=None):
     with get_conn() as conn:
         cur = conn.cursor()
         if name        is not None: cur.execute("UPDATE graph_workflows SET name=%s,        updated_at=NOW() WHERE id=%s", (name,        graph_id))
         if description is not None: cur.execute("UPDATE graph_workflows SET description=%s, updated_at=NOW() WHERE id=%s", (description, graph_id))
         if graph_json  is not None: cur.execute("UPDATE graph_workflows SET graph_json=%s,  updated_at=NOW() WHERE id=%s", (graph_json,  graph_id))
         if enabled     is not None: cur.execute("UPDATE graph_workflows SET enabled=%s,      updated_at=NOW() WHERE id=%s", (enabled,     graph_id))
+        if tags        is not None: cur.execute("UPDATE graph_workflows SET tags=%s,         updated_at=NOW() WHERE id=%s", (tags,        graph_id))
 
 def duplicate_graph(graph_id: int) -> dict:
     """Clone a graph, appending ' (copy)' to the name and generating a fresh slug."""
