@@ -23,7 +23,8 @@ import { HistoryModal }     from "./HistoryModal.jsx";
 import { PermissionsModal } from "./PermissionsModal.jsx";
 import { ShortcutsModal }     from "./ShortcutsModal.jsx";
 import { NodeSearchBar }      from "./NodeSearchBar.jsx";
-import { AlignmentToolbar }   from "./AlignmentToolbar.jsx";
+import { AlignmentToolbar }     from "./AlignmentToolbar.jsx";
+import { ExtractSubflowModal }  from "./ExtractSubflowModal.jsx";
 import { EdgeLabelModal }   from "./EdgeLabelModal.jsx";
 import { validateFlow, computeAutoLayout } from "./canvasHelpers.js";
 
@@ -124,6 +125,7 @@ function CanvasApp() {
   const [showTestModal,   setShowTestModal]   = useState(false);
   const [showHistoryModal,   setShowHistoryModal]   = useState(false);
   const [showPermissionsModal, setShowPermissionsModal] = useState(false);
+  const [showExtractModal,   setShowExtractModal]   = useState(false);
   const [currentUser,     setCurrentUser]     = useState(null);
   const [workspaces,      setWorkspaces]      = useState([]);
   const [activeWorkspace, setActiveWorkspace] = useState(null);
@@ -377,6 +379,67 @@ function CanvasApp() {
 
   function doSelectAll() {
     setNodes(ns => ns.map(n => ({ ...n, selected: true })));
+  }
+
+  /* ── Subflow extraction ──────────────────────────────────────────────── */
+  async function doExtractSubflow(name, description) {
+    const selected = nodes.filter(n => n.selected);
+    if (selected.length < 1) return;
+
+    const selIds  = new Set(selected.map(n => n.id));
+    // Edges fully within the selection
+    const selEdges = edges.filter(e => selIds.has(e.source) && selIds.has(e.target));
+
+    // Reposition extracted nodes to start near origin
+    const minX = Math.min(...selected.map(n => n.position.x));
+    const minY = Math.min(...selected.map(n => n.position.y));
+    const extractedNodes = selected.map(n => ({
+      ...n,
+      position: { x: n.position.x - minX + 60, y: n.position.y - minY + 60 },
+      selected: false,
+      data: { ...n.data, _runStatus: undefined, _runOutput: undefined, _runInput: undefined },
+    }));
+
+    // Create new flow via API
+    const graph_data = { nodes: extractedNodes, edges: selEdges };
+    let newGraph;
+    try {
+      newGraph = await api("POST", "/api/graphs", { name, description, graph_data });
+    } catch (err) {
+      showToast("Extract failed: " + err.message, "error");
+      return;
+    }
+
+    // Calculate centroid of selected nodes for placement of the call_graph node
+    const cx = selected.reduce((s, n) => s + n.position.x, 0) / selected.length;
+    const cy = selected.reduce((s, n) => s + n.position.y, 0) / selected.length;
+
+    // Replace selected nodes with a single call_graph node
+    const callNode = {
+      id:       uid(),
+      type:     "custom",
+      position: { x: cx - 90, y: cy - 25 },
+      selected: true,
+      data: {
+        type:      "action.call_graph",
+        label:     name,
+        config:    { graph_id: String(newGraph.id), payload: "" },
+        retry_max: 0, retry_delay: 5,
+      },
+    };
+
+    setNodes(ns => {
+      const kept    = ns.filter(n => !selIds.has(n.id));
+      const updated = [...kept, callNode];
+      saveSnap(updated, edges.filter(e => !selIds.has(e.source) && !selIds.has(e.target)));
+      return updated;
+    });
+    setEdges(es => es.filter(e => !selIds.has(e.source) && !selIds.has(e.target)));
+
+    await loadGraphList();
+    setShowExtractModal(false);
+    setIsDirty(true);
+    showToast(`Extracted to "${name}" (ID ${newGraph.id}) — Call Sub-flow node added`);
   }
 
   /* ── Graph list ──────────────────────────────────────────────────────── */
@@ -1207,11 +1270,19 @@ function CanvasApp() {
           onRename={ctxRenameNode}
           onCopy={doCopy}
           onPaste={clipboardRef.current ? doPaste : null}
+          onExtract={nodes.filter(n => n.selected).length > 1 ? () => setShowExtractModal(true) : null}
           selectedCount={nodes.filter(n => n.selected).length || 1}
         />
       )}
 
       {showShortcuts && <ShortcutsModal onClose={() => setShowShortcuts(false)}/>}
+
+      <ExtractSubflowModal
+        isOpen={showExtractModal}
+        nodeCount={nodes.filter(n => n.selected).length}
+        onConfirm={doExtractSubflow}
+        onClose={() => setShowExtractModal(false)}
+      />
 
       {showSearch && (
         <NodeSearchBar

@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { NODE_DEFS } from "./nodeDefs.js";
 
-export function NodeContextMenu({ menu, onClose, onDuplicate, onDelete, onToggleDisabled, onCopyId, onRename, onCopy, onPaste, selectedCount }) {
+export function NodeContextMenu({ menu, onClose, onDuplicate, onDelete, onToggleDisabled, onCopyId, onRename, onCopy, onPaste, onExtract, selectedCount }) {
   const node       = menu.node;
   const isDisabled = !!node.data.disabled;
   const isNote     = node.data.type === "note";
@@ -47,6 +47,14 @@ export function NodeContextMenu({ menu, onClose, onDuplicate, onDelete, onToggle
         <div className="ctx-item" onClick={() => { onToggleDisabled(node.id); onClose(); }}>
           {isDisabled ? "▶ Enable node" : "⏸ Disable node"}
         </div>
+      )}
+      {multi && onExtract && (
+        <>
+          <div className="ctx-divider" />
+          <div className="ctx-item" onClick={() => { onExtract(); onClose(); }}>
+            ⛓ Extract {selectedCount} nodes to subflow…
+          </div>
+        </>
       )}
       <div className="ctx-divider" />
       <div className="ctx-item danger" onClick={() => { onDelete(node.id); onClose(); }}>
