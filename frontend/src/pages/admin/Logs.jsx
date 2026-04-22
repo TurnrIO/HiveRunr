@@ -33,6 +33,8 @@ export function Logs({ showToast }) {
   const [searchInput, setSearchInput] = useState("");
   const [statusFilter, setStatus]     = useState("all");
   const [replayEdit, setReplayEdit]   = useState(null);
+  const [editingNoteId, setEditingNoteId] = useState(null);
+  const [noteText, setNoteText]       = useState("");
 
   const load = async (pg, st, sq) => {
     setLoading(true);
@@ -107,6 +109,20 @@ export function Logs({ showToast }) {
       load(page, statusFilter, search);
       showToast("Queued for replay with custom payload");
       setReplayEdit(null);
+    } catch (e) { showToast(e.message, "error"); }
+  }
+
+  function openNoteEditor(r, e) {
+    e.stopPropagation();
+    setEditingNoteId(r.id);
+    setNoteText(r.note || "");
+  }
+  async function saveNote(runId) {
+    try {
+      await api("PUT", `/api/runs/${runId}/note`, { note: noteText.trim() || null });
+      setRuns(rs => rs.map(r => r.id === runId ? { ...r, note: noteText.trim() || null } : r));
+      setEditingNoteId(null);
+      showToast("Note saved");
     } catch (e) { showToast(e.message, "error"); }
   }
 
@@ -191,6 +207,11 @@ export function Logs({ showToast }) {
                         <span title={`Succeeded after ${r.retry_count} ${r.retry_count === 1 ? "retry" : "retries"}`} style={{ fontSize: 10, color: "#94a3b8", background: "#1e2235", borderRadius: 10, padding: "1px 6px" }}>{r.retry_count}↺</span>
                       )}
                       <span style={{ fontSize: 11, fontWeight: 600, color: STATUS_COLOR[r.status] || "#94a3b8" }}>{r.status}</span>
+                      <button
+                        title={r.note ? "Edit note" : "Add note"}
+                        onClick={e => openNoteEditor(r, e)}
+                        style={{ background: "none", border: "none", cursor: "pointer", padding: "0 2px", fontSize: 13, color: r.note ? "#a78bfa" : "#334155", lineHeight: 1 }}
+                      >📝</button>
                     </div>
                   </div>
                   <div style={{ fontSize: 11, color: "#64748b" }}>
@@ -199,6 +220,31 @@ export function Logs({ showToast }) {
                       <span style={{ marginLeft: 6 }}>{r.traces.length} node{r.traces.length !== 1 ? "s" : ""}</span>
                     )}
                   </div>
+                  {r.note && editingNoteId !== r.id && (
+                    <div style={{ fontSize: 11, color: "#94a3b8", fontStyle: "italic", marginTop: 3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {r.note}
+                    </div>
+                  )}
+                  {editingNoteId === r.id && (
+                    <div onClick={e => e.stopPropagation()} style={{ marginTop: 6 }}>
+                      <input
+                        autoFocus
+                        value={noteText}
+                        onChange={e => setNoteText(e.target.value)}
+                        onKeyDown={e => {
+                          if (e.key === "Enter") saveNote(r.id);
+                          if (e.key === "Escape") setEditingNoteId(null);
+                        }}
+                        placeholder="Add a note… (Enter to save, Esc to cancel)"
+                        style={{ width: "100%", fontSize: 11, background: "#13152a", color: "#e2e8f0", border: "1px solid #4338ca", borderRadius: 4, padding: "3px 7px" }}
+                      />
+                      <div style={{ display: "flex", gap: 5, marginTop: 4 }}>
+                        <button className="btn btn-primary" style={{ fontSize: 11, padding: "2px 8px" }} onClick={() => saveNote(r.id)}>Save</button>
+                        <button className="btn btn-ghost" style={{ fontSize: 11, padding: "2px 8px" }} onClick={() => setEditingNoteId(null)}>Cancel</button>
+                        {r.note && <button className="btn btn-ghost" style={{ fontSize: 11, padding: "2px 8px", color: "#f87171" }} onClick={() => { setNoteText(""); saveNote(r.id); }}>Clear</button>}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             ))}
@@ -264,6 +310,11 @@ export function Logs({ showToast }) {
                 {selRun.result?.error && (
                   <div style={{ marginTop: 8, padding: "8px 10px", background: "#3f1111", borderRadius: 6, fontSize: 12, color: "#f87171", fontFamily: "monospace", wordBreak: "break-word" }}>
                     {selRun.result.error}
+                  </div>
+                )}
+                {selRun.note && (
+                  <div style={{ marginTop: 8, padding: "6px 10px", background: "#1a1d2e", border: "1px solid #2a2d3e", borderRadius: 6, fontSize: 12, color: "#94a3b8", fontStyle: "italic" }}>
+                    📝 {selRun.note}
                   </div>
                 )}
               </div>

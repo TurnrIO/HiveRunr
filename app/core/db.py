@@ -382,6 +382,13 @@ def update_run(task_id, status, result=None, traces=None, retry_count: int | Non
                 (status, json.dumps(result or {}), json.dumps(traces or []), task_id),
             )
 
+def set_run_note(run_id: int, note: str | None):
+    with get_conn() as conn:
+        conn.cursor().execute(
+            "UPDATE runs SET note=%s WHERE id=%s",
+            (note or None, run_id),
+        )
+
 def delete_run(run_id):
     with get_conn() as conn:
         conn.cursor().execute("DELETE FROM runs WHERE id=%s", (run_id,))

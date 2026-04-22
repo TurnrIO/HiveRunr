@@ -14,6 +14,7 @@ from app.core.db import (
     trim_runs_by_count, trim_runs_by_age,
     get_retention_policy, set_retention_policy,
     get_ratelimit_policy, set_ratelimit_policy,
+    set_run_note,
     log_audit,
 )
 
@@ -255,6 +256,18 @@ def api_cancel_run(run_id: int, request: Request):
               {"task_id": task_id},
               request.client.host if request.client else None)
     return {"cancelled": True, "run_id": run_id, "task_id": task_id}
+
+
+class _NoteBody(BaseModel):
+    note: Optional[str] = None  # pass null / empty to clear the note
+
+
+@router.put("/api/runs/{run_id}/note")
+def api_set_run_note(run_id: int, body: _NoteBody, request: Request):
+    """Add or update a freeform text note on a run. Pass null/empty to clear."""
+    _require_manage_scope(request)
+    set_run_note(run_id, body.note)
+    return {"ok": True, "run_id": run_id, "note": body.note or None}
 
 
 class _ReplayBody(BaseModel):
