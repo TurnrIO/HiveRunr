@@ -21,7 +21,28 @@ function tagColour(tag) {
   return TAG_COLOURS[h % TAG_COLOURS.length];
 }
 
-export function GraphRow({ g, running, onRun, onToggle, onDuplicate, onDelete, onRename, showToast, load, isExample, ro }) {
+function HealthBadge({ health }) {
+  if (!health || health.total === 0) return null;
+  const { error_rate, total, last_run } = health;
+  const pct = Math.round((error_rate || 0) * 100);
+  // colour: green ≤5%, amber ≤25%, red >25%
+  const colour = pct <= 5 ? "#4ade80" : pct <= 25 ? "#fbbf24" : "#f87171";
+  const bg     = pct <= 5 ? "#052e16" : pct <= 25 ? "#1c1200" : "#2d0a0a";
+  const border = pct <= 5 ? "#16532444" : pct <= 25 ? "#92400e44" : "#991b1b44";
+  const label  = pct === 0 ? "100% ok" : `${pct}% err`;
+  const tip    = `${total} run${total !== 1 ? "s" : ""}${last_run ? " · last: " + new Date(last_run).toLocaleString() : ""}`;
+  return (
+    <span title={tip} style={{
+      fontSize: 10, fontWeight: 600, padding: "1px 7px", borderRadius: 10,
+      background: bg, border: `1px solid ${border}`, color: colour,
+      display: "inline-flex", alignItems: "center", gap: 3,
+    }}>
+      <span style={{ opacity: 0.7, fontSize: 8 }}>●</span>{label}
+    </span>
+  );
+}
+
+export function GraphRow({ g, running, onRun, onToggle, onDuplicate, onDelete, onRename, showToast, load, isExample, ro, health }) {
   const [open, setOpen]                     = useState(false);
   const [showVersions, setShowVersions]     = useState(false);
   const [versions, setVersions]             = useState([]);
@@ -137,6 +158,7 @@ export function GraphRow({ g, running, onRun, onToggle, onDuplicate, onDelete, o
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 3 }}>
               <span style={{ fontWeight: 600, fontSize: 14, color: "#e2e8f0" }}>{g.name}</span>
               <span className={`badge ${g.enabled ? "badge-succeeded" : "badge-cancelled"}`}>{g.enabled ? "enabled" : "disabled"}</span>
+              <HealthBadge health={health} />
               <span style={{ fontSize: 11, color: "#4b5563" }}>#{g.id} · {nodeCount} node{nodeCount !== 1 ? "s" : ""}</span>
             </div>
             {g.description && <div style={{ fontSize: 12, color: "#64748b" }}>{g.description}</div>}

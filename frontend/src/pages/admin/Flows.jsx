@@ -16,6 +16,16 @@ export function Flows({ showToast }) {
   const [activeTag, setActiveTag]     = useState(null);
   const [reseeding, setReseeding]     = useState(false);
   const [confirmState, setConfirmState] = useState(null);
+  const [healthMap, setHealthMap]     = useState({});
+
+  const loadHealth = useCallback(async () => {
+    try {
+      const rows = await api("GET", "/api/analytics/flows?days=30");
+      const m = {};
+      (rows || []).forEach(r => { m[r.graph_id] = r; });
+      setHealthMap(m);
+    } catch { /* analytics optional */ }
+  }, []);
 
   const load = useCallback(async () => {
     try { setGraphs(await api("GET", "/api/graphs")); }
@@ -23,7 +33,7 @@ export function Flows({ showToast }) {
     setLoading(false);
   }, []);
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); loadHealth(); }, []);
 
   async function reseedExamples() {
     setConfirmState({
@@ -167,7 +177,8 @@ export function Flows({ showToast }) {
                 <GraphRow key={g.id} g={g} running={running}
                   onRun={runGraph} onToggle={toggleGraph} onDuplicate={duplicateGraph}
                   onDelete={deleteGraph} onRename={renameGraph}
-                  showToast={showToast} load={load} isExample={true} ro={ro} />
+                  showToast={showToast} load={load} isExample={true} ro={ro}
+                  health={healthMap[g.id]} />
               ))}
             </div>
           )}
@@ -182,7 +193,8 @@ export function Flows({ showToast }) {
                 <GraphRow key={g.id} g={g} running={running}
                   onRun={runGraph} onToggle={toggleGraph} onDuplicate={duplicateGraph}
                   onDelete={deleteGraph} onRename={renameGraph}
-                  showToast={showToast} load={load} isExample={false} ro={ro} />
+                  showToast={showToast} load={load} isExample={false} ro={ro}
+                  health={healthMap[g.id]} />
               ))}
             </div>
           )}
