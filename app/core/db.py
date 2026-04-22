@@ -802,6 +802,98 @@ def get_run_metrics():
             'recent':       recent,
         }
 
+# ── analytics ─────────────────────────────────────────────────────────────
+
+def get_flow_analytics(days: int = 30) -> list:
+    """Per-flow performance stats for the last N days.
+
+    Returns a list of dicts ordered by total runs descending:
+        graph_id, flow_name, total, succeeded, failed, error_rate,
+        avg_ms, p95_ms, p99_ms, last_run
+    """
+    with get_conn() as conn:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur.execute("""
+            SELECT
+                r.graph_id,
+                COALESCE(g.name, 'legacy:' || r.workflow, 'unknown') AS flow_name,
+                COUNT(*)                                               AS total,
+                SUM(CASE WHEN r.status = 'succeeded' THEN 1 ELSE 0 END) AS succeeded,
+                SUM(CASE WHEN r.status = 'failed'    THEN 1 ELSE 0 END) AS failed,
+                ROUND(
+                    SUM(CASE WHEN r.status = 'failed' THEN 1 ELSE 0 END)::numeric
+                    / NULLIF(COUNT(*), 0) * 100, 1
+                ) AS error_rate,
+                ROUND(AVG(
+                    EXTRACT(EPOCH FROM (r.updated_at - r.created_at)) * 1000
+                ))::bigint AS avg_ms,
+                ROUND(PERCENTILE_CONT(0.95) WITHIN GROUP (
+                    ORDER BY EXTRACT(EPOCH FROM (r.updated_at - r.created_at)) * 1000
+                ))::bigint AS p95_ms,
+                ROUND(PERCENTILE_CONT(0.99) WITHIN GROUP (
+                    ORDER BY EXTRACT(EPOCH FROM (r.updated_at - r.created_at)) * 1000
+                ))::bigint AS p99_ms,
+                MAX(r.created_at)::text AS last_run
+            FROM runs r
+            LEFT JOIN graph_workflows g ON r.graph_id = g.id
+            WHERE r.created_at >= NOW() - (%(days)s || ' days')::interval
+              AND r.status IN ('succeeded', 'failed')
+            GROUP BY r.graph_id, flow_name
+            ORDER BY total DESC
+            LIMIT 50
+        """, {"days": days})
+        rows = cur.fetchall()
+        return [
+            {
+                "graph_id":   r["graph_id"],
+                "flow_name":  r["flow_name"],
+                "total":      int(r["total"]),
+                "succeeded":  int(r["succeeded"] or 0),
+                "failed":     int(r["failed"] or 0),
+                "error_rate": float(r["error_rate"] or 0),
+                "avg_ms":     int(r["avg_ms"] or 0),
+                "p95_ms":     int(r["p95_ms"] or 0),
+                "p99_ms":     int(r["p99_ms"] or 0),
+                "last_run":   r["last_run"],
+            }
+            for r in rows
+        ]
+
+
+def get_daily_analytics(days: int = 30) -> list:
+    """Daily run volume + average duration for the last N days.
+
+    Returns a list of dicts ordered by day ascending:
+        day (YYYY-MM-DD), succeeded, failed, total, avg_ms
+    """
+    with get_conn() as conn:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur.execute("""
+            WITH day_series AS (
+                SELECT generate_series(
+                    CURRENT_DATE - (%(days)s - 1),
+                    CURRENT_DATE,
+                    '1 day'::interval
+                )::date AS day
+            )
+            SELECT
+                ds.day::text AS day,
+                COALESCE(SUM(CASE WHEN r.status='succeeded' THEN 1 ELSE 0 END), 0)::int AS succeeded,
+                COALESCE(SUM(CASE WHEN r.status='failed'    THEN 1 ELSE 0 END), 0)::int AS failed,
+                COALESCE(COUNT(r.id), 0)::int AS total,
+                COALESCE(ROUND(AVG(
+                    EXTRACT(EPOCH FROM (r.updated_at - r.created_at)) * 1000
+                )), 0)::int AS avg_ms
+            FROM day_series ds
+            LEFT JOIN runs r
+              ON DATE(r.created_at) = ds.day
+             AND r.status IN ('succeeded', 'failed')
+            GROUP BY ds.day
+            ORDER BY ds.day
+        """, {"days": days})
+        return [dict(r) for r in cur.fetchall()]
+
+
 # ── users ──────────────────────────────────────────────────────────────────
 def users_exist() -> bool:
     with get_conn() as conn:

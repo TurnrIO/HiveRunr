@@ -349,6 +349,24 @@ def api_metrics(request: Request):
     return get_run_metrics()
 
 
+@router.get("/api/analytics/flows")
+def api_analytics_flows(request: Request, days: int = 30):
+    """Per-flow performance stats (avg/P95/P99 duration, error rate)."""
+    from app.core.db import get_flow_analytics
+    _check_admin(request)
+    days = max(1, min(days, 365))
+    return get_flow_analytics(days)
+
+
+@router.get("/api/analytics/daily")
+def api_analytics_daily(request: Request, days: int = 30):
+    """Daily run volume + average duration."""
+    from app.core.db import get_daily_analytics
+    _check_admin(request)
+    days = max(1, min(days, 365))
+    return get_daily_analytics(days)
+
+
 # ── Run logs ──────────────────────────────────────────────────────────────────
 RUNLOGS_DIR = Path("/app/runlogs")
 
