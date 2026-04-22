@@ -689,6 +689,50 @@ export function ConfigPanel({ node, onChange, onDelete, edges }) {
             Output: <code style={{ color: "#a78bfa" }}>{"{ data, errors[], has_errors, status_code, ok }"}</code>
           </div>
         )}
+        {node.data.type === "action.hubspot" && (
+          <div style={{ background: "#0f1117", border: "1px solid #2a2d3e", borderRadius: 6, padding: "8px 10px", fontSize: 10, color: "#94a3b8", marginTop: 6, lineHeight: 1.8 }}>
+            <div style={{ color: "#ff7a59", fontWeight: 600, marginBottom: 4 }}>🟠 HubSpot CRM v3</div>
+            Create a credential with <code style={{ color: "#a78bfa" }}>access_token</code> (Private App or OAuth token from HubSpot).<br />
+            <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: "0 10px", marginTop: 6 }}>
+              <code style={{ color: "#4ade80" }}>get_contact</code><span>→ {"{ object{id,…props}, id, properties }"}</span>
+              <code style={{ color: "#60a5fa" }}>create_contact</code><span>→ pass properties as JSON {"{ email, firstname, … }"}</span>
+              <code style={{ color: "#a78bfa" }}>update_contact</code><span>→ object_id + properties JSON to patch</span>
+              <code style={{ color: "#fbbf24" }}>search</code><span>→ filters array → {"{ results[], count, total, has_more }"}</span>
+              <code style={{ color: "#f87171" }}>create_deal</code><span>→ properties {"{ dealname, amount, dealstage, … }"}</span>
+              <code style={{ color: "#94a3b8" }}>associate</code><span>→ link from_id (contacts) ↔ to_id (deals)</span>
+              <code style={{ color: "#64748b" }}>get_object / create_object / update_object</code><span>→ generic object_type</span>
+            </div>
+          </div>
+        )}
+        {node.data.type === "action.mongodb" && (
+          <div style={{ background: "#0f1117", border: "1px solid #2a2d3e", borderRadius: 6, padding: "8px 10px", fontSize: 10, color: "#94a3b8", marginTop: 6, lineHeight: 1.8 }}>
+            <div style={{ color: "#00ed64", fontWeight: 600, marginBottom: 4 }}>🍃 MongoDB</div>
+            Create a credential with <code style={{ color: "#a78bfa" }}>uri</code> (e.g. <code>mongodb+srv://user:pass@cluster.mongodb.net/mydb</code>).<br />
+            Requires <code style={{ color: "#fbbf24" }}>pymongo</code> — install with <code>pip install pymongo</code>.<br />
+            <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: "0 10px", marginTop: 6 }}>
+              <code style={{ color: "#4ade80" }}>find</code><span>→ {"{ documents[], count, document (first) }"} — supports filter, projection, sort, limit</span>
+              <code style={{ color: "#60a5fa" }}>find_one</code><span>→ {"{ document, found }"}</span>
+              <code style={{ color: "#a78bfa" }}>insert_one</code><span>→ {"{ inserted_id, ok }"}</span>
+              <code style={{ color: "#fbbf24" }}>update_one</code><span>→ {"{ matched_count, modified_count, upserted_id }"}</span>
+              <code style={{ color: "#f87171" }}>delete_one</code><span>→ {"{ deleted_count }"}</span>
+              <code style={{ color: "#94a3b8" }}>aggregate</code><span>→ pipeline array → {"{ documents[], count }"}</span>
+            </div>
+            <div style={{ marginTop: 4, color: "#64748b" }}>All ObjectId and datetime fields are auto-converted to strings.</div>
+          </div>
+        )}
+        {node.data.type === "action.twilio" && (
+          <div style={{ background: "#0f1117", border: "1px solid #2a2d3e", borderRadius: 6, padding: "8px 10px", fontSize: 10, color: "#94a3b8", marginTop: 6, lineHeight: 1.8 }}>
+            <div style={{ color: "#f22f46", fontWeight: 600, marginBottom: 4 }}>🔴 Twilio SMS / WhatsApp / Voice</div>
+            Create a credential with <code style={{ color: "#a78bfa" }}>account_sid</code> + <code style={{ color: "#a78bfa" }}>auth_token</code> (from console.twilio.com).<br />
+            <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: "0 10px", marginTop: 6 }}>
+              <code style={{ color: "#4ade80" }}>send_sms</code><span>→ {"{ sid, status, to, from, body }"}</span>
+              <code style={{ color: "#60a5fa" }}>send_whatsapp</code><span>→ same as send_sms — prefixes <code>whatsapp:</code> automatically</span>
+              <code style={{ color: "#a78bfa" }}>make_call</code><span>→ twiml_url or inline TwiML → {"{ sid, status }"}</span>
+              <code style={{ color: "#fbbf24" }}>check_status</code><span>→ pass sid + resource_type (message/call) → current status</span>
+              <code style={{ color: "#94a3b8" }}>list_messages</code><span>→ filter by to/from → {"{ messages[], count }"}</span>
+            </div>
+          </div>
+        )}
         {node.data.type === "note" && (
           <div style={{ background: "#0f1117", border: "1px solid #2a2d3e", borderRadius: 6, padding: "8px 10px", fontSize: 10, color: "#94a3b8", marginTop: 6 }}>
             <div style={{ color: "#ca8a04", fontWeight: 600, marginBottom: 5 }}>📝 Sticky notes are skipped by the executor</div>
