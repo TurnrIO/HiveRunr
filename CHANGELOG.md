@@ -4,6 +4,61 @@ All notable changes are documented here, newest first.
 
 ---
 
+## [0.3.0] — 2026-04-22 — Full React Canvas, Integrations & Workflow Intelligence
+
+This release completes the Vite + React frontend migration (F-series), ships five new integration nodes, adds collaborative canvas features (multi-select, alignment, subflow extraction), introduces flow tagging & health badges, run annotations, and completes the flow analytics suite.
+
+### Frontend migration complete (F-series)
+- **Vite + React multi-page app** — all six pages (admin SPA, canvas, login, signup, reset, invite) are now fully React; the two monolithic `admin.html` / `canvas.html` files are deleted
+- **Canvas rebuilt** in `CanvasApp.jsx` with full feature parity: SSE run streaming, real-time node state, autosave (30 s debounce), dirty-state badge, undo/redo, multi-select + clipboard, alignment toolbar, subflow extraction, `Ctrl+F` node search, minimap toggle, keyboard shortcuts modal
+- **Shared component library** — `Toast`, `ConfirmModal`, `ReplayEditModal`, `TraceRow`, `StatusDot`, `RoleBadge`, `ViewerBanner`, `useFocusTrap` all in `frontend/src/components/`
+- **Error boundaries** — `ErrorBoundary.jsx` wraps admin SPA (per-route) and canvas; dark-themed fallback with "Try again" / "Reload" and collapsible stack trace
+
+### Canvas: power-user features
+- **Multi-select + clipboard** (`Ctrl+A/C/V/D`) — `SelectionMode.Partial`, paste staggers nodes by +60 px
+- **Alignment toolbar** — floating bar when ≥2 nodes selected; 8 ops: align left/centre/right/top/middle/bottom + distribute H/V; each op is undoable
+- **Subflow extraction** — right-click → "Extract N nodes to subflow…"; creates a new flow via the API and replaces the selection with a `call_graph` node
+- **Node search** (`Ctrl+F`) — floating bar with text filter + group chips; jump-to-node centres viewport
+
+### New integration nodes
+- **`action.mysql`** — pymysql DictCursor; host/port/user/pass/db or DSN; `last_insert_id` in output
+- **`action.jira`** — Jira REST API v3; Basic auth (email + api_token); 8 operations: get/create/update/delete issue, add-comment, JQL search, get-transitions, transition-issue; ADF body wrapping
+- **`action.wait_for_approval`** (N7) — human-in-the-loop gate; Celery polls Redis; styled HTML email with Approve/Reject buttons; public decision endpoints return themed result page
+- **`action.redis`** — GET/SET/DEL/LPUSH/RPOP/INCR/EXPIRE; credential: connection URL
+- **`action.graphql`** — query/mutation with variables; credential stores endpoint + Authorization header
+- **`action.pdf`** — HTML → PDF via xhtml2pdf; output: `pdf_bytes` (base64)
+- **`trigger.rss`** — RSS/Atom feed polling; lookback window + filter expression; output: `entries[]`
+- **`action.airtable`** — Airtable REST API; list/get/create/update/delete-record
+
+### Flow analytics (A2)
+- **Metrics page** rebuilt with Overview + Per-flow tabs; 7/14/30/90 d range selector
+- **Per-flow table** — sortable by total/succeeded/failed/error-rate/avg-ms/P95/P99
+- **Daily chart** — stacked volume bars + SVG duration overlay
+- **`GET /api/analytics/flows`** + **`GET /api/analytics/daily`** — server-side `PERCENTILE_CONT` aggregation
+
+### Flow management
+- **Flow tags** — `tags TEXT[]` column (migration 0013) + GIN index; inline chip editor in admin; tag filter bar on Flows page
+- **Flow health badges** — colour-coded error-rate pill per flow (green ≤5%, amber ≤25%, red >25%); fetched from analytics API on page load
+- **Run annotations** — `note TEXT` column (migration 0014); `PUT /api/runs/{id}/note` endpoint; inline note editor on every run row in Logs page
+
+### Upgrade notes
+
+**Database migrations required** — run Alembic before starting:
+```
+docker compose exec api alembic upgrade head
+```
+
+New migrations: `0012_approvals.py`, `0013_flow_tags.py`, `0014_run_notes.py`
+
+**New Python dependencies** (already in `requirements.txt`):
+- `pymysql` — MySQL/MariaDB support (`action.mysql`)
+- `boto3` — S3 + AWS SDK (added in 0.2.0, unchanged)
+- `xhtml2pdf` — HTML → PDF conversion (`action.pdf`)
+
+**No new env vars** required for this release. All new features are opt-in or self-contained.
+
+---
+
 ## [0.2.0] — 2026-04-20 — Resilience, Observability & Power-User Features
 
 This release covers all work since 0.1.0: operations hardening, DB resilience, credential OAuth, nine new node types, full mobile + accessibility overhaul, canvas power-user features, and the webhook rate-limit config UI.

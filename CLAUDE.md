@@ -295,6 +295,7 @@ OWNER_EMAIL=
 | D1 | Flow tags — migration `0013_flow_tags.py` adds `tags TEXT[]` + GIN index to `graph_workflows`; `create_graph`/`update_graph` accept tags; `GraphRow` inline chip editor (add with Enter/comma, remove by clicking, normalised to lowercase-kebab); `Flows.jsx` tag filter bar above the list |
 | R1 | Run annotations — migration `0014_run_notes.py` adds `note TEXT` to runs; `set_run_note()` db helper; `PUT /api/runs/{id}/note` endpoint; `Logs.jsx` 📝 button per row opens inline note editor (Enter saves, Esc cancels, Clear button); existing note shown as italic muted text under the run; note also shown in the detail panel |
 | H1 | Flow health badges — `Flows.jsx` fetches `/api/analytics/flows?days=30` on load; `HealthBadge` component on each `GraphRow` shows colour-coded error-rate pill (green ≤5%, amber ≤25%, red >25%); tooltip shows total run count + last run timestamp; badge absent when no history |
+| F9 | Canvas main app complete — `CanvasApp.jsx` is the full ReactFlow root with SSE run streaming, autosave (30 s debounce), dirty-state badge, undo/redo history, multi-select + clipboard, alignment toolbar, subflow extraction, `Ctrl+F` node search, minimap toggle, keyboard shortcuts modal; `canvas.html` deleted from `app/static/`; F-series migration complete |
 
 ---
 
@@ -446,7 +447,41 @@ directory structure changed.
 
 49. ~~**F8 — Canvas: modals**~~ ✓ Done — `NodeEditorModal.jsx` (3-col n8n-style, TestPanel, VarField autocomplete), `HistoryModal.jsx`, `OpenModal.jsx`, `TestPayloadModal.jsx`, `ValidationModal.jsx`, `EdgeLabelModal.jsx`, `PermissionsModal.jsx`, `ShortcutsModal.jsx`, `NodeSearchBar.jsx`; shared helpers in `canvasHelpers.js` + `VarField.jsx`; `NioBody`/`JsonSchemaTree`/`NodeIOPanel` exported from `ConfigPanel.jsx`; direct-navigation SPA routes added to `main.py` (`/settings`, `/graphs`, etc.).
 
-50. **F9 — Canvas: main app + delete canvas.html** — `CanvasApp.jsx` (ReactFlow root, SSE streaming, keyboard shortcuts, minimap, autosave, dirty-state); `NodeSearchBar.jsx`; delete `app/static/canvas.html`.
+50. ~~**F9 — Canvas: main app + delete canvas.html**~~ ✓ Done — `CanvasApp.jsx` (ReactFlow root, SSE streaming, keyboard shortcuts, minimap, autosave, dirty-state, multi-select/clipboard, alignment toolbar, subflow extraction, search bar); `canvas.html` deleted from `app/static/`.
+
+---
+
+## Active backlog — next sprints (Q3)
+
+### 🔴 V1 — v0.3.0 release + upgrade docs
+
+51. **CHANGELOG `[0.3.0]` + version bump** — full changelog entry covering all C/D/R/H/N sprints since 0.2.0; bump `app/_version.py` + `pyproject.toml`; create `v0.3.0` git tag.
+
+---
+
+### 🟠 N5 — More integrations
+
+52. **New node: `action.hubspot`** — HubSpot CRM REST API v3; credential: `access_token`; operations: get/create/update contact, search contacts (filter properties), get/create deal, associate contact↔deal; output: `object`, `results[]`.
+
+53. **New node: `action.mongodb`** — pymongo; credential JSON with `uri` (connection string); operations: find, insert-one, update-one, delete-one, aggregate; output: `documents[]`, `count`, `document` (first), `inserted_id`, `modified_count`.
+
+54. **New node: `action.twilio`** — Twilio SMS/voice REST API; credential: `account_sid` + `auth_token`; operations: send-sms, send-whatsapp, make-call, check-status; output: `sid`, `status`, `to`, `from`, `body`.
+
+---
+
+### 🟡 Q1 — Queue & concurrency
+
+55. **Flow run queue depth** — `GET /api/runs/queue` returns Celery `inspect().reserved()` + `scheduled()` counts per worker; Dashboard card shows queue depth + active workers; auto-refresh every 10 s.
+
+56. **Run priority** — `priority` field on `graph_workflows` (0–9, default 5); Celery `apply_async(priority=…)` passes it through; priority selector in GraphRow ⋯ menu and canvas topbar.
+
+---
+
+### 🟢 UX2 — Polish round 2
+
+57. **Global search** — `Ctrl+K` command palette in admin SPA; searches flows, runs (by ID/name), credentials, settings pages; keyboard-navigable results list; jump directly to result.
+
+58. **Pinned flows** — `pinned BOOLEAN DEFAULT false` on `graph_workflows`; pin toggle in GraphRow ⋯ menu; Flows page shows a "Pinned" section at the top (no card separator needed if ≤5 pins).
 
 ---
 
@@ -458,4 +493,4 @@ directory structure changed.
 - **API auth**: all `/api/` routes require session cookie or `Authorization: Bearer <token>` header (or legacy `x-api-token`).
 - **Frontend toasts**: call `showToast(message, "error"|"success")` passed as prop — do not use `alert()`.
 - **Confirm dialogs**: set `confirmState({message, confirmLabel, fn})` — the `ConfirmModal` handles the rest.
-- **New node**: create `app/nodes/action_xyz.py` with `NODE_TYPE`, `LABEL`, `run()`; add `NODE_DEFS` entry and hint JSX to both panels in `canvas.html`.
+- **New node**: create `app/nodes/action_xyz.py` with `NODE_TYPE`, `LABEL`, `run()`; add entry to `frontend/src/pages/canvas/nodeDefs.js` and hint panel to `frontend/src/pages/canvas/ConfigPanel.jsx`.
