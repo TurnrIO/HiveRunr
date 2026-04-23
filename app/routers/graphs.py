@@ -57,6 +57,7 @@ class GraphUpdate(BaseModel):
     name: Optional[str] = None; description: Optional[str] = None
     graph_data: Optional[dict] = None; enabled: Optional[bool] = None
     tags: Optional[list[str]] = None; priority: Optional[int] = None
+    pinned: Optional[bool] = None
 
 
 @router.get("/api/graphs")
@@ -119,7 +120,7 @@ def api_graph_update(graph_id: int, body: GraphUpdate, request: Request):
     update_graph(graph_id, name=body.name, description=body.description,
                  graph_json=json.dumps(body.graph_data) if body.graph_data is not None else None,
                  enabled=body.enabled, tags=body.tags,
-                 priority=body.priority)
+                 priority=body.priority, pinned=body.pinned)
     if body.graph_data is not None:
         _sync_cron_triggers(graph_id, body.graph_data)
         gname = body.name or g['name']

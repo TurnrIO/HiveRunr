@@ -95,8 +95,9 @@ export function Flows({ showToast }) {
     if (activeTag && !(Array.isArray(g.tags) ? g.tags : []).includes(activeTag)) return false;
     return true;
   });
-  const exampleFlows = filtered.filter(g => isExample(g.name));
-  const userFlows    = filtered.filter(g => !isExample(g.name));
+  const pinnedFlows  = filtered.filter(g => g.pinned);
+  const exampleFlows = filtered.filter(g => !g.pinned && isExample(g.name));
+  const userFlows    = filtered.filter(g => !g.pinned && !isExample(g.name));
   const ro = user?.role === "viewer";
 
   return (
@@ -165,6 +166,23 @@ export function Flows({ showToast }) {
         <div className="card"><div className="empty-state">No flows match "{search}".</div></div>
       ) : (
         <div>
+          {pinnedFlows.length > 0 && (
+            <div className="card" style={{ marginBottom: 16, borderColor: "#4338ca66" }}>
+              <div style={{ display: "flex", alignItems: "center", marginBottom: 12, gap: 8 }}>
+                <span style={{ fontSize: 14 }}>📌</span>
+                <div className="card-title" style={{ marginBottom: 0 }}>
+                  Pinned <span style={{ fontSize: 11, color: "#64748b", fontWeight: 400 }}>({pinnedFlows.length})</span>
+                </div>
+              </div>
+              {pinnedFlows.map(g => (
+                <GraphRow key={g.id} g={g} running={running}
+                  onRun={runGraph} onToggle={toggleGraph} onDuplicate={duplicateGraph}
+                  onDelete={deleteGraph} onRename={renameGraph}
+                  showToast={showToast} load={load} isExample={isExample(g.name)} ro={ro}
+                  health={healthMap[g.id]} />
+              ))}
+            </div>
+          )}
           {exampleFlows.length > 0 && (
             <div className="card" style={{ marginBottom: 16 }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>

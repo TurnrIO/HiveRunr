@@ -192,6 +192,10 @@ export function GraphRow({ g, running, onRun, onToggle, onDuplicate, onDelete, o
 
         {open && (
           <div style={{ display: "flex", gap: 8, marginTop: 10, paddingTop: 10, borderTop: "1px solid #1e2235", flexWrap: "wrap" }}>
+            <button className="btn btn-ghost" onClick={async () => {
+              try { await api("PUT", `/api/graphs/${g.id}`, { pinned: !g.pinned }); load(); showToast(g.pinned ? "Unpinned" : "Pinned"); }
+              catch (e) { showToast(e.message, "error"); }
+            }}>{g.pinned ? "📌 Unpin" : "📌 Pin"}</button>
             <button className="btn btn-ghost" onClick={() => onRename(g)}>✏ Rename</button>
             <button className="btn btn-ghost" onClick={() => onDuplicate(g)}>📋 Duplicate</button>
             <button className="btn btn-ghost" onClick={openVersionHistory} disabled={loadingVersions}>📜 History</button>
