@@ -4,6 +4,7 @@ import { useWorkspace } from "../contexts/WorkspaceContext.jsx";
 import { useAuth } from "../contexts/AuthContext.jsx";
 import { useFocusTrap } from "../components/useFocusTrap.js";
 import { Toast } from "../components/Toast.jsx";
+import { CommandPalette } from "../components/CommandPalette.jsx";
 
 // ── Navigation pages ─────────────────────────────────────────────────────
 export const PAGES = [
@@ -24,8 +25,9 @@ export const PAGES = [
 
 // ── Keyboard shortcuts modal ──────────────────────────────────────────────
 const ADMIN_SHORTCUTS = [
+  { key: "Ctrl+K", desc: "Open global search / command palette" },
   { key: "?",      desc: "Toggle this cheatsheet" },
-  { key: "Escape", desc: "Close sidebar / cheatsheet" },
+  { key: "Escape", desc: "Close sidebar / cheatsheet / palette" },
 ];
 
 function AdminShortcutsModal({ onClose }) {
@@ -69,6 +71,7 @@ export function AdminLayout({ showToast }) {
   const { workspaces, activeWorkspace, switchWorkspace } = useWorkspace();
   const [sidebarOpen, setSidebarOpen]     = useState(false);
   const [showShortcuts, setShowShortcuts] = useState(false);
+  const [showPalette, setShowPalette]     = useState(false);
   const [versionInfo, setVersionInfo]     = useState(null);
   const [updateDismissed, setUpdateDismissed] = useState(() => {
     try { return localStorage.getItem("hr_update_dismissed") || ""; } catch { return ""; }
@@ -89,7 +92,8 @@ export function AdminLayout({ showToast }) {
       const tag = document.activeElement?.tagName;
       if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || document.activeElement?.isContentEditable) return;
       if (e.key === "?") { setShowShortcuts(s => !s); }
-      if (e.key === "Escape") { setShowShortcuts(false); setSidebarOpen(false); }
+      if ((e.key === "k" || e.key === "K") && (e.ctrlKey || e.metaKey)) { e.preventDefault(); setShowPalette(s => !s); }
+      if (e.key === "Escape") { setShowShortcuts(false); setSidebarOpen(false); setShowPalette(false); }
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -198,6 +202,12 @@ export function AdminLayout({ showToast }) {
           <a className="ext-link" href="/flower/" target="_blank" rel="noopener"><span className="el-icon">🌸</span>Flower / Celery</a>
           <a className="ext-link" href="/docs" target="_blank" rel="noopener"><span className="el-icon">📖</span>API Docs</a>
           <a className="ext-link" href="/health" target="_blank" rel="noopener"><span className="el-icon">💚</span>Health check</a>
+          <button className="ext-link" onClick={() => setShowPalette(true)}
+            style={{ background: "none", border: "none", width: "100%", textAlign: "left", cursor: "pointer" }}>
+            <span className="el-icon">🔍</span>Search
+            <kbd style={{ marginLeft: "auto", background: "#1e2235", border: "1px solid #2a2d3e", borderRadius: 4,
+              padding: "1px 5px", fontSize: 9, color: "#6366f1", fontFamily: "monospace" }}>Ctrl+K</kbd>
+          </button>
           <button className="ext-link" onClick={() => setShowShortcuts(true)}
             style={{ background: "none", border: "none", width: "100%", textAlign: "left", cursor: "pointer" }}>
             <span className="el-icon">⌨️</span>Keyboard shortcuts
@@ -238,6 +248,7 @@ export function AdminLayout({ showToast }) {
       </div>
 
       {showShortcuts && <AdminShortcutsModal onClose={() => setShowShortcuts(false)} />}
+      <CommandPalette open={showPalette} onClose={() => setShowPalette(false)} navigate={navigate} />
     </>
   );
 }
