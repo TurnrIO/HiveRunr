@@ -104,7 +104,7 @@ def run(config, inp, context, logger, creds=None, **kwargs):
             try:
                 pipeline = json.loads(pipeline_raw) if isinstance(pipeline_raw, str) else pipeline_raw
             except Exception:
-                raise ValueError(f"MongoDB aggregate: pipeline must be valid JSON array")
+                raise ValueError("MongoDB aggregate: pipeline must be valid JSON array")
             docs = [_bson_to_dict(d) for d in coll.aggregate(pipeline)]
             return {"documents": docs, "count": len(docs), "document": docs[0] if docs else None}
 

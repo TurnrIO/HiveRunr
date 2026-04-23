@@ -113,7 +113,7 @@ def run(config, inp, context, logger, creds=None, **kwargs):
     elif op == "create_deal":
         props_raw = _render(config.get("properties", "{}"), context, creds)
         try:   props = json.loads(props_raw) if isinstance(props_raw, str) else props_raw
-        except: raise ValueError(f"HubSpot create_deal: properties must be valid JSON")
+        except: raise ValueError("HubSpot create_deal: properties must be valid JSON")
         result = _req("POST", "/crm/v3/objects/deals", token, {"properties": props})
         flat   = _flatten(result)
         return {"object": flat, "id": flat.get("id"), "properties": result.get("properties", {}), "raw": result}
@@ -127,7 +127,6 @@ def run(config, inp, context, logger, creds=None, **kwargs):
         assoc_type = _render(config.get("association_type", ""), context, creds)
         # default association type labels
         if not assoc_type:
-            pair = tuple(sorted([from_type.rstrip("s"), to_type.rstrip("s")]))
             assoc_type = f"{from_type.rstrip('s')}_to_{to_type.rstrip('s')}"
         body = [{"associationCategory": "HUBSPOT_DEFINED", "associationTypeId": assoc_type}]
         _req("PUT", f"/crm/v4/objects/{from_type}/{from_id}/associations/{to_type}/{to_id}", token, body)
