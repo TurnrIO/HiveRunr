@@ -270,6 +270,51 @@ def api_set_run_note(run_id: int, body: _NoteBody, request: Request):
     return {"ok": True, "run_id": run_id, "note": body.note or None}
 
 
+@router.get("/api/runs/queue")
+def api_run_queue(request: Request):
+    """Return current Celery queue depth and active worker counts.
+
+    Uses Celery inspect() with a short timeout so it never blocks long.
+    Falls back gracefully if the broker is unreachable.
+    """
+    _require_run_scope(request)
+    try:
+        from app.worker import app as _celery
+        i = _celery.control.inspect(timeout=2)
+
+        active_map    = i.active()    or {}
+        reserved_map  = i.reserved()  or {}
+        scheduled_map = i.scheduled() or {}
+
+        active_count    = sum(len(v) for v in active_map.values())
+        reserved_count  = sum(len(v) for v in reserved_map.values())
+        scheduled_count = sum(len(v) for v in scheduled_map.values())
+        worker_names    = sorted(set(list(active_map) + list(reserved_map) + list(scheduled_map)))
+
+        # Per-worker summary
+        workers = []
+        for w in worker_names:
+            workers.append({
+                "name":      w,
+                "active":    len(active_map.get(w,    [])),
+                "reserved":  len(reserved_map.get(w,  [])),
+                "scheduled": len(scheduled_map.get(w, [])),
+            })
+
+        return {
+            "ok":           True,
+            "active":       active_count,
+            "reserved":     reserved_count,
+            "scheduled":    scheduled_count,
+            "total_queued": reserved_count + scheduled_count,
+            "workers":      workers,
+            "worker_count": len(workers),
+        }
+    except Exception as exc:
+        log.warning("Queue inspect failed: %s", exc)
+        return {"ok": False, "error": str(exc), "active": 0, "reserved": 0, "scheduled": 0, "total_queued": 0, "workers": [], "worker_count": 0}
+
+
 class _ReplayBody(BaseModel):
     payload: Optional[dict] = None  # if provided, overrides stored initial_payload
 

@@ -12,6 +12,7 @@ export function Dashboard({ showToast }) {
   const [loading, setLoading]       = useState(true);
   const [expandedRunId, setExpanded] = useState(null);
   const [replayEdit, setReplayEdit] = useState(null);
+  const [queue, setQueue]           = useState(null);
 
   const load = useCallback(async () => {
     try {
@@ -27,10 +28,17 @@ export function Dashboard({ showToast }) {
     setLoading(false);
   }, []);
 
+  const loadQueue = useCallback(async () => {
+    try { setQueue(await api("GET", "/api/runs/queue")); }
+    catch { /* queue is optional */ }
+  }, []);
+
   useEffect(() => {
     load();
-    const t = setInterval(load, 5000);
-    return () => clearInterval(t);
+    loadQueue();
+    const t1 = setInterval(load, 5000);
+    const t2 = setInterval(loadQueue, 10000);
+    return () => { clearInterval(t1); clearInterval(t2); };
   }, []);
 
   const stats = {
@@ -98,6 +106,45 @@ export function Dashboard({ showToast }) {
         <div className="stat-card"><div className="stat-val" style={{ color: "#4ade80" }}>{stats.ok}</div><div className="stat-lbl">Succeeded</div></div>
         <div className="stat-card"><div className="stat-val" style={{ color: "#f87171" }}>{stats.failed}</div><div className="stat-lbl">Failed</div></div>
       </div>
+
+      {queue && (
+        <div className="card" style={{ marginBottom: 16 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+            <div className="card-title" style={{ marginBottom: 0 }}>⚙ Worker Queue</div>
+            <span style={{ fontSize: 11, color: "#4b5563" }}>auto-refreshes every 10 s</span>
+          </div>
+          {!queue.ok ? (
+            <div style={{ fontSize: 12, color: "#94a3b8", fontStyle: "italic" }}>⚠ {queue.error || "Could not reach broker"}</div>
+          ) : (
+            <div style={{ display: "flex", gap: 16, flexWrap: "wrap", alignItems: "flex-start" }}>
+              <div style={{ display: "flex", gap: 10 }}>
+                {[
+                  { label: "Active",    val: queue.active,       color: "#34d399" },
+                  { label: "Reserved",  val: queue.reserved,     color: "#60a5fa" },
+                  { label: "Scheduled", val: queue.scheduled,    color: "#a78bfa" },
+                  { label: "Workers",   val: queue.worker_count, color: "#fbbf24" },
+                ].map(({ label, val, color }) => (
+                  <div key={label} style={{ textAlign: "center", minWidth: 56 }}>
+                    <div style={{ fontSize: 20, fontWeight: 700, color }}>{val}</div>
+                    <div style={{ fontSize: 10, color: "#64748b" }}>{label}</div>
+                  </div>
+                ))}
+              </div>
+              {queue.workers.length > 0 && (
+                <div style={{ flex: 1, minWidth: 200 }}>
+                  {queue.workers.map(w => (
+                    <div key={w.name} style={{ display: "flex", alignItems: "center", gap: 8, padding: "3px 0", borderBottom: "1px solid #1e2235" }}>
+                      <span style={{ fontSize: 10, color: "#64748b", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={w.name}>{w.name}</span>
+                      <span style={{ fontSize: 10, color: "#34d399", minWidth: 28 }} title="active">{w.active}▶</span>
+                      <span style={{ fontSize: 10, color: "#60a5fa", minWidth: 30 }} title="reserved">{w.reserved}⏳</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {(workflows.length > 0 || graphs.length > 0) && (
         <div style={{ display: "grid", gridTemplateColumns: workflows.length > 0 && graphs.length > 0 ? "1fr 1fr" : "1fr", gap: 16, marginBottom: 24 }}>
