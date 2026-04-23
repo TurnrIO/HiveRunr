@@ -198,6 +198,21 @@ export function GraphRow({ g, running, onRun, onToggle, onDuplicate, onDelete, o
             <button className="btn btn-ghost" onClick={openAlerts}>🔔 Alerts</button>
             <button className="btn btn-ghost" onClick={() => { setEditingTags(t => !t); setTagInput(""); }}>🏷 Tags</button>
             <button className="btn btn-ghost" onClick={() => onToggle(g.id, g.enabled)}>{g.enabled ? "⏸ Disable" : "▶ Enable"}</button>
+            <label style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 12, color: "#94a3b8" }}>
+              ⚡ Priority
+              <select
+                value={g.priority ?? 5}
+                onChange={async e => {
+                  try { await api("PUT", `/api/graphs/${g.id}`, { priority: Number(e.target.value) }); load(); showToast("Priority updated"); }
+                  catch (err) { showToast(err.message, "error"); }
+                }}
+                style={{ background: "#1a1d2e", color: "#e2e8f0", border: "1px solid #2a2d3e", borderRadius: 4, padding: "2px 6px", fontSize: 12 }}
+              >
+                {[0,1,2,3,4,5,6,7,8,9].map(n => (
+                  <option key={n} value={n}>{n}{n === 5 ? " (default)" : n === 0 ? " (lowest)" : n === 9 ? " (highest)" : ""}</option>
+                ))}
+              </select>
+            </label>
             <div style={{ flex: 1 }} />
             <div style={{ fontSize: 11, color: "#4b5563", alignSelf: "center", display: "flex", gap: 8, alignItems: "center" }}>
               Webhook: <span style={{ fontFamily: "monospace", fontSize: 12, color: "#94a3b8" }}>{"••••••••"}</span>

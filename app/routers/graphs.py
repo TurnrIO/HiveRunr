@@ -56,7 +56,7 @@ class GraphCreate(BaseModel):
 class GraphUpdate(BaseModel):
     name: Optional[str] = None; description: Optional[str] = None
     graph_data: Optional[dict] = None; enabled: Optional[bool] = None
-    tags: Optional[list[str]] = None
+    tags: Optional[list[str]] = None; priority: Optional[int] = None
 
 
 @router.get("/api/graphs")
@@ -118,7 +118,8 @@ def api_graph_update(graph_id: int, body: GraphUpdate, request: Request):
         _check_flow_access(request, graph_id, "editor")
     update_graph(graph_id, name=body.name, description=body.description,
                  graph_json=json.dumps(body.graph_data) if body.graph_data is not None else None,
-                 enabled=body.enabled, tags=body.tags)
+                 enabled=body.enabled, tags=body.tags,
+                 priority=body.priority)
     if body.graph_data is not None:
         _sync_cron_triggers(graph_id, body.graph_data)
         gname = body.name or g['name']
@@ -229,7 +230,9 @@ async def api_graph_run(graph_id: int, request: Request):
     except Exception:
         body = {}
     payload = body or {"source": "api"}
-    task = enqueue_graph.delay(graph_id, payload)
+    # Pass flow priority (0=lowest … 9=highest) to Celery; default 5 if column absent
+    flow_priority = g.get("priority", 5) if isinstance(g, dict) else 5
+    task = enqueue_graph.apply_async(args=[graph_id, payload], priority=flow_priority)
     try:
         from app.core.db import get_conn
         with get_conn() as conn:

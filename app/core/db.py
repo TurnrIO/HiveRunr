@@ -580,7 +580,7 @@ def get_graph_by_token(token):
         row = cur.fetchone()
         return dict(row) if row else None
 
-def update_graph(graph_id, name=None, description=None, graph_json=None, enabled=None, tags=None):
+def update_graph(graph_id, name=None, description=None, graph_json=None, enabled=None, tags=None, priority=None):
     with get_conn() as conn:
         cur = conn.cursor()
         if name        is not None: cur.execute("UPDATE graph_workflows SET name=%s,        updated_at=NOW() WHERE id=%s", (name,        graph_id))
@@ -588,6 +588,7 @@ def update_graph(graph_id, name=None, description=None, graph_json=None, enabled
         if graph_json  is not None: cur.execute("UPDATE graph_workflows SET graph_json=%s,  updated_at=NOW() WHERE id=%s", (graph_json,  graph_id))
         if enabled     is not None: cur.execute("UPDATE graph_workflows SET enabled=%s,      updated_at=NOW() WHERE id=%s", (enabled,     graph_id))
         if tags        is not None: cur.execute("UPDATE graph_workflows SET tags=%s,         updated_at=NOW() WHERE id=%s", (tags,        graph_id))
+        if priority    is not None: cur.execute("UPDATE graph_workflows SET priority=%s,     updated_at=NOW() WHERE id=%s", (int(priority), graph_id))
 
 def duplicate_graph(graph_id: int) -> dict:
     """Clone a graph, appending ' (copy)' to the name and generating a fresh slug."""

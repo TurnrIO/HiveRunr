@@ -110,7 +110,14 @@ def _make_job(sched, scheduler_ref=None):
             else (sched["payload"] or {})
         )
         if sched.get("graph_id"):
-            task = enqueue_graph.delay(sched["graph_id"], payload)
+            # Look up flow priority; fall back to 5 if column absent (pre-migration)
+            try:
+                from app.core.db import get_graph as _get_graph
+                _g = _get_graph(sched["graph_id"])
+                _priority = int((_g or {}).get("priority", 5))
+            except Exception:
+                _priority = 5
+            task = enqueue_graph.apply_async(args=[sched["graph_id"], payload], priority=_priority)
             # Pre-create a run record scoped to the schedule's workspace
             try:
                 from app.core.db import get_conn
