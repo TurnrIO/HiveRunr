@@ -60,51 +60,91 @@ export function computeAutoLayout(nodes, edges) {
 // ── Flow validation ────────────────────────────────────────────────────────────
 export const REQUIRED_FIELDS = {
   "trigger.cron":         ["cron"],
+  "trigger.email":        ["credential"],
+  "trigger.rss":          ["url"],
   "action.http_request":  ["url"],
   "action.send_email":    ["to", "subject"],
   "action.ssh":           ["host", "command"],
   "action.sftp":          ["host", "remote_path"],
   "action.call_graph":    ["graph_id"],
-  "action.slack":         ["webhook_url", "message"],
+  "action.slack":         ["message"],
+  "action.discord":       ["message"],
+  "action.telegram":      ["chat_id", "text"],
   "action.llm_call":      ["prompt"],
   "action.run_script":    ["script"],
   "action.transform":     ["expression"],
   "action.condition":     ["expression"],
-  "action.github":        ["owner", "repo", "action"],
-  "action.google_sheets": ["spreadsheet_id", "range", "action"],
+  "action.github":        ["repo", "action"],
+  "action.google_sheets": ["spreadsheet_id", "action"],
   "action.notion":        ["action"],
+  "action.postgres":      ["query"],
+  "action.mysql":         ["query"],
+  "action.mongodb":       ["database", "collection", "operation"],
+  "action.s3":            ["bucket", "operation"],
+  "action.airtable":      ["operation"],
+  "action.hubspot":       ["operation"],
+  "action.jira":          ["operation"],
+  "action.twilio":        ["operation"],
+  "action.graphql":       ["query"],
+  "action.redis":         ["operation"],
+  "action.pdf":           ["html"],
+  "action.wait_for_approval": ["to"],
 };
+
+/**
+ * Compute validation issues for a SINGLE node.
+ * Returns an array of { level: "error"|"warning", msg: string }.
+ * Pass credNames as a Set<string> for credential checking.
+ */
+export function nodeIssues(node, edges, credNames) {
+  if (!node.data || node.data.type === "note" || node.data.disabled) return [];
+  const issues    = [];
+  const label     = node.data.label || node.data.type || node.id;
+  const isTrigger = node.data.type?.startsWith("trigger.");
+  const cfg       = node.data.config || {};
+  const creds     = credNames instanceof Set ? credNames : new Set(credNames || []);
+
+  // Disconnected non-trigger node
+  const connectedIds = new Set([...edges.map(e => e.source), ...edges.map(e => e.target)]);
+  if (!isTrigger && !connectedIds.has(node.id))
+    issues.push({ level: "warning", msg: "Not connected to any other node" });
+
+  // Required fields
+  (REQUIRED_FIELDS[node.data.type] || []).forEach(f => {
+    if (!cfg[f] || !String(cfg[f]).trim())
+      issues.push({ level: "warning", msg: `Required field "${f}" is empty` });
+  });
+
+  // Credential field by name (when a "credential" field is used)
+  const credField = cfg.credential;
+  if (credField && credField.trim() && !creds.has(credField.trim()))
+    issues.push({ level: "warning", msg: `Credential "${credField}" not found` });
+
+  // Inline {{creds.name}} references
+  const configStr = JSON.stringify(cfg);
+  [...configStr.matchAll(/\{\{creds\.([^.}]+)\.[^}]*\}\}/g)].forEach(m => {
+    const name = m[1].trim();
+    if (!creds.has(name))
+      issues.push({ level: "warning", msg: `Credential "{{creds.${name}…}}" not found` });
+  });
+
+  return issues;
+}
 
 export function validateFlow(nodes, edges, credentials) {
   const issues   = [];
   const triggers = nodes.filter(n => n.data.type?.startsWith("trigger.") && !n.data.disabled);
+  const credNames = new Set((credentials || []).map(c => c.name));
 
   if (triggers.length === 0)
     issues.push({ level: "error", msg: "No trigger node — the flow can't start" });
 
-  const connectedIds = new Set([...edges.map(e => e.source), ...edges.map(e => e.target)]);
-  const credNames    = new Set((credentials || []).map(c => c.name));
-
   nodes.forEach(node => {
     if (node.data.type === "note" || node.data.disabled) return;
-    const label     = node.data.label || node.data.type || node.id;
-    const isTrigger = node.data.type?.startsWith("trigger.");
-    const cfg       = node.data.config || {};
-
-    if (!isTrigger && !connectedIds.has(node.id))
-      issues.push({ level: "warning", msg: `"${label}" is not connected to anything` });
-
-    (REQUIRED_FIELDS[node.data.type] || []).forEach(f => {
-      if (!cfg[f] || !String(cfg[f]).trim())
-        issues.push({ level: "warning", msg: `"${label}" — required field "${f}" is empty` });
-    });
-
-    const configStr = JSON.stringify(cfg);
-    [...configStr.matchAll(/\{\{creds\.([^}]+)\}\}/g)].forEach(m => {
-      const name = m[1].trim();
-      if (!credNames.has(name))
-        issues.push({ level: "warning", msg: `"${label}" references missing credential "{{creds.${name}}}"` });
-    });
+    const label = node.data.label || node.data.type || node.id;
+    nodeIssues(node, edges, credNames).forEach(iss =>
+      issues.push({ ...iss, msg: `"${label}" — ${iss.msg}` })
+    );
   });
 
   return issues;

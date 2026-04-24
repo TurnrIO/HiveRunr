@@ -1,16 +1,21 @@
+import { useContext } from "react";
 import { Handle, Position } from "reactflow";
 import { NODE_DEFS } from "./nodeDefs.js";
 import { StickyNote } from "./StickyNote.jsx";
+import { ValidationContext } from "./CanvasApp.jsx";
 
 export function CustomNode({ id, data, selected }) {
   if (data.type === "note") return <StickyNote id={id} data={data} selected={selected} />;
+
+  const validationMap = useContext(ValidationContext);
+  const issues = validationMap.get(id) || [];
 
   const def        = NODE_DEFS[data.type] || { label: data.type, icon: "?", color: "#475569" };
   const isCondition = data.type === "action.condition";
   const isLoop      = data.type === "action.loop";
   const isTrigger   = data.type?.startsWith("trigger.");
   const isDisabled  = !!data.disabled;
-  const runStatus   = data._runStatus;  // "ok" | "err" | "skip" | "pending"
+  const runStatus   = data._runStatus;  // "ok" | "err" | "skip" | "pending" | "unreached"
   const runOutput   = data._runOutput;
   const runDuration = data._runDurationMs;
 
@@ -60,6 +65,14 @@ export function CustomNode({ id, data, selected }) {
 
       <div className="node-footer">
         <span className="node-id">#{id}</span>
+        {issues.length > 0 && !runStatus && (
+          <span
+            className="node-validation-badge"
+            title={issues.map(i => i.msg).join("\n")}
+          >
+            ⚠ {issues.length}
+          </span>
+        )}
         {runStatus && (
           <span className={`node-status-badge ${runStatus}`}>
             {runStatus === "ok"        ? "✓"

@@ -1,6 +1,7 @@
-import { useState, useEffect, useRef, useMemo, useCallback } from "react";
+import { useState, useEffect, useRef, useMemo, useCallback, useContext } from "react";
 import { NODE_DEFS, GROUPS } from "./nodeDefs.js";
 import { NOTE_COLORS } from "./StickyNote.jsx";
+import { ValidationContext } from "./CanvasApp.jsx";
 
 // ── JsonSchemaTree ─────────────────────────────────────────────────────────────
 // Renders a JSON value as a collapsible schema tree with drag-to-insert support.
@@ -284,6 +285,9 @@ export function ConfigPanel({ node, onChange, onDelete, edges }) {
     );
   }
 
+  const validationMap = useContext(ValidationContext);
+  const nodeIssueList = validationMap.get(node.id) || [];
+
   const isNote      = node.data.type === "note";
   const isTrigger   = node.data.type?.startsWith("trigger.");
   const def         = NODE_DEFS[node.data.type] || { label: node.data.type, icon: "?", color: "#475569", fields: [] };
@@ -347,6 +351,22 @@ export function ConfigPanel({ node, onChange, onDelete, edges }) {
           </div>
           <span className="copy-hint">📋 copy</span>
         </div>
+
+        {/* Validation issues */}
+        {nodeIssueList.length > 0 && (
+          <div style={{ margin: "6px 0 2px", display: "flex", flexDirection: "column", gap: 3 }}>
+            {nodeIssueList.map((iss, i) => (
+              <div key={i} style={{
+                display: "flex", gap: 6, alignItems: "flex-start",
+                background: "#1c1400", border: "1px solid #fbbf2433",
+                borderRadius: 5, padding: "4px 8px", fontSize: 11,
+              }}>
+                <span style={{ color: "#fbbf24", flexShrink: 0 }}>⚠</span>
+                <span style={{ color: "#fcd34d", lineHeight: 1.4 }}>{iss.msg}</span>
+              </div>
+            ))}
+          </div>
+        )}
 
         {/* Disable / Enable toggle */}
         {!isNote && (

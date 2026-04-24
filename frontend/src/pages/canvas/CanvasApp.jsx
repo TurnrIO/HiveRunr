@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, createContext, useContext, useMemo } from "react";
 import ReactFlow, {
   ReactFlowProvider, addEdge, Background, Controls, MiniMap,
   useNodesState, useEdgesState, useReactFlow,
@@ -26,7 +26,10 @@ import { NodeSearchBar }      from "./NodeSearchBar.jsx";
 import { AlignmentToolbar }     from "./AlignmentToolbar.jsx";
 import { ExtractSubflowModal }  from "./ExtractSubflowModal.jsx";
 import { EdgeLabelModal }   from "./EdgeLabelModal.jsx";
-import { validateFlow, computeAutoLayout } from "./canvasHelpers.js";
+import { validateFlow, computeAutoLayout, nodeIssues } from "./canvasHelpers.js";
+
+/** Per-node validation issues — Map<nodeId, {level,msg}[]> */
+export const ValidationContext = createContext(new Map());
 
 /* ── RFC 4122 v4 UUID ──────────────────────────────────────────────────── */
 function uid() {
@@ -221,6 +224,18 @@ function CanvasApp() {
   const [showShortcuts,   setShowShortcuts]   = useState(false);
   const [showSearch,      setShowSearch]      = useState(false);
   const [replayEdit,      setReplayEdit]      = useState(null);
+
+  // Live per-node validation map — recomputed on every nodes/edges/credentials change
+  const validationMap = useMemo(() => {
+    const credNames = new Set((credentials || []).map(c => c.name));
+    const map = new Map();
+    nodes.forEach(n => {
+      if (n.data.type === "note" || n.data.disabled) return;
+      const issues = nodeIssues(n, edges, credNames);
+      if (issues.length > 0) map.set(n.id, issues);
+    });
+    return map;
+  }, [nodes, edges, credentials]);
 
   // Undo / redo
   const histRef    = useRef([]);
@@ -1042,6 +1057,7 @@ function CanvasApp() {
   const isAdmin = currentUser && (currentUser.role === "admin" || currentUser.role === "owner");
 
   return (
+    <ValidationContext.Provider value={validationMap}>
     <>
       {/* Hidden import file input */}
       <input type="file" accept=".json" style={{ display: "none" }} ref={importFileRef} onChange={importFlow} />
@@ -1365,6 +1381,7 @@ function CanvasApp() {
 
       {toast && <Toast key={toast.key} msg={toast.msg} type={toast.type} onDone={() => setToast(null)}/>}
     </>
+    </ValidationContext.Provider>
   );
 }
 

@@ -206,6 +206,7 @@ select.field-input{appearance:none;cursor:pointer;background-image:url("data:ima
 .node-status-badge.skip{color:#64748b;background:#64748b12}
 .node-status-badge.pending{color:#a78bfa;background:#7c3aed14}
 .node-status-badge.unreached{color:#374151;background:#1e223500;opacity:0.5}
+.node-validation-badge{display:flex;align-items:center;gap:2px;font-size:9px;font-weight:700;border-radius:4px;padding:1px 5px;color:#fbbf24;background:#fbbf2412;cursor:help;letter-spacing:.02em}
 .node-off-chip{background:#374151;color:#94a3b8;font-size:9px;font-weight:700;padding:1px 5px;border-radius:4px;letter-spacing:.04em}
 
 /* ── sticky note node ── */
