@@ -37,13 +37,87 @@ function uid() {
   });
 }
 
-/* ── Edge style helper ─────────────────────────────────────────────────── */
+/* ── Edge style helpers ─────────────────────────────────────────────────── */
 const EDGE_STYLE = {
   type: "smoothstep", animated: true,
   style: { stroke: "#7c3aed", strokeWidth: 2 },
   markerEnd: { type: MarkerType.ArrowClosed, color: "#7c3aed" },
 };
 function styledEdge(e) { return { ...e, ...EDGE_STYLE }; }
+
+const EDGE_OVERLAY = {
+  ok:        { stroke: "#4ade80", strokeWidth: 2.5, opacity: 1,   animated: true  },
+  err:       { stroke: "#f87171", strokeWidth: 2.5, opacity: 1,   animated: false },
+  skip:      { stroke: "#4b5563", strokeWidth: 1.5, opacity: 0.4, animated: false },
+  unreached: { stroke: "#2a2d3e", strokeWidth: 1.5, opacity: 0.3, animated: false },
+};
+
+/** Apply a traceMap to nodes + edges, returning updated arrays.
+ *  Nodes not present in traceMap are marked "unreached".
+ *  Edges are coloured based on their source node's outcome. */
+function overlayTrace(nodes, edges, traceMap) {
+  const nodeStatus = {};   // id → "ok" | "err" | "skip" | "unreached"
+  const updatedNodes = nodes.map(n => {
+    if (n.data.type === "note") return n;
+    const t = traceMap[n.id];
+    let st;
+    if (t) {
+      st = t.status === "ok" ? "ok" : t.status === "error" ? "err" : "skip";
+    } else {
+      st = "unreached";
+    }
+    nodeStatus[n.id] = st;
+    return { ...n, data: { ...n.data, _runStatus: st, _runOutput: t?.output, _runInput: t?.input, _runDurationMs: t?.duration_ms, _runAttempts: t?.attempts } };
+  });
+  const updatedEdges = edges.map(e => {
+    const srcSt = nodeStatus[e.source] || "unreached";
+    const ov    = EDGE_OVERLAY[srcSt];
+    return {
+      ...e,
+      animated: ov.animated,
+      style: { ...EDGE_STYLE.style, stroke: ov.stroke, strokeWidth: ov.strokeWidth, opacity: ov.opacity },
+      markerEnd: { type: MarkerType.ArrowClosed, color: ov.stroke },
+    };
+  });
+  return { nodes: updatedNodes, edges: updatedEdges };
+}
+
+/** Reset all overlay state on nodes + edges back to defaults. */
+function clearOverlay(nodes, edges) {
+  return {
+    nodes: nodes.map(n => ({ ...n, data: { ...n.data, _runStatus: undefined, _runOutput: undefined, _runInput: undefined, _runDurationMs: undefined } })),
+    edges: edges.map(styledEdge),
+  };
+}
+
+/* ── Run overlay summary bar ────────────────────────────────────────────── */
+function RunOverlayBar({ run, nodes, onClear }) {
+  if (!run) return null;
+  const counts = { ok: 0, err: 0, skip: 0, unreached: 0 };
+  nodes.forEach(n => { if (n.data.type !== "note" && n.data._runStatus) counts[n.data._runStatus] = (counts[n.data._runStatus] || 0) + 1; });
+  const statusColor = run.status === "succeeded" ? "#4ade80" : run.status === "failed" ? "#f87171" : "#60a5fa";
+  return (
+    <div style={{
+      position: "absolute", top: 10, left: "50%", transform: "translateX(-50%)",
+      zIndex: 10, display: "flex", alignItems: "center", gap: 8,
+      background: "#13152aee", border: "1px solid #2a2d3e", borderRadius: 20,
+      padding: "5px 14px 5px 10px", boxShadow: "0 4px 16px #0006",
+      fontSize: 12, pointerEvents: "auto",
+    }}>
+      <span style={{ color: "#64748b", fontSize: 11 }}>Run</span>
+      <span style={{ fontWeight: 700, color: "#e2e8f0" }}>#{run.id}</span>
+      <span style={{ fontWeight: 600, color: statusColor, fontSize: 11 }}>{run.status}</span>
+      <span style={{ color: "#4ade80" }}>✓ {counts.ok}</span>
+      {counts.err > 0    && <span style={{ color: "#f87171" }}>✗ {counts.err}</span>}
+      {counts.skip > 0   && <span style={{ color: "#94a3b8" }}>— {counts.skip}</span>}
+      {counts.unreached > 0 && <span style={{ color: "#374151" }}>? {counts.unreached}</span>}
+      <button onClick={onClear} title="Clear overlay" style={{
+        background: "none", border: "none", cursor: "pointer", color: "#64748b",
+        fontSize: 13, padding: "0 0 0 4px", lineHeight: 1,
+      }}>✕</button>
+    </div>
+  );
+}
 
 /* ── Node loader ───────────────────────────────────────────────────────── */
 function loadNode(n) {
@@ -141,6 +215,7 @@ function CanvasApp() {
   const [validationIssues,  setValidationIssues]  = useState(null);
   const [inspectorRuns,   setInspectorRuns]   = useState([]);
   const [inspectorRunId,  setInspectorRunId]  = useState(null);
+  const [inspectorRun,    setInspectorRun]    = useState(null);  // full run obj for overlay bar
   const [credentials,     setCredentials]     = useState([]);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [showShortcuts,   setShowShortcuts]   = useState(false);
@@ -678,50 +753,34 @@ function CanvasApp() {
 
     const liveTraceMap = {};
 
-    function applyRunDone(status, errMsg) {
+    function applyRunDone(status, errMsg, finishedRun) {
       setRunning(false);
       refreshInspectorRuns();
+      // Colour all nodes + edges from final liveTraceMap (unreached nodes get "?" badge)
+      setNodes(ns => { const { nodes: n2 } = overlayTrace(ns, [], liveTraceMap); return n2; });
+      setEdges(es => { const { edges: e2 } = overlayTrace([], es, liveTraceMap); return e2; });
+      setSelectedNode(s => {
+        if (!s || s.data.type === "note") return s;
+        const t  = liveTraceMap[s.id];
+        const st = t ? (t.status === "ok" ? "ok" : t.status === "error" ? "err" : "skip") : "unreached";
+        return { ...s, data: { ...s.data, _runStatus: st, _runOutput: t?.output, _runInput: t?.input, _runDurationMs: t?.duration_ms } };
+      });
+      if (finishedRun) setInspectorRun(finishedRun);
       if (status === "succeeded") {
         showToast("Run succeeded ✓");
       } else if (status === "timeout") {
         showToast("Run timed out", "error");
       } else {
         const err = errMsg || "";
-        let failedNodeId = null;
         const m = err.match(/\[([a-zA-Z0-9_-]+)\]/);
-        if (m) failedNodeId = m[1];
-        let failedNodeName = failedNodeId;
+        const failedNodeId = m ? m[1] : null;
         setNodes(ns => {
           const n = ns.find(x => x.id === failedNodeId);
-          if (n) failedNodeName = n.data?.label || failedNodeId;
-          return ns.map(nd => {
-            if (nd.data.type === "note") return nd;
-            const t  = liveTraceMap[nd.id];
-            if (t) {
-              const st = t.status === "ok" ? "ok" : t.status === "error" ? "err" : "skip";
-              return { ...nd, data: { ...nd.data, _runStatus: st, _runOutput: t.output, _runInput: t.input, _runDurationMs: t.duration_ms } };
-            }
-            return { ...nd, data: { ...nd.data, _runStatus: undefined } };
-          });
+          const failedNodeName = n ? (n.data?.label || failedNodeId) : failedNodeId;
+          setRunError({ msg: err, nodeName: failedNodeName });
+          return ns;
         });
-        setRunError({ msg: err, nodeName: failedNodeName });
       }
-      setNodes(ns => ns.map(nd => {
-        if (nd.data.type === "note") return nd;
-        const t  = liveTraceMap[nd.id];
-        if (t) {
-          const st = t.status === "ok" ? "ok" : t.status === "error" ? "err" : "skip";
-          return { ...nd, data: { ...nd.data, _runStatus: st, _runOutput: t.output, _runInput: t.input, _runDurationMs: t.duration_ms } };
-        }
-        return { ...nd, data: { ...nd.data, _runStatus: undefined } };
-      }));
-      setSelectedNode(s => {
-        if (!s) return s;
-        const t = liveTraceMap[s.id];
-        if (!t) return { ...s, data: { ...s.data, _runStatus: undefined } };
-        const st = t.status === "ok" ? "ok" : t.status === "error" ? "err" : "skip";
-        return { ...s, data: { ...s.data, _runStatus: st, _runOutput: t.output, _runInput: t.input, _runDurationMs: t.duration_ms } };
-      });
     }
 
     // ── SSE streaming ──────────────────────────────────────────────────────
@@ -748,7 +807,10 @@ function CanvasApp() {
         if (event.type === "run_done") {
           clearTimeout(safetyTimer);
           evtSource.close();
-          applyRunDone(event.status, event.error);
+          // Fetch the full run record so the overlay bar has id + status
+          api("GET", `/api/runs/by-task/${taskId}`)
+            .then(run => applyRunDone(event.status, event.error, run))
+            .catch(() => applyRunDone(event.status, event.error));
         }
       };
       evtSource.onerror = () => {
@@ -757,7 +819,7 @@ function CanvasApp() {
         api("GET", `/api/runs/by-task/${taskId}`).then(run => {
           if (!run) { setRunning(false); return; }
           (run.traces || []).forEach(t => { if (t.node_id) liveTraceMap[t.node_id] = t; });
-          applyRunDone(run.status, (run.result || {}).error || run.error);
+          applyRunDone(run.status, (run.result || {}).error || run.error, run);
         }).catch(() => setRunning(false));
       };
     } catch {
@@ -769,7 +831,7 @@ function CanvasApp() {
           if (!run || run.status === "running" || run.status === "queued") return;
           clearInterval(poll);
           (run.traces || []).forEach(t => { if (t.node_id) liveTraceMap[t.node_id] = t; });
-          applyRunDone(run.status, (run.result || {}).error || run.error);
+          applyRunDone(run.status, (run.result || {}).error || run.error, run);
         } catch { /* keep polling */ }
       }, 800);
       setTimeout(() => { clearInterval(poll); setRunning(false); }, 300000);
@@ -849,7 +911,9 @@ function CanvasApp() {
   async function loadInspectorRun(runId) {
     setInspectorRunId(runId);
     if (!runId) {
-      setNodes(ns => ns.map(n => ({ ...n, data: { ...n.data, _runStatus: undefined, _runOutput: undefined, _runInput: undefined } })));
+      setInspectorRun(null);
+      setNodes(ns => { const { nodes: n2, edges: e2 } = clearOverlay(ns, []); return n2; });
+      setEdges(es => clearOverlay([], es).edges);
       setSelectedNode(s => s ? { ...s, data: { ...s.data, _runStatus: undefined, _runOutput: undefined, _runInput: undefined } } : s);
       return;
     }
@@ -859,20 +923,16 @@ function CanvasApp() {
       if (!run) { showToast("Run not found", "error"); return; }
       const traceMap = {};
       (run.traces || []).forEach(t => { if (t.node_id) traceMap[t.node_id] = t; });
-      setNodes(ns => ns.map(n => {
-        if (n.data.type === "note") return n;
-        const t = traceMap[n.id];
-        if (!t) return n;
-        const st = t.status === "ok" ? "ok" : t.status === "error" ? "err" : "skip";
-        return { ...n, data: { ...n.data, _runStatus: st, _runOutput: t.output, _runInput: t.input, _runDurationMs: t.duration_ms, _runAttempts: t.attempts } };
-      }));
+      setNodes(ns => { const { nodes: n2 } = overlayTrace(ns, [], traceMap); return n2; });
+      setEdges(es => { const { edges: e2 } = overlayTrace([], es, traceMap); return e2; });
+      // Re-read the just-updated node state is unreliable; update selectedNode from traceMap directly
       setSelectedNode(s => {
-        if (!s) return s;
+        if (!s || s.data.type === "note") return s;
         const t = traceMap[s.id];
-        if (!t) return s;
-        const st = t.status === "ok" ? "ok" : t.status === "error" ? "err" : "skip";
-        return { ...s, data: { ...s.data, _runStatus: st, _runOutput: t.output, _runInput: t.input, _runDurationMs: t.duration_ms, _runAttempts: t.attempts } };
+        const st = t ? (t.status === "ok" ? "ok" : t.status === "error" ? "err" : "skip") : "unreached";
+        return { ...s, data: { ...s.data, _runStatus: st, _runOutput: t?.output, _runInput: t?.input, _runDurationMs: t?.duration_ms } };
       });
+      setInspectorRun(run);
       showToast(`Loaded run #${run.id || runId.slice(0, 8)}`);
     } catch (e) { showToast("Failed to load run: " + e.message, "error"); }
   }
@@ -887,7 +947,7 @@ function CanvasApp() {
       setNodes(newNodes); setEdges(newEdges);
       setCurrentGraph(full); setGraphName(full.name);
       setSelectedNode(null); setShowModal(false);
-      setRunError(null); setInspectorRunId(null); setInspectorRuns([]);
+      setRunError(null); setInspectorRunId(null); setInspectorRuns([]); setInspectorRun(null);
       histRef.current = []; histIdx.current = -1; syncHistState();
       saveSnap(newNodes, newEdges);
       setIsDirty(false);
@@ -901,15 +961,11 @@ function CanvasApp() {
           const latest = graphRuns[0];
           setInspectorRuns(graphRuns.slice(0, 20));
           setInspectorRunId(String(latest.id || latest.task_id));
+          setInspectorRun(latest);
           const traceMap = {};
           (latest.traces || []).forEach(t => { if (t.node_id) traceMap[t.node_id] = t; });
-          setNodes(ns => ns.map(n => {
-            if (n.data.type === "note") return n;
-            const t = traceMap[n.id];
-            if (!t) return n;
-            const st = t.status === "ok" ? "ok" : t.status === "error" ? "err" : "skip";
-            return { ...n, data: { ...n.data, _runStatus: st, _runOutput: t.output, _runInput: t.input, _runDurationMs: t.duration_ms, _runAttempts: t.attempts } };
-          }));
+          setNodes(ns => { const { nodes: n2 } = overlayTrace(ns, [], traceMap); return n2; });
+          setEdges(es => { const { edges: e2 } = overlayTrace([], es, traceMap); return e2; });
         }
       } catch { /* non-fatal */ }
     } catch (err) { showToast(err.message, "error"); }
@@ -1138,6 +1194,12 @@ function CanvasApp() {
       <div className="canvas-layout">
         <Palette search={paletteSearch} onSearch={setPaletteSearch} open={mobileSidebarOpen}/>
         <div className="flow-wrap" ref={reactFlowWrapper} style={{ position: "relative" }}>
+          {/* ── Run overlay summary bar ── */}
+          <RunOverlayBar
+            run={inspectorRun}
+            nodes={nodes}
+            onClear={() => loadInspectorRun(null)}
+          />
           {/* ── Alignment toolbar (shown when ≥2 nodes selected) ── */}
           <AlignmentToolbar
             nodes={nodes}

@@ -205,6 +205,7 @@ select.field-input{appearance:none;cursor:pointer;background-image:url("data:ima
 .node-status-badge.err{color:#f87171;background:#f8717112}
 .node-status-badge.skip{color:#64748b;background:#64748b12}
 .node-status-badge.pending{color:#a78bfa;background:#7c3aed14}
+.node-status-badge.unreached{color:#374151;background:#1e223500;opacity:0.5}
 .node-off-chip{background:#374151;color:#94a3b8;font-size:9px;font-weight:700;padding:1px 5px;border-radius:4px;letter-spacing:.04em}
 
 /* ── sticky note node ── */

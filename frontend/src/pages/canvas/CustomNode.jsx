@@ -62,10 +62,15 @@ export function CustomNode({ id, data, selected }) {
         <span className="node-id">#{id}</span>
         {runStatus && (
           <span className={`node-status-badge ${runStatus}`}>
-            {runStatus === "ok" ? "✓" : runStatus === "err" ? "✗" : runStatus === "pending" ? "⟳" : "—"}
+            {runStatus === "ok"        ? "✓"
+            : runStatus === "err"      ? "✗"
+            : runStatus === "pending"  ? "⟳"
+            : runStatus === "unreached"? "?"
+            : "—"}
             {runStatus === "ok" && runDuration != null ? ` ${runDuration}ms` : ""}
-            {runStatus === "err" ? " err" : ""}
-            {runStatus === "skip" ? " skip" : ""}
+            {runStatus === "err"       ? " err"       : ""}
+            {runStatus === "skip"      ? " skip"      : ""}
+            {runStatus === "unreached" ? " not reached" : ""}
           </span>
         )}
       </div>
