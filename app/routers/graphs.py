@@ -58,6 +58,7 @@ class GraphUpdate(BaseModel):
     graph_data: Optional[dict] = None; enabled: Optional[bool] = None
     tags: Optional[list[str]] = None; priority: Optional[int] = None
     pinned: Optional[bool] = None
+    save_note: Optional[str] = None   # optional note stored on the graph_version snapshot
 
 
 @router.get("/api/graphs")
@@ -124,7 +125,8 @@ def api_graph_update(graph_id: int, body: GraphUpdate, request: Request):
     if body.graph_data is not None:
         _sync_cron_triggers(graph_id, body.graph_data)
         gname = body.name or g['name']
-        save_graph_version(graph_id, gname, json.dumps(body.graph_data))
+        save_graph_version(graph_id, gname, json.dumps(body.graph_data),
+                           note=body.save_note or "")
     log_audit(user["username"], "graph.update", "graph", graph_id,
               {"name": body.name or g["name"]},
               request.client.host if request.client else None)

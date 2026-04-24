@@ -144,7 +144,7 @@ function loadNode(n) {
 function MoreMenu({
   onExport, onImport, onLayout, onValidate, onHistory, onPermissions,
   onTest, onAdmin, onUndo, onRedo, undoDisabled, redoDisabled,
-  onShortcuts, onToggleMap, showMap, onSearch, isAdmin, disabled,
+  onShortcuts, onToggleMap, showMap, onSearch, onSaveWithNote, isAdmin, disabled,
 }) {
   const [open, setOpen] = useState(false);
   const wrapRef = useRef(null);
@@ -167,6 +167,7 @@ function MoreMenu({
           <button className="tb-more-item" onClick={() => act(onValidate)} disabled={disabled}>✔ Validate</button>
           <div className="tb-more-sep"/>
           <button className="tb-more-item" onClick={() => act(onHistory)} disabled={disabled}>📜 Version history</button>
+          <button className="tb-more-item" onClick={() => act(onSaveWithNote)} disabled={disabled}>💾 Save with note…</button>
           {isAdmin && <>
             <div className="tb-more-sep"/>
             <button className="tb-more-item" onClick={() => act(onPermissions)} disabled={disabled}>🔐 Manage permissions</button>
@@ -675,14 +676,16 @@ function CanvasApp() {
   }
 
   /* ── Save ────────────────────────────────────────────────────────────── */
-  async function saveGraph() {
+  async function saveGraph(saveNote) {
     setSaving(true);
     try {
       const gd = buildGraphData();
       if (currentGraph) {
-        await api("PUT", `/api/graphs/${currentGraph.id}`, { name: graphName, graph_data: gd });
+        const body = { name: graphName, graph_data: gd };
+        if (saveNote) body.save_note = saveNote;
+        await api("PUT", `/api/graphs/${currentGraph.id}`, body);
         setIsDirty(false);
-        showToast("Graph saved!");
+        showToast(saveNote ? `Saved: "${saveNote}"` : "Graph saved!");
         await loadGraphList();
       } else {
         const g = await api("POST", "/api/graphs", { name: graphName, description: "", graph_data: gd });
@@ -693,6 +696,12 @@ function CanvasApp() {
       }
     } catch (e) { showToast(e.message, "error"); }
     setSaving(false);
+  }
+
+  async function saveGraphWithNote() {
+    const note = window.prompt("Save note (optional — shown in version history):", "");
+    if (note === null) return;   // cancelled
+    await saveGraph(note.trim() || undefined);
   }
 
   /* ── Export / import ─────────────────────────────────────────────────── */
@@ -1079,6 +1088,7 @@ function CanvasApp() {
           onShortcuts={() => setShowShortcuts(s => !s)}
           onSearch={() => setShowSearch(s => !s)}
           onToggleMap={() => setShowMap(m => !m)}
+          onSaveWithNote={saveGraphWithNote}
           showMap={showMap}
           onUndo={doUndo}
           onRedo={doRedo}

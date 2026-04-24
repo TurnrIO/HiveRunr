@@ -6,7 +6,8 @@ import { useAuth } from "../../contexts/AuthContext.jsx";
 
 export function Dashboard({ showToast }) {
   const { currentUser: user } = useAuth();
-  const [runs, setRuns]             = useState([]);
+  const [metrics, setMetrics]       = useState(null);   // server-side accurate stats
+  const [runs, setRuns]             = useState([]);      // last 20 runs for the feed
   const [workflows, setWfs]         = useState([]);
   const [graphs, setGraphs]         = useState([]);
   const [loading, setLoading]       = useState(true);
@@ -16,11 +17,13 @@ export function Dashboard({ showToast }) {
 
   const load = useCallback(async () => {
     try {
-      const [r, w, g] = await Promise.all([
-        api("GET", "/api/runs?page_size=200"),
+      const [m, r, w, g] = await Promise.all([
+        api("GET", "/api/metrics"),
+        api("GET", "/api/runs?page_size=20"),
         api("GET", "/api/workflows"),
         api("GET", "/api/graphs"),
       ]);
+      setMetrics(m);
       setRuns(r.runs ?? r);
       setWfs(w);
       setGraphs(g);
@@ -41,11 +44,16 @@ export function Dashboard({ showToast }) {
     return () => { clearInterval(t1); clearInterval(t2); };
   }, []);
 
-  const stats = {
-    total:  runs.length,
-    active: runs.filter(r => r.status === "running" || r.status === "queued").length,
-    ok:     runs.filter(r => r.status === "succeeded").length,
-    failed: runs.filter(r => r.status === "failed").length,
+  // Use server-side accurate counts from /api/metrics; fall back to run list while loading
+  const activeCount = runs.filter(r => r.status === "running" || r.status === "queued").length;
+  const stats = metrics ? {
+    total:  metrics.total  ?? 0,
+    active: activeCount,               // live count from the feed (refreshes every 5s)
+    ok:     metrics.succeeded ?? 0,
+    failed: metrics.failed    ?? 0,
+    avg_ms: metrics.avg_ms,
+  } : {
+    total: 0, active: 0, ok: 0, failed: 0,
   };
 
   async function toggleWf(name) {
@@ -101,10 +109,18 @@ export function Dashboard({ showToast }) {
       {ro && <ViewerBanner />}
 
       <div className="stat-grid">
-        <div className="stat-card"><div className="stat-val">{stats.total}</div><div className="stat-lbl">Total Runs</div></div>
+        <div className="stat-card"><div className="stat-val">{stats.total}</div><div className="stat-lbl">Total Runs (30d)</div></div>
         <div className="stat-card"><div className="stat-val" style={{ color: "#60a5fa" }}>{stats.active}</div><div className="stat-lbl">Active</div></div>
         <div className="stat-card"><div className="stat-val" style={{ color: "#4ade80" }}>{stats.ok}</div><div className="stat-lbl">Succeeded</div></div>
         <div className="stat-card"><div className="stat-val" style={{ color: "#f87171" }}>{stats.failed}</div><div className="stat-lbl">Failed</div></div>
+        {stats.avg_ms > 0 && (
+          <div className="stat-card">
+            <div className="stat-val" style={{ color: "#38bdf8" }}>
+              {stats.avg_ms < 1000 ? `${Math.round(stats.avg_ms)}ms` : `${(stats.avg_ms / 1000).toFixed(1)}s`}
+            </div>
+            <div className="stat-lbl">Avg Duration</div>
+          </div>
+        )}
       </div>
 
       {queue && (

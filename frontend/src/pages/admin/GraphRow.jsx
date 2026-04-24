@@ -221,10 +221,21 @@ export function GraphRow({ g, running, onRun, onToggle, onDuplicate, onDelete, o
             </label>
             <div style={{ flex: 1 }} />
             <div style={{ fontSize: 11, color: "#4b5563", alignSelf: "center", display: "flex", gap: 8, alignItems: "center" }}>
-              Webhook: <span style={{ fontFamily: "monospace", fontSize: 12, color: "#94a3b8" }}>{"••••••••"}</span>
-              <button className="btn btn-ghost" style={{ marginLeft: 8, padding: "3px 8px", fontSize: 11 }}
-                onClick={() => navigator.clipboard.writeText(g.webhook_token).then(() => showToast("Copied")).catch(() => showToast("Copy failed", "error"))}>
-                Copy
+              <span>Webhook:</span>
+              <code style={{ fontFamily: "monospace", fontSize: 11, color: "#64748b", background: "#0f1117",
+                             border: "1px solid #1e2235", borderRadius: 4, padding: "1px 6px", maxWidth: 200,
+                             overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                title={`${window.location.origin}/api/webhooks/${g.webhook_token}`}>
+                /api/webhooks/{g.webhook_token ? g.webhook_token.slice(0, 8) + "…" : "—"}
+              </code>
+              <button className="btn btn-ghost" style={{ padding: "3px 8px", fontSize: 11 }}
+                onClick={() => {
+                  const url = `${window.location.origin}/api/webhooks/${g.webhook_token}`;
+                  navigator.clipboard.writeText(url)
+                    .then(() => showToast("Webhook URL copied"))
+                    .catch(() => showToast("Copy failed", "error"));
+                }}>
+                Copy URL
               </button>
             </div>
             <button className="btn btn-danger" onClick={() => onDelete(g.id, g.name)}
