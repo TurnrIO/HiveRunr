@@ -88,6 +88,39 @@ def api_graph_create(body: GraphCreate, request: Request):
     return _graph_with_data(g)
 
 
+@router.post("/api/graphs/import")
+async def api_graph_import(request: Request):
+    """Import a flow from a JSON bundle.
+
+    Accepts either a full HiveRunr export bundle (with hiverunr_export header)
+    or a minimal object: { name, description?, graph_data }.
+    Creates a new graph in the current workspace and saves an initial version.
+    """
+    user = _check_admin(request)
+    if not _is_admin_or_owner(user):
+        raise HTTPException(403, "Importing flows requires admin or owner role")
+    workspace_id = _resolve_workspace(request, user)
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(400, "Invalid JSON body")
+
+    name = (body.get("name") or "Imported Flow").strip()
+    desc = body.get("description") or ""
+    gd   = body.get("graph_data") or {}
+
+    if not isinstance(gd, dict):
+        raise HTTPException(400, "graph_data must be a JSON object")
+
+    g = create_graph(name, desc, json.dumps(gd), workspace_id=workspace_id)
+    _sync_cron_triggers(g["id"], gd)
+    save_graph_version(g["id"], name, json.dumps(gd), note="Imported")
+    log_audit(user["username"], "graph.import", "graph", g["id"],
+              {"name": name},
+              request.client.host if request.client else None)
+    return _graph_with_data(g)
+
+
 @router.get("/api/graphs/by-slug/{slug}")
 def api_graph_by_slug(slug: str, request: Request):
     user = _check_admin(request)

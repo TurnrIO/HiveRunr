@@ -352,7 +352,16 @@ def list_runs(page: int = 1, page_size: int = 50,
                 LIMIT %s OFFSET %s""",
             params + [page_size, offset],
         )
-        runs = [dict(r) for r in cur.fetchall()]
+        runs = []
+        for r in cur.fetchall():
+            d = dict(r)
+            # psycopg2 may return JSONB columns as raw strings depending on version/config
+            for col in ("traces", "result", "initial_payload"):
+                v = d.get(col)
+                if isinstance(v, str):
+                    try:    d[col] = json.loads(v)
+                    except: d[col] = [] if col == "traces" else {}
+            runs.append(d)
 
     pages = max(1, (total + page_size - 1) // page_size)
     return {"runs": runs, "total": total, "page": page, "pages": pages}
@@ -362,7 +371,15 @@ def get_run_by_task(task_id):
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         cur.execute("SELECT * FROM runs WHERE task_id=%s", (task_id,))
         row = cur.fetchone()
-        return dict(row) if row else None
+        if not row:
+            return None
+        d = dict(row)
+        for col in ("traces", "result", "initial_payload"):
+            v = d.get(col)
+            if isinstance(v, str):
+                try:    d[col] = json.loads(v)
+                except: d[col] = [] if col == "traces" else {}
+        return d
 
 def update_run(task_id, status, result=None, traces=None, retry_count: int | None = None):
     """Update a run's status, result, traces, and optionally its retry_count.
