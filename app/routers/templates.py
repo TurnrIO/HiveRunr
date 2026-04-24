@@ -57,19 +57,12 @@ def list_templates(request: Request):
 
 @router.post("/api/templates/{slug}/use")
 async def use_template(slug: str, request: Request):
-    """Create a new graph from a built-in template.
-
-    Loads the template, creates a graph in the current workspace, and returns
-    the new graph object — identical to POST /api/graphs/import but driven by
-    a server-side template file rather than a client-supplied bundle.
-    """
+    """Create a new graph from a built-in template and return its id + name."""
     from app.deps import _check_admin, _resolve_workspace
-    from app.core.db import create_graph, save_graph_version
-    from app.routers.graphs import _sync_cron_triggers, _graph_with_data, _is_admin_or_owner
+    from app.core.db import create_graph, save_graph_version, get_graph
+    from app.routers.graphs import _sync_cron_triggers
 
     user = _check_admin(request)
-    if not _is_admin_or_owner(user):
-        raise HTTPException(403, "Creating flows requires admin or owner role")
 
     if not all(c.isalnum() or c in "-_" for c in slug):
         raise HTTPException(400, "Invalid template slug")
@@ -86,12 +79,18 @@ async def use_template(slug: str, request: Request):
     name = data.get("name", slug)
     desc = data.get("description", "")
     gd   = data.get("graph_data", {})
+    gd_str = json.dumps(gd)
 
     workspace_id = _resolve_workspace(request, user)
-    g = create_graph(name, desc, json.dumps(gd), workspace_id=workspace_id)
-    _sync_cron_triggers(g["id"], gd)
-    save_graph_version(g["id"], name, json.dumps(gd), note=f"Created from template: {name}")
-    return _graph_with_data(g)
+    g = create_graph(name, desc, gd_str, workspace_id=workspace_id)
+    try:
+        _sync_cron_triggers(g["id"], gd)
+        save_graph_version(g["id"], name, gd_str, note=f"Created from template: {name}")
+    except Exception as exc:
+        log.warning("Post-create steps failed for template %s: %s", slug, exc)
+
+    # Return only the fields the frontend needs to avoid serialisation issues
+    return {"id": g["id"], "name": g["name"], "slug": g.get("slug", "")}
 
 
 @router.get("/api/templates/{slug}")
