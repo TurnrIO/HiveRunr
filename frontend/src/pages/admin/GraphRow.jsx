@@ -51,7 +51,7 @@ export function GraphRow({ g, running, onRun, onToggle, onDuplicate, onDelete, o
   const [loadingPreview, setLoadingPreview] = useState(false);
   const [confirmState, setConfirmState]     = useState(null);
   const [showAlerts, setShowAlerts]         = useState(false);
-  const [alertCfg, setAlertCfg]             = useState({ alert_emails: "", alert_webhook: "", alert_on_success: false });
+  const [alertCfg, setAlertCfg]             = useState({ alert_emails: "", alert_webhook: "", alert_on_success: false, alert_min_failures: 1 });
   const [savingAlerts, setSavingAlerts]     = useState(false);
   const [editingTags,  setEditingTags]      = useState(false);
   const [tagInput,     setTagInput]         = useState("");
@@ -112,9 +112,10 @@ export function GraphRow({ g, running, onRun, onToggle, onDuplicate, onDelete, o
     try {
       const cfg = await api("GET", `/api/graphs/${g.id}/alerts`);
       setAlertCfg({
-        alert_emails:     cfg.alert_emails    || "",
-        alert_webhook:    cfg.alert_webhook   || "",
-        alert_on_success: cfg.alert_on_success || false,
+        alert_emails:       cfg.alert_emails       || "",
+        alert_webhook:      cfg.alert_webhook      || "",
+        alert_on_success:   cfg.alert_on_success   || false,
+        alert_min_failures: cfg.alert_min_failures ?? 1,
       });
       setShowAlerts(true);
     } catch (e) { showToast(e.message, "error"); }
@@ -124,9 +125,10 @@ export function GraphRow({ g, running, onRun, onToggle, onDuplicate, onDelete, o
     setSavingAlerts(true);
     try {
       await api("PUT", `/api/graphs/${g.id}/alerts`, {
-        alert_emails:     alertCfg.alert_emails.trim()  || null,
-        alert_webhook:    alertCfg.alert_webhook.trim() || null,
-        alert_on_success: alertCfg.alert_on_success,
+        alert_emails:       alertCfg.alert_emails.trim()  || null,
+        alert_webhook:      alertCfg.alert_webhook.trim() || null,
+        alert_on_success:   alertCfg.alert_on_success,
+        alert_min_failures: Math.max(1, parseInt(alertCfg.alert_min_failures) || 1),
       });
       showToast("Alert settings saved");
       setShowAlerts(false);
@@ -383,6 +385,16 @@ export function GraphRow({ g, running, onRun, onToggle, onDuplicate, onDelete, o
               <label htmlFor={`alert-success-${g.id}`} style={{ fontSize: 13, color: "#94a3b8", cursor: "pointer", margin: 0 }}>
                 Also alert on successful runs
               </label>
+            </div>
+            <div className="form-group">
+              <label>Alert after N consecutive failures</label>
+              <input type="number" min="1" max="100"
+                value={alertCfg.alert_min_failures}
+                onChange={e => setAlertCfg(c => ({ ...c, alert_min_failures: e.target.value }))}
+                style={{ width: 80 }} />
+              <div style={{ fontSize: 11, color: "#475569", marginTop: 4 }}>
+                Default 1 — alert on every failure. Set to 3 to only alert after 3 failures in a row.
+              </div>
             </div>
             <div className="modal-btns">
               <button className="btn btn-ghost" onClick={() => setShowAlerts(false)}>Cancel</button>

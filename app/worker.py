@@ -53,28 +53,43 @@ def _send_run_alert(
     """
     from app.email import send_run_alert, _is_configured
 
-    alert_emails:   str  = ""
-    alert_webhook:  str  = ""
+    alert_emails:     str  = ""
+    alert_webhook:    str  = ""
     alert_on_success: bool = False
+    alert_min_failures: int = 1
 
     # Per-flow config
     if graph_id:
         try:
-            from app.core.db import get_graph_alerts
+            from app.core.db import get_graph_alerts, count_trailing_failures
             cfg = get_graph_alerts(graph_id)
             if cfg:
-                alert_emails    = cfg.get("alert_emails") or ""
-                alert_webhook   = cfg.get("alert_webhook") or ""
-                alert_on_success = bool(cfg.get("alert_on_success", False))
+                alert_emails       = cfg.get("alert_emails") or ""
+                alert_webhook      = cfg.get("alert_webhook") or ""
+                alert_on_success   = bool(cfg.get("alert_on_success", False))
+                alert_min_failures = int(cfg.get("alert_min_failures") or 1)
         except Exception as exc:
             log.warning("Could not load alert config for graph %s: %s", graph_id, exc)
 
     # Decide whether to fire
-    is_failure = status == "failed"
-    should_alert = is_failure or alert_on_success
+    is_failure = status in ("failed", "dead")
+    should_alert = is_failure or (alert_on_success and status == "succeeded")
 
     if not should_alert:
         return
+
+    # Consecutive-failure threshold: only alert if the last N runs all failed
+    if is_failure and alert_min_failures > 1 and graph_id:
+        try:
+            streak = count_trailing_failures(graph_id)
+            if streak < alert_min_failures:
+                log.debug(
+                    "Alert suppressed for graph %s: streak=%d < min=%d",
+                    graph_id, streak, alert_min_failures,
+                )
+                return
+        except Exception as exc:
+            log.warning("Could not check failure streak for graph %s: %s", graph_id, exc)
 
     webhook_payload = {
         "event":     "run.failed" if is_failure else "run.succeeded",

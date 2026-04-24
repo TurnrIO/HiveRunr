@@ -307,6 +307,45 @@ export function Metrics({ showToast }) {
             <DailyChart daily={daily} />
           </div>
 
+          {/* ── Flaky flows ── */}
+          {(() => {
+            const flaky = flows
+              .filter(f => f.total >= 3 && f.error_rate > 5 && f.error_rate < 95)
+              .sort((a, b) => Math.abs(a.error_rate - 50) - Math.abs(b.error_rate - 50))
+              .slice(0, 5);
+            if (!flaky.length) return null;
+            return (
+              <div className="card">
+                <div className="card-title">⚡ Flaky Flows
+                  <span style={{ fontSize: 10, color: "#475569", fontWeight: 400, marginLeft: 8 }}>
+                    intermittently failing · {days}d
+                  </span>
+                </div>
+                <table>
+                  <thead><tr><th>Flow</th><th>Runs</th><th>Error %</th><th>Avg duration</th><th>Last run</th></tr></thead>
+                  <tbody>
+                    {flaky.map(f => (
+                      <tr key={f.graph_id ?? f.flow_name}
+                          style={{ cursor: f.graph_id ? "pointer" : "default" }}
+                          onClick={() => f.graph_id && openFlow(f.graph_id)}>
+                        <td style={{ fontWeight: 500 }}>{f.flow_name}</td>
+                        <td style={{ color: "#a78bfa" }}>{f.total}</td>
+                        <td>
+                          <span style={{
+                            fontWeight: 600,
+                            color: f.error_rate >= 40 ? "#f87171" : "#fbbf24",
+                          }}>{f.error_rate}%</span>
+                        </td>
+                        <td style={{ color: "#94a3b8" }}>{fmtDur(f.avg_ms)}</td>
+                        <td style={{ color: "#64748b", fontSize: 11 }}>{relativeTime(f.last_run)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            );
+          })()}
+
           {/* ── Top failing flows ── */}
           {(summary.top_failing || []).length > 0 && (
             <div className="card">

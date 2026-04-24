@@ -1060,21 +1060,52 @@ def get_graph_alerts(graph_id: int):
     with get_conn() as conn:
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         cur.execute(
-            "SELECT alert_emails, alert_webhook, alert_on_success "
+            "SELECT alert_emails, alert_webhook, alert_on_success, "
+            "COALESCE(alert_min_failures, 1) AS alert_min_failures "
             "FROM graph_workflows WHERE id=%s",
             (graph_id,)
         )
         row = cur.fetchone()
         return dict(row) if row else None
 
-def update_graph_alerts(graph_id: int, alert_emails: str, alert_webhook: str, alert_on_success: bool):
+def update_graph_alerts(graph_id: int, alert_emails: str, alert_webhook: str,
+                        alert_on_success: bool, alert_min_failures: int = 1):
     with get_conn() as conn:
         conn.cursor().execute(
             "UPDATE graph_workflows "
-            "SET alert_emails=%s, alert_webhook=%s, alert_on_success=%s "
+            "SET alert_emails=%s, alert_webhook=%s, alert_on_success=%s, alert_min_failures=%s "
             "WHERE id=%s",
-            (alert_emails or None, alert_webhook or None, bool(alert_on_success), graph_id)
+            (alert_emails or None, alert_webhook or None,
+             bool(alert_on_success), max(1, int(alert_min_failures or 1)),
+             graph_id)
         )
+
+def count_trailing_failures(graph_id: int, limit: int = 20) -> int:
+    """Return the number of consecutive failed runs at the end of the run history.
+
+    Only considers terminal statuses (succeeded, failed, dead).  Running / queued
+    runs are ignored so an in-progress run doesn't reset the streak.
+    """
+    with get_conn() as conn:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur.execute(
+            """
+            SELECT status FROM runs
+            WHERE graph_id = %s
+              AND status IN ('succeeded', 'failed', 'dead')
+            ORDER BY id DESC
+            LIMIT %s
+            """,
+            (graph_id, limit),
+        )
+        rows = cur.fetchall()
+    streak = 0
+    for row in rows:
+        if row["status"] in ("failed", "dead"):
+            streak += 1
+        else:
+            break
+    return streak
 
 # ── Password reset tokens ──────────────────────────────────────────────────────
 def get_user_by_email(email: str):

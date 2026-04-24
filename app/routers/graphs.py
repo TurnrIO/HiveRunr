@@ -320,9 +320,10 @@ def api_restore_version(graph_id: int, version_id: int, request: Request):
 
 # ── Per-flow alert configuration ──────────────────────────────────────────────
 class AlertConfig(BaseModel):
-    alert_emails:     Optional[str]  = None   # comma-separated
-    alert_webhook:    Optional[str]  = None
-    alert_on_success: bool           = False
+    alert_emails:       Optional[str]  = None   # comma-separated
+    alert_webhook:      Optional[str]  = None
+    alert_on_success:   bool           = False
+    alert_min_failures: int            = 1      # only alert after N consecutive failures
 
 
 @router.get("/api/graphs/{graph_id}/alerts")
@@ -350,6 +351,7 @@ def api_update_alerts(graph_id: int, body: AlertConfig, request: Request):
         alert_emails=body.alert_emails,
         alert_webhook=body.alert_webhook,
         alert_on_success=body.alert_on_success,
+        alert_min_failures=body.alert_min_failures,
     )
     return get_graph_alerts(graph_id)
 
