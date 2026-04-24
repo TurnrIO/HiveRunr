@@ -35,6 +35,11 @@ export function Logs({ showToast }) {
   const [replayEdit, setReplayEdit]   = useState(null);
   const [editingNoteId, setEditingNoteId] = useState(null);
   const [noteText, setNoteText]       = useState("");
+  const [savedFilters, setSavedFilters] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("hr_log_filters") || "[]"); } catch { return []; }
+  });
+  const [showSaveFilter, setShowSaveFilter] = useState(false);
+  const [filterName, setFilterName]   = useState("");
 
   const load = async (pg, st, sq) => {
     setLoading(true);
@@ -126,6 +131,28 @@ export function Logs({ showToast }) {
     } catch (e) { showToast(e.message, "error"); }
   }
 
+  function persistFilters(list) {
+    setSavedFilters(list);
+    try { localStorage.setItem("hr_log_filters", JSON.stringify(list)); } catch {}
+  }
+  function saveFilter() {
+    const name = filterName.trim();
+    if (!name) return;
+    const entry = { name, status: statusFilter, q: search };
+    persistFilters([...savedFilters.filter(f => f.name !== name), entry]);
+    setFilterName(""); setShowSaveFilter(false);
+    showToast(`Filter "${name}" saved`);
+  }
+  function applyFilter(f) {
+    setStatus(f.status); setSearch(f.q); setSearchInput(f.q);
+    setPage(1); setSelected(null); setChecked(new Set());
+    load(1, f.status, f.q);
+  }
+  function deleteFilter(name) {
+    persistFilters(savedFilters.filter(f => f.name !== name));
+  }
+  const hasActiveFilter = search || statusFilter !== "all";
+
   const selRun = selected != null ? runs.find(r => r.id === selected) : null;
   const traces = selRun?.traces || [];
 
@@ -137,6 +164,41 @@ export function Logs({ showToast }) {
         and the input/output at each step. Data is stored in the database — there are no
         separate log files.
       </div>
+
+      {/* Saved filter chips */}
+      {(savedFilters.length > 0 || hasActiveFilter) && (
+        <div style={{ display: "flex", gap: 6, marginBottom: 8, alignItems: "center", flexWrap: "wrap" }}>
+          <span style={{ fontSize: 11, color: "#4b5563" }}>Saved:</span>
+          {savedFilters.map(f => (
+            <span key={f.name} style={{ display: "inline-flex", alignItems: "center", gap: 3,
+              background: "#1e2235", border: "1px solid #2a2d3e", borderRadius: 12,
+              fontSize: 11, padding: "2px 4px 2px 8px", cursor: "pointer", color: "#94a3b8" }}>
+              <span onClick={() => applyFilter(f)} style={{ cursor: "pointer" }}>{f.name}</span>
+              <button onClick={() => deleteFilter(f.name)}
+                style={{ background: "none", border: "none", cursor: "pointer", color: "#475569",
+                         padding: "0 2px", fontSize: 11, lineHeight: 1 }} title="Remove">✕</button>
+            </span>
+          ))}
+          {hasActiveFilter && (
+            showSaveFilter ? (
+              <span style={{ display: "inline-flex", gap: 4, alignItems: "center" }}>
+                <input autoFocus value={filterName} onChange={e => setFilterName(e.target.value)}
+                  onKeyDown={e => { if (e.key === "Enter") saveFilter(); if (e.key === "Escape") setShowSaveFilter(false); }}
+                  placeholder="Filter name…"
+                  style={{ fontSize: 11, padding: "2px 7px", background: "#13152a", color: "#e2e8f0",
+                           border: "1px solid #4338ca", borderRadius: 6, width: 130 }} />
+                <button className="btn btn-primary" style={{ fontSize: 11, padding: "2px 8px" }} onClick={saveFilter}>Save</button>
+                <button className="btn btn-ghost" style={{ fontSize: 11, padding: "2px 6px" }} onClick={() => setShowSaveFilter(false)}>✕</button>
+              </span>
+            ) : (
+              <button className="btn btn-ghost" style={{ fontSize: 11, padding: "2px 8px", color: "#64748b" }}
+                onClick={() => { setShowSaveFilter(true); setFilterName(""); }}>
+                + Save filter
+              </button>
+            )
+          )}
+        </div>
+      )}
 
       {/* Filter bar */}
       <div style={{ display: "flex", gap: 8, marginBottom: 16, alignItems: "center", flexWrap: "wrap" }}>

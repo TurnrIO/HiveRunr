@@ -1223,6 +1223,62 @@ function CanvasApp() {
             setNodes={setNodes}
             onSaveSnap={saveSnap}
           />
+          {/* ── Empty-state onboarding (no graph loaded) ── */}
+          {!currentGraph && nodes.length === 0 && (
+            <div style={{
+              position: "absolute", inset: 0, zIndex: 5,
+              display: "flex", alignItems: "center", justifyContent: "center",
+              pointerEvents: "none",
+            }}>
+              <div style={{
+                textAlign: "center", maxWidth: 420, padding: "32px 28px",
+                background: "#13152aee", border: "1px solid #2a2d3e",
+                borderRadius: 16, boxShadow: "0 8px 32px #0008",
+                pointerEvents: "auto",
+              }}>
+                <div style={{ fontSize: 36, marginBottom: 10 }}>⚡</div>
+                <div style={{ fontSize: 18, fontWeight: 700, color: "#e2e8f0", marginBottom: 6 }}>
+                  Welcome to HiveRunr Canvas
+                </div>
+                <div style={{ fontSize: 13, color: "#64748b", marginBottom: 24, lineHeight: 1.6 }}>
+                  Build automation flows by connecting nodes. Drag from the left panel,
+                  or start from a template below.
+                </div>
+                <div style={{ display: "flex", gap: 10, justifyContent: "center", marginBottom: 24, flexWrap: "wrap" }}>
+                  <button className="btn btn-primary" onClick={() => setShowModal(true)}>
+                    📂 Open / Browse flows
+                  </button>
+                  <button className="btn btn-ghost" onClick={() => {
+                    setNodes([]); setEdges([]);
+                    setCurrentGraph(null); setGraphName("Untitled Flow");
+                    setShowModal(false);
+                  }}>
+                    + New blank flow
+                  </button>
+                </div>
+                <div style={{ display: "flex", gap: 8, justifyContent: "center", flexWrap: "wrap" }}>
+                  {[
+                    { icon: "📧", label: "Email alert" },
+                    { icon: "🔗", label: "Webhook → Slack" },
+                    { icon: "⏰", label: "Scheduled report" },
+                    { icon: "🔄", label: "Data sync" },
+                  ].map(t => (
+                    <button key={t.label} className="btn btn-ghost"
+                      style={{ fontSize: 11, padding: "4px 10px", color: "#94a3b8" }}
+                      onClick={() => setShowModal(true)}
+                      title={`Start from a ${t.label} template`}
+                    >
+                      {t.icon} {t.label}
+                    </button>
+                  ))}
+                </div>
+                <div style={{ marginTop: 16, fontSize: 10, color: "#334155" }}>
+                  Drag nodes from the left panel · Press <kbd style={{ background: "#1e2235", borderRadius: 3, padding: "1px 4px", fontSize: 9, border: "1px solid #2a2d3e" }}>?</kbd> for shortcuts
+                </div>
+              </div>
+            </div>
+          )}
+
           <ReactFlow
             nodes={nodes}
             edges={edges}
