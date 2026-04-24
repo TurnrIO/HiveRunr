@@ -32,9 +32,11 @@ def _load_all() -> list[dict]:
     for path in sorted(TEMPLATES_DIR.glob("*.json")):
         try:
             data = json.loads(path.read_text())
+            slug = path.stem
             templates.append({
-                "slug":        path.stem,
-                "name":        data.get("name", path.stem),
+                "id":          slug,   # alias used by admin Templates page
+                "slug":        slug,
+                "name":        data.get("name", slug),
                 "description": data.get("description", ""),
                 "category":    data.get("category", "General"),
                 "tags":        data.get("tags", []),
@@ -51,6 +53,45 @@ def list_templates(request: Request):
     """Return metadata for all built-in templates (no graph_data payload)."""
     _require_run_scope(request)
     return _load_all()
+
+
+@router.post("/api/templates/{slug}/use")
+async def use_template(slug: str, request: Request):
+    """Create a new graph from a built-in template.
+
+    Loads the template, creates a graph in the current workspace, and returns
+    the new graph object — identical to POST /api/graphs/import but driven by
+    a server-side template file rather than a client-supplied bundle.
+    """
+    from app.deps import _check_admin, _resolve_workspace
+    from app.core.db import create_graph, save_graph_version
+    from app.routers.graphs import _sync_cron_triggers, _graph_with_data, _is_admin_or_owner
+
+    user = _check_admin(request)
+    if not _is_admin_or_owner(user):
+        raise HTTPException(403, "Creating flows requires admin or owner role")
+
+    if not all(c.isalnum() or c in "-_" for c in slug):
+        raise HTTPException(400, "Invalid template slug")
+    path = TEMPLATES_DIR / f"{slug}.json"
+    if not path.exists():
+        raise HTTPException(404, f"Template '{slug}' not found")
+
+    try:
+        data = json.loads(path.read_text())
+    except Exception as exc:
+        log.error("Error reading template %s: %s", slug, exc)
+        raise HTTPException(500, "Failed to load template")
+
+    name = data.get("name", slug)
+    desc = data.get("description", "")
+    gd   = data.get("graph_data", {})
+
+    workspace_id = _resolve_workspace(request, user)
+    g = create_graph(name, desc, json.dumps(gd), workspace_id=workspace_id)
+    _sync_cron_triggers(g["id"], gd)
+    save_graph_version(g["id"], name, json.dumps(gd), note=f"Created from template: {name}")
+    return _graph_with_data(g)
 
 
 @router.get("/api/templates/{slug}")
