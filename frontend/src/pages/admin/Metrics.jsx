@@ -46,27 +46,43 @@ function DailyChart({ daily }) {
     <div style={{ overflowX: "auto" }}>
       <div style={{ display: "flex", alignItems: "flex-end", gap: 3, minWidth: daily.length * 28,
                     height: BAR_H + 32, paddingBottom: 24, position: "relative" }}>
-        {/* Duration line (SVG overlay) */}
-        {maxDur > 0 && (
-          <svg style={{ position: "absolute", top: 0, left: 0, width: "100%", height: BAR_H,
-                        pointerEvents: "none", overflow: "visible" }}>
-            <polyline
-              fill="none"
-              stroke="#38bdf8"
-              strokeWidth="1.5"
-              strokeDasharray="3 2"
-              points={daily.map((d, i) => {
-                const x = (i + 0.5) * (100 / daily.length) + "%";
-                const y = BAR_H - ((d.avg_ms || 0) / maxDur) * (BAR_H - 8);
-                return `${i === 0 ? 14 : i * 28 + 14},${y}`;
-              }).join(" ")}
-            />
-            {daily.map((d, i) => d.avg_ms > 0 && (
-              <circle key={i} cx={i * 28 + 14} cy={BAR_H - ((d.avg_ms) / maxDur) * (BAR_H - 8)}
-                r="2.5" fill="#38bdf8" />
-            ))}
-          </svg>
-        )}
+        {/* Duration line (SVG overlay).
+            Uses a fixed viewBox matching the bar layout so it scales correctly
+            with the flex container — avoids the pixel/percentage mismatch. */}
+        {maxDur > 0 && (() => {
+          const W = daily.length * 28;
+          return (
+            <svg
+              viewBox={`0 0 ${W} ${BAR_H}`}
+              preserveAspectRatio="none"
+              style={{ position: "absolute", top: 0, left: 0, width: "100%", height: BAR_H,
+                       pointerEvents: "none", overflow: "visible" }}
+            >
+              <polyline
+                fill="none"
+                stroke="#38bdf8"
+                strokeWidth="1.5"
+                strokeDasharray="3 2"
+                vectorEffect="non-scaling-stroke"
+                points={daily.map((d, i) => {
+                  const x = i * 28 + 14;
+                  const y = BAR_H - ((d.avg_ms || 0) / maxDur) * (BAR_H - 8);
+                  return `${x},${y}`;
+                }).join(" ")}
+              />
+              {daily.map((d, i) => d.avg_ms > 0 && (
+                <circle
+                  key={i}
+                  cx={i * 28 + 14}
+                  cy={BAR_H - (d.avg_ms / maxDur) * (BAR_H - 8)}
+                  r="2.5"
+                  fill="#38bdf8"
+                  vectorEffect="non-scaling-stroke"
+                />
+              ))}
+            </svg>
+          );
+        })()}
 
         {/* Volume bars */}
         {daily.map((d, i) => {

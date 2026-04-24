@@ -46,6 +46,10 @@ body{font-family:'Inter',system-ui,sans-serif;background:#0f1117;color:#e2e8f0;h
 .sidebar-scroll::-webkit-scrollbar{width:3px}
 .sidebar-scroll::-webkit-scrollbar-thumb{background:#2a2d3e;border-radius:3px}
 .sidebar-title{font-size:10px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:.08em;padding:10px 12px 5px}
+.sidebar-group-header{display:flex;align-items:center;gap:6px;width:100%;background:none;border:none;cursor:pointer;padding:8px 12px 4px;font-size:10px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:.08em;text-align:left;transition:color .1s}
+.sidebar-group-header:hover{color:#94a3b8}
+.sidebar-group-count{margin-left:auto;background:#1e2235;color:#475569;font-size:9px;border-radius:8px;padding:1px 6px;font-weight:500;letter-spacing:0}
+.sidebar-group-chevron{color:#475569;font-size:10px;flex-shrink:0;transition:transform .15s}
 .node-palette-item{display:flex;align-items:center;gap:9px;padding:7px 12px;cursor:grab;border-radius:5px;margin:1px 5px;transition:background .12s;user-select:none}
 .node-palette-item:hover{background:#2a2d3e}
 .node-palette-item:active{cursor:grabbing}
