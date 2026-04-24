@@ -15,7 +15,9 @@ from app.core.db import (
 SCRIPTS_DIR = Path(__file__).parent / 'workflows'
 
 log    = logging.getLogger(__name__)
-broker = os.environ.get("CELERY_BROKER_URL", "redis://redis:6379/0")
+# CELERY_BROKER_URL is the standard Celery env var; fall back to REDIS_URL so
+# operators only need to set one variable in their .env file.
+broker = os.environ.get("CELERY_BROKER_URL") or os.environ.get("REDIS_URL", "redis://redis:6379/0")
 app    = Celery("hiverunr", broker=broker, backend=broker)
 app.conf.task_serializer   = "json"
 app.conf.result_serializer = "json"

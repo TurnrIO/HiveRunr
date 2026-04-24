@@ -11,7 +11,7 @@ A self-hosted workflow automation platform with a visual node-canvas editor, mod
 | API server | FastAPI (Python 3.11) |
 | Task queue | Celery + Redis |
 | Database | PostgreSQL |
-| Frontend | React 18 (UMD/Babel), React Flow v11 |
+| Frontend | Vite + React 18, React Flow v11 (multi-page SPA) |
 | Reverse proxy | Caddy |
 | Worker monitor | Flower |
 
@@ -89,8 +89,8 @@ x-api-token: hr_your_token_here
 | `http://localhost/` | Admin dashboard |
 | `http://localhost/canvas` | Visual node canvas editor |
 | `http://localhost/flower/` | Flower / Celery monitor (requires login) |
-| `http://localhost/docs` | Swagger API docs (requires login) |
-| `http://localhost/health` | Health check |
+| `http://localhost/health` | Health check — returns `{"status":"ok","version":"x.y.z"}` |
+| `http://localhost/api/prometheus` | Prometheus metrics scrape endpoint |
 
 ---
 
@@ -109,7 +109,7 @@ x-api-token: hr_your_token_here
 | **Users** | Manage users and roles (owner only) |
 | **Settings** | API token management, maintenance tools |
 
-URL state is preserved via hash routing — refreshing the page restores your last location.
+The admin UI is a React Router SPA (`/admin`). The canvas editor is a separate Vite entry point (`/canvas`). Both are built to `app/static/dist/` and served by FastAPI.
 
 ---
 
@@ -122,33 +122,58 @@ The visual canvas editor lets you build flows by connecting nodes on a graph. Ea
 | Node | Description |
 |---|---|
 | `trigger.manual` | Run manually via the dashboard or API |
-| `trigger.webhook` | HTTP webhook with optional secret + rate limiting |
+| `trigger.webhook` | HTTP webhook with optional HMAC secret + rate limiting |
 | `trigger.cron` | Scheduled execution via cron expression |
+| `trigger.email` | Poll an IMAP inbox for new messages |
+| `trigger.rss` | Poll an RSS/Atom feed for new entries |
+| `trigger.file_watch` | Watch a local or SFTP path for new/modified files |
 
-### Action nodes
+### Action nodes — control flow & data
 
 | Node | Description |
 |---|---|
-| `action.http_request` | HTTP GET/POST/PUT/DELETE with headers and body |
-| `action.transform` | Expression to reshape data |
-| `action.condition` | True/If-Else branching — skips the un-taken branch |
-| `action.filter` | Stop execution if a condition is not met |
-| `action.log` | Write a message to the run trace |
+| `action.condition` | True/False branching |
+| `action.switch` | Multi-way routing by value |
+| `action.filter` | Keep only list items matching an expression |
+| `action.loop` | Iterate over an array |
+| `action.aggregate` | Collect loop results into a list |
+| `action.merge` | Join outputs from multiple upstream nodes |
+| `action.transform` | Reshape data with a Python expression |
 | `action.set_variable` | Store a value in flow context |
-| `action.delay` | Pause execution for N seconds |
+| `action.delay` | Pause for N seconds |
+| `action.log` | Write a message to the run trace |
+| `action.date` | Date/time operations (format, add, diff, parse) |
+| `action.csv` | Parse or generate CSV strings |
 | `action.run_script` | Execute a Python script from the Scripts library |
-| `action.llm_call` | OpenAI chat completion with prompt templating |
+| `action.wait_for_approval` | Pause and send an approval email; resume on Approve/Reject |
+
+### Action nodes — integrations
+
+| Node | Description |
+|---|---|
+| `action.http_request` | HTTP GET/POST/PUT/DELETE with headers, body, credential |
+| `action.llm_call` | OpenAI-compatible LLM chat completion |
 | `action.send_email` | Send email via SMTP |
-| `action.telegram` | Send a Telegram message |
 | `action.slack` | Post to Slack via incoming webhook |
-| `action.loop` | Iterate over an array and run sub-nodes per item |
+| `action.discord` | Post to Discord via incoming webhook |
+| `action.telegram` | Send a Telegram bot message |
 | `action.call_graph` | Invoke another flow as a sub-flow |
 | `action.ssh` | Run a command on a remote server over SSH |
-| `action.sftp` | Upload, download, or list files over SFTP |
-| `action.github` | GitHub API — issues, PRs, releases |
+| `action.sftp` | Upload, download, or list files over SFTP/FTP |
+| `action.github` | GitHub REST API — issues, PRs, releases |
 | `action.google_sheets` | Read/write Google Sheets rows |
-| `action.notion` | Create/update Notion pages |
-| `action.merge` | Merge outputs from multiple upstream nodes |
+| `action.notion` | Create/update Notion pages and databases |
+| `action.airtable` | Airtable REST API — list, get, create, update, delete records |
+| `action.postgres` | PostgreSQL / MySQL / SQLite query |
+| `action.mysql` | MySQL / MariaDB query |
+| `action.redis` | Redis GET / SET / DEL / LPUSH / RPOP / INCR |
+| `action.mongodb` | MongoDB find, insert, update, delete, aggregate |
+| `action.s3` | S3-compatible storage — get, put, list, delete, presign |
+| `action.graphql` | GraphQL query or mutation |
+| `action.pdf` | Render HTML to PDF |
+| `action.hubspot` | HubSpot CRM v3 — contacts, deals, search, associate |
+| `action.jira` | Jira REST API v3 — issues, comments, transitions, JQL |
+| `action.twilio` | Twilio SMS, WhatsApp, and voice calls |
 
 ### Node features
 
@@ -156,9 +181,26 @@ The visual canvas editor lets you build flows by connecting nodes on a graph. Ea
 - **Fail mode** — `abort` (default) or `continue` (stores error in context, keeps flow running)
 - **Disable/enable** per node without deleting it
 - **Live data inspector** — overlay run input/output on any node from a past run
+- **Real-time streaming** — nodes colour in as they execute via SSE
 - **Undo/redo** — full history within a session
 - **Auto-layout** — one-click graph arrangement
-- **Version history** — save and restore named snapshots per flow
+- **Version history** — save, diff, and restore named snapshots per flow
+- **Import/export** — portable JSON bundles (credential names included, secrets never)
+
+---
+
+## Frontend Development
+
+The frontend lives in `frontend/` and is built with Vite + React.
+
+```bash
+cd frontend
+npm install
+npm run dev        # continuous rebuild → app/static/dist/ (watch mode)
+npm run build      # one-shot production build
+```
+
+FastAPI serves the built files from `app/static/dist/`. In development, run `npm run dev` in one terminal and `docker compose up api worker scheduler db redis` in another — file changes rebuild automatically and are served immediately (no container restart needed thanks to the bind mount).
 
 ---
 

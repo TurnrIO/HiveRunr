@@ -22,7 +22,7 @@ def _check_webhook_rate(token: str) -> tuple[bool, int, int]:
         return True, limit, window
     try:
         import redis as _redis
-        r = _redis.from_url(os.environ.get("CELERY_BROKER_URL", "redis://redis:6379/0"))
+        r = _redis.from_url(os.environ.get("REDIS_URL", "redis://redis:6379/0"))
         key = f"wh_rate:{token}"
         pipe = r.pipeline()
         pipe.incr(key)

@@ -193,7 +193,7 @@ def api_get_ratelimit(request: Request):
     counters = []
     try:
         import redis as _redis
-        r = _redis.from_url(os.environ.get("CELERY_BROKER_URL", "redis://redis:6379/0"))
+        r = _redis.from_url(os.environ.get("REDIS_URL", "redis://redis:6379/0"))
         keys = r.keys("wh_rate:*")
         for k in sorted(keys)[:50]:  # cap at 50 entries
             token = k.split(":", 1)[1] if ":" in k else k
@@ -399,8 +399,7 @@ def api_stream_run(task_id: str, request: Request):
     """
     _check_admin(request)
 
-    REDIS_URL = os.environ.get("REDIS_URL",
-                os.environ.get("CELERY_BROKER_URL", "redis://redis:6379/0"))
+    REDIS_URL = os.environ.get("REDIS_URL", "redis://redis:6379/0")
     TERMINAL  = {"succeeded", "failed", "cancelled"}
 
     def _sse(data: dict) -> str:

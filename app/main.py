@@ -202,14 +202,14 @@ def startup():
     for name in WORKFLOWS:
         try:
             upsert_workflow(name)
-        except Exception:
-            pass
+        except Exception as exc:
+            log.warning("startup: could not register workflow %r — %s", name, exc)
 
 
 # ── Health ────────────────────────────────────────────────────────────────────
 @app.get("/health")
 def health():
-    return {"status": "ok", "version": "8"}
+    return {"status": "ok", "version": __version__}
 
 
 # ── Page routes ───────────────────────────────────────────────────────────────
