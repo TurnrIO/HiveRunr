@@ -408,10 +408,10 @@ def api_toggle_workflow(name: str, request: Request):
 @app.post("/api/workflows/{name}/run")
 async def api_run_workflow(name: str, request: Request):
     import uuid as _uuid
-    from app.deps import _require_run_scope
+    from app.deps import _require_run_scope, _resolve_workspace
     from app.core.db import get_conn, list_workflows
     from app.worker import enqueue_script
-    _require_run_scope(request)
+    user = _require_run_scope(request)
     # Check the workflow exists and is enabled
     workflows = {w["name"]: w for w in list_workflows()}
     if name not in workflows:
@@ -422,11 +422,12 @@ async def api_run_workflow(name: str, request: Request):
             payload = {}
     except Exception:
         payload = {}
-    task_id = str(_uuid.uuid4())
+    task_id      = str(_uuid.uuid4())
+    workspace_id = _resolve_workspace(request, user)
     with get_conn() as conn:
         conn.cursor().execute(
-            "INSERT INTO runs(task_id, workflow, status) VALUES(%s, %s, 'queued')",
-            (task_id, name)
+            "INSERT INTO runs(task_id, workflow, status, workspace_id) VALUES(%s, %s, 'queued', %s)",
+            (task_id, name, workspace_id)
         )
     enqueue_script.apply_async(args=[name, payload], task_id=task_id)
     return {"queued": True, "task_id": task_id, "workflow": name}

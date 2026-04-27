@@ -126,6 +126,9 @@ def test_templates_list_unauthenticated(client):
     ("GET",  "/api/runs/queue"),
     ("POST", "/api/graphs/import"),
     ("POST", "/api/templates/daily_health_check/use"),
+    ("GET",  "/api/scripts"),
+    ("GET",  "/api/users"),
+    ("GET",  "/api/tokens"),
 ])
 def test_route_exists_returns_non_500(client, method, path):
     """Every listed endpoint must exist and return 401/403, never 404 or 500."""
