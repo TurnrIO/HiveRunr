@@ -301,12 +301,50 @@ OWNER_EMAIL=
 | Q1b | Run priority — migration `0015_flow_priority.py` adds `priority INT DEFAULT 5`; `apply_async(priority=…)` in graphs.py + scheduler; priority dropdown 0–9 in GraphRow ⋯ menu |
 | UX2a | Global search (`Ctrl+K`) — `CommandPalette.jsx` overlay; searches pages, flows, runs, credentials; 180 ms debounce; match highlight; ↑↓/↵/Esc navigation; Search button in sidebar footer |
 | UX2b | Pinned flows — migration `0016_flow_pinned.py`; pin/unpin in GraphRow ⋯ menu; purple "Pinned" section at top of Flows page; pinned rows excluded from other sections |
+| V1 | Release v0.3.0 — CHANGELOG covering F-series, N5, C/D/R/H sprints; `app/_version.py` + `pyproject.toml` bumped; `v0.3.0` git tag |
+| S1 | Route audit + smoke tests — duplicate template endpoints removed from admin.py; startup duplicate-route guard; `tests/test_api_smoke.py` with 19 endpoint checks |
+| S2 | Global exception handler — FastAPI `exception_handler(Exception)` logs full traceback + returns structured JSON; silent 500s are gone |
+| S3 | Dist files removed from git — Vite build stays in Docker image; `static_dist` named volume in docker-compose prevents bind-mount clobber |
+| S4 | VM push script — `scripts/vm-push.sh` wraps full plumbing workflow; lock file cleanup; single command |
+| WS-fix | Workspace_id stamped on all run creation paths — scripts, replays, webhooks, and legacy workflow runner all now stamp workspace_id; `list_runs` uses NULL-inclusive filter for historical data; metrics + analytics endpoints workspace-scoped |
+
+---
+
+## Active backlog — Q4
+
+Pick the next item off the top. Cross it off and add a "Completed sprints" row when done.
+
+### 🔴 V2 — v0.3.1 patch release
+
+65. **CHANGELOG `[0.3.1]` + version bump** — patch release covering all S-series stability fixes + workspace_id bug fixes; bump `app/_version.py` + `pyproject.toml` to 0.3.1; create `v0.3.1` tag.
+
+---
+
+### 🟠 UX3 — Scripts page improvements
+
+66. **Scripts page run status** — when you click ▶ Run on the Scripts page, show inline run status (queued → running → succeeded/failed) without navigating to Logs. Poll `GET /api/runs/by-task/{task_id}` every 2 s; show a status pill next to the script row.
+
+67. **Scripts page last-run summary** — for each script show the last run's status and timestamp fetched from `GET /api/runs?q={name}&page_size=1`.
+
+---
+
+### 🟡 T1 — Test coverage expansion
+
+68. **Workspace scoping tests** — `tests/test_workspace_scoping.py`: verify that script runs, replay runs, and webhook runs are stamped with workspace_id; verify list_runs filters correctly; verify analytics return workspace-scoped data.
+
+69. **Node unit tests** — `tests/test_nodes.py`: test the 5 most-used nodes (`action.http_request`, `action.transform`, `action.condition`, `action.llm_call`, `trigger.webhook`) with mocked I/O; assert output shapes and error handling.
+
+---
+
+### 🟢 UX4 — Canvas polish
+
+70. **"Run from this node"** — right-click context menu item on any non-trigger node; fires `POST /api/graphs/{id}/run` with `start_node_id` in the payload; executor skips nodes before the start node and uses previous run's output as context.
+
+71. **Canvas node output preview** — in ConfigPanel, when a run overlay is active and the selected node ran, show a collapsible "Last output" section with the full JSON tree (already have `_runOutput` on node data; just surface it cleanly).
 
 ---
 
 ## Active backlog (priority order)
-
-Pick the next item off the top. Cross it off and add a "Completed sprints" row when done.
 
 1. ~~**W2 — Scope graphs + runs to workspace**~~ ✓ Done
 2. ~~**W3 — Scope credentials, schedules, tokens**~~ ✓ Done

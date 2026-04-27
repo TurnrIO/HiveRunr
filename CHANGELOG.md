@@ -4,6 +4,38 @@ All notable changes are documented here, newest first.
 
 ---
 
+## [0.3.1] — 2026-04-27 — Stability & Bug Fixes
+
+Patch release covering the stability hardening sprint and a set of workspace-scoping bug fixes discovered after 0.3.0.
+
+### Stability (S1–S4)
+- **Duplicate route audit** — removed `GET /api/templates` and `POST /api/templates/{slug}/use` from `admin.py` which had been silently shadowing `templates_router` since F4; templates now work correctly from both the admin page and the canvas
+- **Startup duplicate-route guard** — `main.py` scans all registered routes after `include_router()` calls and logs `ERROR: DUPLICATE ROUTE DETECTED` at boot
+- **API smoke tests** — `tests/test_api_smoke.py` covers 19 key endpoints; runs in CI without live infrastructure (DB/Redis mocked)
+- **Global exception handler** — all unhandled exceptions now log full traceback at ERROR level and return structured JSON `{"detail": "..."}` instead of silent `Internal Server Error`
+- **Dist files removed from git** — Vite build output no longer tracked in git; built into Docker image at `docker compose up --build`; `static_dist` named volume prevents bind-mount from clobbering built assets
+- **VM push script** — `scripts/vm-push.sh` wraps the git plumbing workflow for the VirtioFS development environment
+
+### Bug fixes
+- **Templates 500** — `POST /api/templates/{slug}/use` was passing a raw Python dict to `create_graph()` instead of a JSON string; fixed in `admin.py`
+- **Canvas blank styling** — `canvas.html` referenced a CSS hash that didn't exist on disk after git operations; fixed by rebuilding dist and removing dist from git
+- **Logs page traces blank** — psycopg2 returns JSONB as raw strings on some configurations; `list_runs()` and `get_run_by_task()` now explicitly parse `traces`, `result`, and `initial_payload` if they come back as strings
+- **Templates `/api/templates/undefined`** — template list returned `slug` but not `id`; canvas OpenModal used `t.slug`, admin page used `t.id`; both fields now returned
+- **`/health` version** — was returning hardcoded `"version": "8"`; now returns real `__version__`
+- **REDIS_URL consistency** — `webhooks.py`, `runs.py`, and `worker.py` were reading `CELERY_BROKER_URL` instead of `REDIS_URL`; unified to `REDIS_URL` with `CELERY_BROKER_URL` as fallback in `worker.py`
+
+### Workspace scoping fixes
+- **Script/replay/webhook runs missing from Logs** — all five run-creation paths now stamp `workspace_id`; previously `POST /api/scripts/{name}/run`, `POST /api/runs/{id}/replay`, `POST /api/webhooks/{token}`, and `POST /api/workflows/{name}/run` inserted runs without `workspace_id`, making them invisible to workspace-scoped queries
+- **Historical NULL-workspace runs** — `list_runs()` now uses `(workspace_id = X OR workspace_id IS NULL)` filter so pre-fix runs remain visible
+- **Analytics not workspace-scoped** — `GET /api/metrics`, `GET /api/analytics/flows`, and `GET /api/analytics/daily` now resolve the active workspace and filter accordingly; Dashboard and Metrics page now show workspace-specific data
+
+### Upgrade notes
+No database migrations required for this patch. Run `docker compose up -d --build` — the `--build` is important to pick up the dist file change (no longer tracked in git, baked into Docker image).
+
+If upgrading from a deployment where `docker compose down -v` was recently run, a fresh `docker compose up -d --build` will correctly initialise the `static_dist` volume from the new image.
+
+---
+
 ## [0.3.0] — 2026-04-22 — Full React Canvas, Integrations & Workflow Intelligence
 
 This release completes the Vite + React frontend migration (F-series), ships five new integration nodes, adds collaborative canvas features (multi-select, alignment, subflow extraction), introduces flow tagging & health badges, run annotations, and completes the flow analytics suite.

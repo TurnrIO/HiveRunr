@@ -18,6 +18,11 @@ function loadMonaco(cb) {
   document.head.appendChild(script);
 }
 
+const RUN_STATUS_COLOR = {
+  succeeded: "#4ade80", failed: "#f87171", dead: "#ef4444",
+  running: "#34d399", queued: "#60a5fa", retrying: "#fb923c",
+};
+
 export function Scripts({ showToast }) {
   const { user }                              = useAuth();
   const [scripts, setScripts]                 = useState([]);
@@ -26,10 +31,15 @@ export function Scripts({ showToast }) {
   const [newName, setNewName]                 = useState("");
   const [creating, setCreating]               = useState(false);
   const [confirmState, setConfirmState]       = useState(null);
+  // run status: { taskId, status, error } per script name
+  const [runStatus, setRunStatus]             = useState({});
+  // last run info per script name: { status, created_at }
+  const [lastRuns, setLastRuns]               = useState({});
   const monacoRef          = useRef(null);
   const editorContainerRef = useRef(null);
+  const pollRef            = useRef({});
 
-  /* ── fetch list ──────────────────────────────────────────────────────── */
+  /* ── fetch list + last-run info ──────────────────────────────────────── */
   const load = useCallback(async (keepSelected = false) => {
     try {
       const s = await api("GET", "/api/scripts");
@@ -38,6 +48,19 @@ export function Scripts({ showToast }) {
       if (!keepSelected && list.length > 0) {
         await selectScript(list[0].name);
       }
+      // Load last run for each script
+      await Promise.allSettled(list.map(async sc => {
+        try {
+          const runs = await api("GET", `/api/runs?q=${encodeURIComponent(sc.name)}&page_size=1`);
+          const latest = (runs.runs ?? runs)[0];
+          if (latest) {
+            setLastRuns(prev => ({ ...prev, [sc.name]: {
+              status: latest.status,
+              created_at: latest.created_at,
+            }}));
+          }
+        } catch { /* optional */ }
+      }));
     } catch (e) { showToast(e.message, "error"); }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -50,7 +73,10 @@ export function Scripts({ showToast }) {
     setLoadingContent(false);
   }
 
-  useEffect(() => { load(false); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    load(false);
+    return () => { Object.values(pollRef.current).forEach(clearInterval); };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   /* ── Monaco editor lifecycle ─────────────────────────────────────────── */
   useEffect(() => {
@@ -118,9 +144,27 @@ export function Scripts({ showToast }) {
 
   async function runScript() {
     if (!selectedScript) return;
+    const name = selectedScript.name;
     try {
-      const res = await api("POST", `/api/scripts/${selectedScript.name}/run`);
-      showToast(`Queued: task ${res.task_id}`);
+      const res = await api("POST", `/api/scripts/${name}/run`);
+      showToast(`▶ Running ${name}…`);
+      setRunStatus(prev => ({ ...prev, [name]: { taskId: res.task_id, status: "queued" } }));
+
+      // Poll until terminal
+      if (pollRef.current[name]) clearInterval(pollRef.current[name]);
+      pollRef.current[name] = setInterval(async () => {
+        try {
+          const run = await api("GET", `/api/runs/by-task/${res.task_id}`);
+          if (!run) return;
+          setRunStatus(prev => ({ ...prev, [name]: { taskId: res.task_id, status: run.status, error: run.result?.error } }));
+          if (["succeeded","failed","dead","cancelled"].includes(run.status)) {
+            clearInterval(pollRef.current[name]);
+            setLastRuns(prev => ({ ...prev, [name]: { status: run.status, created_at: run.created_at } }));
+            if (run.status === "succeeded") showToast(`✓ ${name} succeeded`);
+            else showToast(`✗ ${name} ${run.status}${run.result?.error ? `: ${run.result.error}` : ""}`, "error");
+          }
+        } catch { clearInterval(pollRef.current[name]); }
+      }, 2000);
     } catch (e) { showToast(e.message, "error"); }
   }
 
@@ -166,18 +210,36 @@ export function Scripts({ showToast }) {
                 No scripts yet. Create one above.
               </div>
             )}
-            {scripts.map(s => (
-              <div
-                key={s.name}
-                className={`script-item${selectedScript?.name === s.name ? " active" : ""}`}
-                onClick={() => selectScript(s.name)}
-              >
-                <div className="script-item-name">{s.name}</div>
-                <div className="script-item-meta">
-                  {s.size} bytes · {new Date(s.modified * 1000).toLocaleDateString()}
+            {scripts.map(s => {
+              const live = runStatus[s.name];
+              const last = lastRuns[s.name];
+              const isRunning = live && ["queued","running","retrying"].includes(live.status);
+              const displayStatus = live?.status || last?.status;
+              return (
+                <div
+                  key={s.name}
+                  className={`script-item${selectedScript?.name === s.name ? " active" : ""}`}
+                  onClick={() => selectScript(s.name)}
+                >
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <div className="script-item-name">{s.name}</div>
+                    {displayStatus && (
+                      <span style={{
+                        fontSize: 9, fontWeight: 700, padding: "1px 5px", borderRadius: 8,
+                        color: RUN_STATUS_COLOR[displayStatus] || "#94a3b8",
+                        animation: isRunning ? "pulse 1.2s ease-in-out infinite" : "none",
+                      }}>
+                        {isRunning ? "⟳" : displayStatus === "succeeded" ? "✓" : displayStatus === "failed" ? "✗" : "●"}{" "}
+                        {displayStatus}
+                      </span>
+                    )}
+                  </div>
+                  <div className="script-item-meta">
+                    {s.size} bytes · {new Date(s.modified * 1000).toLocaleDateString()}
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
 
@@ -193,9 +255,16 @@ export function Scripts({ showToast }) {
                 <span style={{ color: "#64748b", fontSize: 12, marginRight: "auto", fontFamily: "monospace" }}>
                   {selectedScript.name}.py
                 </span>
-                {!ro && <button className="btn btn-primary btn-sm"  onClick={saveScript}>💾 Save</button>}
-                {!ro && <button className="btn btn-success btn-sm"  onClick={runScript}>▶ Run</button>}
-                {!ro && <button className="btn btn-danger btn-sm"   onClick={deleteScript}>✕ Delete</button>}
+                {!ro && <button className="btn btn-primary btn-sm" onClick={saveScript}>💾 Save</button>}
+                {!ro && (
+                  <button className="btn btn-success btn-sm" onClick={runScript}
+                    disabled={["queued","running"].includes(runStatus[selectedScript?.name]?.status)}>
+                    {["queued","running"].includes(runStatus[selectedScript?.name]?.status)
+                      ? <><span style={{ animation: "spin .8s linear infinite", display: "inline-block" }}>⟳</span> Running…</>
+                      : "▶ Run"}
+                  </button>
+                )}
+                {!ro && <button className="btn btn-danger btn-sm" onClick={deleteScript}>✕ Delete</button>}
               </div>
               <div className="editor-container" ref={editorContainerRef} />
             </>
