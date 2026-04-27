@@ -56,8 +56,11 @@ def list_templates(request: Request):
 
 
 @router.post("/api/templates/{slug}/use")
-async def use_template(slug: str, request: Request):
+def use_template(slug: str, request: Request):
     """Create a new graph from a built-in template and return its id + name."""
+    print(">>>USE_TEMPLATE slug=" + str(slug), flush=True)
+    import sys; sys.stderr.write(">>>USE_TEMPLATE_STDERR slug=" + str(slug) + "\n"); sys.stderr.flush()
+    return {"ok": True, "slug": slug}
     try:
         import traceback as _tb
         from app.deps import _check_admin, _resolve_workspace
