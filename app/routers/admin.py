@@ -549,18 +549,28 @@ def api_list_templates(request: Request):
 @router.post("/api/templates/{template_id}/use")
 def api_use_template(template_id: str, request: Request):
     """Instantiate a template as a new graph and return the created graph."""
-    _check_admin(request)
+    from app.deps import _resolve_workspace
+    from app.core.db import create_graph, save_graph_version
+    from app.routers.graphs import _sync_cron_triggers
+
+    user = _check_admin(request)
     if not _re.match(r'^[a-zA-Z0-9_\-]+$', template_id):
         raise HTTPException(400, "Invalid template id")
     p = TEMPLATES_DIR / f"{template_id}.json"
     if not p.exists():
         raise HTTPException(404, f"Template '{template_id}' not found")
-    data = json.loads(p.read_text())
-    name = data.get("name", template_id)
-    graph_data = data.get("graph_data", {"nodes": [], "edges": []})
-    from app.core.db import create_graph
-    g = create_graph(name, data.get("description", ""), graph_data)
-    return g
+    data      = json.loads(p.read_text())
+    name      = data.get("name", template_id)
+    gd        = data.get("graph_data", {"nodes": [], "edges": []})
+    gd_str    = json.dumps(gd)
+    workspace_id = _resolve_workspace(request, user)
+    g = create_graph(name, data.get("description", ""), gd_str, workspace_id=workspace_id)
+    try:
+        _sync_cron_triggers(g["id"], gd)
+        save_graph_version(g["id"], name, gd_str, note=f"Created from template: {name}")
+    except Exception:
+        pass
+    return {"id": g["id"], "name": g["name"], "slug": g.get("slug", "")}
 
 
 # ── Audit log ─────────────────────────────────────────────────────────────────
