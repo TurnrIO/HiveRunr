@@ -751,7 +751,8 @@ function CanvasApp() {
     }
   }
 
-  async function runGraph(payload) {
+  async function runGraph(payload, opts) {
+    // opts: { start_node_id?, prior_context? } for "run from this node"
     if (!currentGraph) { showToast("Save the graph first", "error"); return; }
     setRunning(true);
     setRunError(null);
@@ -771,7 +772,12 @@ function CanvasApp() {
         try { runPayload = JSON.parse(payload); }
         catch (e) { showToast("Invalid JSON in test payload", "error"); setRunning(false); return; }
       }
-      const r = await api("POST", `/api/graphs/${currentGraph.id}/run`, { source: "canvas", payload: runPayload });
+      const body = { source: "canvas", payload: runPayload };
+      if (opts?.start_node_id) {
+        body.start_node_id = opts.start_node_id;
+        body.prior_context = opts.prior_context || {};
+      }
+      const r = await api("POST", `/api/graphs/${currentGraph.id}/run`, body);
       taskId = r.task_id;
     } catch (e) { showToast(e.message, "error"); setRunning(false); return; }
 
@@ -860,6 +866,19 @@ function CanvasApp() {
       }, 800);
       setTimeout(() => { clearInterval(poll); setRunning(false); }, 300000);
     }
+  }
+
+  /* ── Run from a specific node ───────────────────────────────────────── */
+  function doRunFrom(nodeId) {
+    if (!currentGraph) { showToast("Save the graph first", "error"); return; }
+    // Collect current node outputs as prior context for the executor
+    const prior = {};
+    nodes.forEach(n => {
+      if (n.data._runOutput !== undefined) prior[n.id] = n.data._runOutput;
+    });
+    const label = nodes.find(n => n.id === nodeId)?.data?.label || nodeId;
+    showToast(`▶ Running from "${label}"…`);
+    runGraph(null, { start_node_id: nodeId, prior_context: prior });
   }
 
   /* ── Single-node test ────────────────────────────────────────────────── */
@@ -1415,6 +1434,7 @@ function CanvasApp() {
           onCopy={doCopy}
           onPaste={clipboardRef.current ? doPaste : null}
           onExtract={nodes.filter(n => n.selected).length > 1 ? () => setShowExtractModal(true) : null}
+          onRunFrom={currentGraph ? doRunFrom : null}
           selectedCount={nodes.filter(n => n.selected).length || 1}
         />
       )}

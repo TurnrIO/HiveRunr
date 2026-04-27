@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { NODE_DEFS } from "./nodeDefs.js";
 
-export function NodeContextMenu({ menu, onClose, onDuplicate, onDelete, onToggleDisabled, onCopyId, onRename, onCopy, onPaste, onExtract, selectedCount }) {
+export function NodeContextMenu({ menu, onClose, onDuplicate, onDelete, onToggleDisabled, onCopyId, onRename, onCopy, onPaste, onExtract, onRunFrom, selectedCount }) {
   const node       = menu.node;
   const isDisabled = !!node.data.disabled;
   const isNote     = node.data.type === "note";
@@ -53,6 +53,15 @@ export function NodeContextMenu({ menu, onClose, onDuplicate, onDelete, onToggle
           <div className="ctx-divider" />
           <div className="ctx-item" onClick={() => { onExtract(); onClose(); }}>
             ⛓ Extract {selectedCount} nodes to subflow…
+          </div>
+        </>
+      )}
+      {!isNote && !multi && onRunFrom && (
+        <>
+          <div className="ctx-divider" />
+          <div className="ctx-item" onClick={() => { onRunFrom(node.id); onClose(); }}
+            title="Re-run the flow starting from this node, using previous run outputs as context">
+            ▶ Run from here
           </div>
         </>
       )}

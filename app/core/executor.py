@@ -336,7 +336,8 @@ def _expand_loop(nid, loop_result, nodes_map, edges, context, creds, logger, suc
 
 # ── main graph runner ─────────────────────────────────────────────────────
 def run_graph(graph_data: dict, initial_payload: dict = None, logger=None, _depth: int = 0,
-              node_callback=None, workspace_id: int = None) -> dict:
+              node_callback=None, workspace_id: int = None,
+              start_node_id: str = None, prior_context: dict = None) -> dict:
     """Execute a graph and return {context, results, traces}.
 
     node_callback(event: dict) — optional callable fired after each node
@@ -368,6 +369,33 @@ def run_graph(graph_data: dict, initial_payload: dict = None, logger=None, _dept
 
     # Seed initial payload so root nodes receive it as their input
     context['__initial_payload__'] = payload.copy()
+
+    # ── "Run from this node" support ─────────────────────────────────────────
+    # When start_node_id is provided, pre-populate context with prior run
+    # outputs and mark all ancestors as skipped so the executor resumes
+    # from the requested node using previous outputs as inputs.
+    if start_node_id and start_node_id in {n['id'] for n in nodes}:
+        # Build the ancestor set (BFS backwards from start_node_id)
+        pred = {n['id']: [] for n in nodes}
+        for e in edges:
+            if e['target'] in pred and e['source'] in pred:
+                pred[e['target']].append(e['source'])
+        visited = set()
+        queue = [start_node_id]
+        while queue:
+            cur = queue.pop()
+            for p in pred.get(cur, []):
+                if p not in visited:
+                    visited.add(p)
+                    queue.append(p)
+        # Skip all ancestors
+        skip_nodes.update(visited)
+        # Pre-populate context from prior run outputs (if provided)
+        if prior_context:
+            for node_id, output in prior_context.items():
+                if node_id not in ('__initial_payload__',) and node_id in visited:
+                    context[node_id] = output
+        logger(f"[run_from] starting at node {start_node_id}, skipping {len(skip_nodes)} ancestor(s)")
 
     # Determine execution mode
     parallel    = graph_data.get('parallel', False) or \

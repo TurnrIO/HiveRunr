@@ -265,10 +265,17 @@ async def api_graph_run(graph_id: int, request: Request):
         body = await request.json()
     except Exception:
         body = {}
-    payload = body or {"source": "api"}
-    # Pass flow priority (0=lowest … 9=highest) to Celery; default 5 if column absent
-    flow_priority = g.get("priority", 5) if isinstance(g, dict) else 5
-    task = enqueue_graph.apply_async(args=[graph_id, payload], priority=flow_priority)
+    payload        = (body or {}).get("payload") or body or {"source": "api"}
+    start_node_id  = (body or {}).get("start_node_id")   # "run from this node" feature
+    prior_context  = (body or {}).get("prior_context")   # previous run's node outputs
+    flow_priority  = g.get("priority", 5) if isinstance(g, dict) else 5
+
+    task_kwargs = {}
+    if start_node_id:
+        task_kwargs = {"start_node_id": start_node_id, "prior_context": prior_context or {}}
+    task = enqueue_graph.apply_async(
+        args=[graph_id, payload], kwargs=task_kwargs, priority=flow_priority
+    )
     try:
         from app.core.db import get_conn
         with get_conn() as conn:

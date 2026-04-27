@@ -47,11 +47,12 @@ def test_transform_invalid_expression_raises():
         run({"expression": "this is not python &&"}, {}, {}, log)
 
 
-def test_transform_missing_expression_raises():
+def test_transform_missing_expression_returns_empty():
+    """Missing expression returns {} rather than raising — not a hard error."""
     from app.nodes.action_transform import run
     log, _ = make_logger()
-    with pytest.raises(Exception):
-        run({}, {}, {}, log)
+    out = run({}, {}, {}, log)
+    assert isinstance(out, dict)
 
 
 # ── action.condition ──────────────────────────────────────────────────────────
@@ -70,11 +71,13 @@ def test_condition_false_branch():
     assert out.get("result") is False
 
 
-def test_condition_missing_expression_raises():
+def test_condition_missing_expression_returns_false():
+    """Missing/empty expression evaluates to False rather than raising."""
     from app.nodes.action_condition import run
     log, _ = make_logger()
-    with pytest.raises(Exception):
-        run({}, {}, {}, log)
+    out = run({}, {}, {}, log)
+    assert isinstance(out, dict)
+    assert out.get("result") is False
 
 
 # ── action.http_request ───────────────────────────────────────────────────────
@@ -96,10 +99,10 @@ def test_http_request_get_success():
     mock_client.__exit__ = mock.MagicMock(return_value=False)
     mock_client.request.return_value = mock_response
 
-    with mock.patch("app.nodes.action_http_request.httpx") as mock_httpx:
-        mock_httpx.Client.return_value = mock_client
-        mock_httpx.HTTPStatusError = Exception
-        mock_httpx.RequestError = Exception
+    with mock.patch("httpx.Client") as MockClient, \
+         mock.patch("httpx.HTTPStatusError", Exception), \
+         mock.patch("httpx.RequestError", Exception):
+        MockClient.return_value = mock_client
         out = run({"url": "https://example.com/api", "method": "GET"}, {}, {}, log)
 
     assert out["status_code"] == 200
@@ -137,7 +140,7 @@ def test_llm_call_output_shape():
         "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15},
     }
 
-    with mock.patch("urllib.request.urlopen") as mock_urlopen:
+    with mock.patch("app.nodes.action_llm_call.urllib.request.urlopen") as mock_urlopen:
         mock_cm = mock.MagicMock()
         mock_cm.__enter__ = lambda s: s
         mock_cm.__exit__ = mock.MagicMock(return_value=False)

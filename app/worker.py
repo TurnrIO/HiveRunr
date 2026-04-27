@@ -266,7 +266,8 @@ _RETRY_BACKOFF_BASE = 30  # seconds
 
 
 @app.task(bind=True, name="app.worker.enqueue_graph", max_retries=_MAX_RETRIES)
-def enqueue_graph(self, graph_id: int, payload: dict):
+def enqueue_graph(self, graph_id: int, payload: dict,
+                  start_node_id: str = None, prior_context: dict = None):
     """Execute a graph flow.
 
     Retry policy: up to 3 retries with exponential backoff (30 s / 60 s / 120 s)
@@ -321,7 +322,9 @@ def enqueue_graph(self, graph_id: int, payload: dict):
         result = run_graph(graph_data, payload,
                            logger=_streaming_logger,
                            node_callback=_node_callback,
-                           workspace_id=g.get('workspace_id'))
+                           workspace_id=g.get('workspace_id'),
+                           start_node_id=start_node_id,
+                           prior_context=prior_context)
         traces = result.get('traces', [])
         update_run(task_id, "succeeded", result=result, traces=traces, retry_count=retry_attempt)
         if publish:
