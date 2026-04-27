@@ -78,6 +78,31 @@ from app._version import __version__
 
 app = FastAPI(title="HiveRunr", version=__version__, docs_url=None, redoc_url=None, openapi_url=None)
 
+# ── Global exception handler ──────────────────────────────────────────────────
+# Catches any unhandled exception that reaches the top of the stack, logs the
+# full traceback, then returns a structured JSON 500 response.
+# This ensures every server error leaves a trace — previously psycopg2 errors
+# and import failures in handler bodies could produce 500s with zero log output.
+import traceback as _traceback
+from fastapi import Request as _Request
+from fastapi.responses import JSONResponse as _JSONResponse
+from starlette.exceptions import HTTPException as _StarletteHTTP
+
+@app.exception_handler(Exception)
+async def _unhandled_exception_handler(_req: _Request, exc: Exception) -> _JSONResponse:
+    # Let FastAPI's own HTTPException handler deal with intentional HTTP errors
+    if isinstance(exc, _StarletteHTTP):
+        raise exc
+    log.error(
+        "Unhandled exception %s %s: %s\n%s",
+        _req.method, _req.url.path, exc,
+        _traceback.format_exc(),
+    )
+    return _JSONResponse(
+        status_code=500,
+        content={"detail": f"Internal server error: {type(exc).__name__}: {exc}"},
+    )
+
 # ── Middleware ────────────────────────────────────────────────────────────────
 app.add_middleware(PrometheusMiddleware)
 

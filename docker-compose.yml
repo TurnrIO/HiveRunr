@@ -24,6 +24,10 @@ services:
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
     volumes:
       - ./app:/app/app
+      # static_dist is a named volume pre-populated from the image at build time.
+      # It mounts OVER the ./app bind mount for app/static/dist/ so the bind
+      # mount never clobbers the Vite-built assets (which are no longer in git).
+      - static_dist:/app/app/static/dist
       - ./migrations:/app/migrations
       - ./alembic.ini:/app/alembic.ini
       - ./runlogs:/app/runlogs
@@ -81,3 +85,8 @@ volumes:
   pg_data:
   caddy_data:
   caddy_config:
+  # Vite build output — populated from the Docker image at build time.
+  # Mounting this here prevents the ./app bind mount from overriding the
+  # compiled frontend assets with an empty host directory.
+  # To rebuild: docker compose up -d --build (recreates volume from new image)
+  static_dist:
