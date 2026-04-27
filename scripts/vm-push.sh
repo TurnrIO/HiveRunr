@@ -40,7 +40,7 @@ for lock in \
   "$REPO/.git/refs/remotes/origin/main.lock" \
   "$REPO/.git/objects/maintenance.lock"
 do
-  [ -f "$lock" ] && { echo "Removing stale lock: $lock"; rm -f "$lock"; }
+  [ -f "$lock" ] && { echo "Removing stale lock: $lock"; rm -f "$lock" 2>/dev/null || echo "  (could not remove — VirtioFS permission, continuing)"; }
 done
 
 # ── 2. Load current HEAD into a fresh temp index ─────────────────────────────

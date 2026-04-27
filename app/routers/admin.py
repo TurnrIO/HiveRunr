@@ -506,19 +506,21 @@ def api_delete_script(name: str, request: Request):
 
 @router.post("/api/scripts/{name}/run")
 async def api_run_script(name: str, request: Request):
-    _check_admin(request)
+    user = _check_admin(request)
     _safe_script_name(name)
     try:
         payload = await request.json()
     except Exception:
         payload = {}
     from app.core.db import get_conn
+    from app.deps import _resolve_workspace
     from app.worker import enqueue_script
-    task_id = str(uuid.uuid4())
+    task_id      = str(uuid.uuid4())
+    workspace_id = _resolve_workspace(request, user)
     with get_conn() as conn:
         conn.cursor().execute(
-            "INSERT INTO runs(task_id,workflow,status) VALUES(%s,%s,'queued')",
-            (task_id, name)
+            "INSERT INTO runs(task_id, workflow, status, workspace_id) VALUES(%s,%s,'queued',%s)",
+            (task_id, name, workspace_id)
         )
     enqueue_script.apply_async(args=[name, payload], task_id=task_id)
     return {"task_id": task_id, "workflow": name}

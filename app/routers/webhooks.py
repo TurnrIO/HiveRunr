@@ -98,13 +98,15 @@ async def webhook_trigger(token: str, request: Request):
     except Exception:
         payload = {}
 
-    task = enqueue_graph.delay(g["id"], payload)
+    workspace_id = g.get("workspace_id")
+    task = enqueue_graph.apply_async(args=[g["id"], payload],
+                                     priority=g.get("priority", 5))
     try:
         from app.core.db import get_conn
         with get_conn() as conn:
             conn.cursor().execute(
-                "INSERT INTO runs(task_id, graph_id, status, initial_payload) VALUES(%s,%s,'queued',%s)",
-                (task.id, g["id"], json.dumps(payload))
+                "INSERT INTO runs(task_id, graph_id, status, initial_payload, workspace_id) VALUES(%s,%s,'queued',%s,%s)",
+                (task.id, g["id"], json.dumps(payload), workspace_id)
             )
     except Exception:
         pass
