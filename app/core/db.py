@@ -776,7 +776,6 @@ def get_run_metrics(workspace_id: int | None = None):
         s = dict(cur.fetchone())
 
         # Daily counts for the last 14 days (fill gaps with zeros)
-        cur.execute("""
         cur.execute(f"""
             WITH days AS (
                 SELECT generate_series(
