@@ -14,17 +14,17 @@ from fastapi.testclient import TestClient
 
 # ── App bootstrap ──────────────────────────────────────────────────────────────
 
-@pytest.fixture(scope="module")
-def client():
-    """Create a TestClient with a fully initialised app.
+@pytest.fixture(scope="session")
+def app_with_mocks():
+    """Import the FastAPI app with DB/Redis patched out.
 
-    The DB/Redis aren't available in CI, so we patch get_conn and redis to
-    avoid real network calls while still exercising the routing layer.
+    Session-scoped so the app is only imported once; individual tests get
+    their own TestClient instance (function-scoped) to avoid event-loop
+    lifecycle issues with module-scoped clients.
     """
     import unittest.mock as mock
     import app.core.db as db_mod
 
-    # Minimal fake connection pool so init_db / run_migrations is a no-op
     fake_conn = mock.MagicMock()
     fake_conn.__enter__ = lambda s: s
     fake_conn.__exit__ = mock.MagicMock(return_value=False)
@@ -38,17 +38,24 @@ def client():
          mock.patch("app.main.init_db", return_value=None), \
          mock.patch("app.main.seed_example_graphs", return_value=None):
 
-        from app.main import app
-        with TestClient(app, raise_server_exceptions=False) as c:
-            yield c
+        from app.main import app as _app
+        yield _app
+
+
+@pytest.fixture()
+def client(app_with_mocks):
+    """Fresh TestClient per test — avoids CancelledError from shared event loops."""
+    # Do NOT use 'with TestClient' context manager: it triggers lifespan
+    # events (startup/shutdown) which require a live DB. Plain instantiation
+    # skips lifespan and is sufficient for route-existence checks.
+    return TestClient(app_with_mocks, raise_server_exceptions=False)
 
 
 # ── Duplicate route detector ───────────────────────────────────────────────────
 
-def test_no_duplicate_routes():
+def test_no_duplicate_routes(app_with_mocks):
     """Fail if any two routes share method + path — the first one silently wins."""
-    import importlib, app.main as main_mod
-    from app.main import app as fastapi_app
+    fastapi_app = app_with_mocks
 
     seen = {}
     duplicates = []
