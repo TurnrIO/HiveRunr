@@ -757,20 +757,20 @@ def get_graph_version(version_id):
 
 # ── metrics ───────────────────────────────────────────────────────────────
 def get_run_metrics(workspace_id: int | None = None):
-    ws_filter = "(workspace_id = %s OR workspace_id IS NULL)" if workspace_id is not None else "TRUE"
+    ws_filter = "(r.workspace_id = %s OR r.workspace_id IS NULL)" if workspace_id is not None else "TRUE"
     ws_params = [workspace_id] if workspace_id is not None else []
     with get_conn() as conn:
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
 
-        # 30-day summary
+        # 30-day summary — alias runs as r so ws_filter can use r.workspace_id
         cur.execute(f"""
             SELECT
-                COUNT(*)                                                        AS total,
-                SUM(CASE WHEN status='succeeded' THEN 1 ELSE 0 END)            AS succeeded,
-                SUM(CASE WHEN status='failed'    THEN 1 ELSE 0 END)            AS failed,
-                ROUND(AVG(EXTRACT(EPOCH FROM (updated_at - created_at))*1000)) AS avg_ms
-            FROM runs
-            WHERE created_at >= NOW() - INTERVAL '30 days'
+                COUNT(*)                                                           AS total,
+                SUM(CASE WHEN r.status='succeeded' THEN 1 ELSE 0 END)             AS succeeded,
+                SUM(CASE WHEN r.status='failed'    THEN 1 ELSE 0 END)             AS failed,
+                ROUND(AVG(EXTRACT(EPOCH FROM (r.updated_at - r.created_at))*1000)) AS avg_ms
+            FROM runs r
+            WHERE r.created_at >= NOW() - INTERVAL '30 days'
               AND {ws_filter}
         """, ws_params)
         s = dict(cur.fetchone())
