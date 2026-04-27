@@ -58,12 +58,12 @@ def list_templates(request: Request):
 @router.post("/api/templates/{slug}/use")
 async def use_template(slug: str, request: Request):
     """Create a new graph from a built-in template and return its id + name."""
-    import traceback as _tb
-    from app.deps import _check_admin, _resolve_workspace
-    from app.core.db import create_graph, save_graph_version
-    from app.routers.graphs import _sync_cron_triggers
-
     try:
+        import traceback as _tb
+        from app.deps import _check_admin, _resolve_workspace
+        from app.core.db import create_graph, save_graph_version
+        from app.routers.graphs import _sync_cron_triggers
+
         user = _check_admin(request)
         log.info("use_template: user=%s slug=%s", user.get("username"), slug)
 
