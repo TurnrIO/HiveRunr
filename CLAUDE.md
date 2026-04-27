@@ -490,6 +490,44 @@ directory structure changed.
 
 ---
 
+## Active backlog — Stability & Maintainability
+
+**Goal: make the codebase super stable and easy to maintain before adding features.**
+
+The template 500 and CSS mismatch bugs revealed four systemic fragility points:
+1. Duplicate route shadowing in admin.py (silently serves wrong handler)
+2. No API smoke tests (broken endpoints undetected until users hit them)
+3. Dist files tracked in git (CSS hash mismatches on restore/corruption)
+4. Silent 500s with no logs (exceptions in psycopg2 bypass our loggers)
+
+### 🔴 S1 — Route audit + smoke tests ✅ Done (this sprint)
+
+59. ~~**Audit & remove duplicate routes**~~ ✓ Done — removed duplicate `GET /api/templates` and `POST /api/templates/{template_id}/use` from `admin.py` (they shadowed `templates_router`; admin.py is included first); added comment marking ownership; cleaned up debug endpoints.
+
+60. ~~**Startup duplicate-route guard**~~ ✓ Done — loop over `app.routes` after all `include_router` calls; logs `ERROR: DUPLICATE ROUTE DETECTED` at startup so problems are caught immediately.
+
+61. ~~**API smoke tests**~~ ✓ Done — `tests/test_api_smoke.py`: `test_no_duplicate_routes` (introspects live route table), `test_health` (checks version != "8"), parametrized `test_route_exists_returns_non_500` for 16 key endpoints. DB/Redis patched so tests run in CI without infrastructure.
+
+---
+
+### 🟠 S2 — Error visibility
+
+62. **Global exception handler with tracebacks** — add a FastAPI `exception_handler(Exception)` that logs the full traceback before returning 500. Currently some errors (psycopg2, import errors in handler body) produce 500 with zero log output.
+
+---
+
+### 🟡 S3 — Remove dist files from git
+
+63. **Move Vite build into Dockerfile** — add `RUN npm ci && npm run build` to the Dockerfile so dist is baked into the image at build time. Remove `app/static/dist/` from git tracking (`.gitignore`). This eliminates the CSS-hash-mismatch class of bug entirely and removes ~50 hashed asset files from the repo.
+
+---
+
+### 🟢 S4 — Git workflow
+
+64. **VM push script** — create `scripts/vm-push.sh` that wraps the git plumbing workflow (read-tree → add → write-tree → commit-tree → push) with automatic lock file cleanup. Single command instead of 10-step ritual.
+
+---
+
 ## Conventions
 
 - **Migration naming**: `000N_short_description.py`, `down_revision` must chain correctly.

@@ -55,57 +55,41 @@ def list_templates(request: Request):
     return _load_all()
 
 
-@router.post("/api/templates/use-ping")
-def use_template_ping(request: Request):
-    print(">>>PING CALLED", flush=True)
-    return {"pong": True}
-
-
 @router.post("/api/templates/{slug}/use")
 def use_template(slug: str, request: Request):
     """Create a new graph from a built-in template and return its id + name."""
-    print(">>>USE_TEMPLATE slug=" + str(slug), flush=True)
-    import sys; sys.stderr.write(">>>USE_TEMPLATE_STDERR slug=" + str(slug) + "\n"); sys.stderr.flush()
-    return {"ok": True, "slug": slug}
+    import traceback as _tb
+    from app.deps import _check_admin, _resolve_workspace
+    from app.core.db import create_graph, save_graph_version
+    from app.routers.graphs import _sync_cron_triggers
+
     try:
-        import traceback as _tb
-        from app.deps import _check_admin, _resolve_workspace
-        from app.core.db import create_graph, save_graph_version
-        from app.routers.graphs import _sync_cron_triggers
-
         user = _check_admin(request)
-        log.info("use_template: user=%s slug=%s", user.get("username"), slug)
-
         if not all(c.isalnum() or c in "-_" for c in slug):
             raise HTTPException(400, "Invalid template slug")
         path = TEMPLATES_DIR / f"{slug}.json"
         if not path.exists():
             raise HTTPException(404, f"Template '{slug}' not found")
 
-        data = json.loads(path.read_text())
+        data   = json.loads(path.read_text())
         name   = data.get("name", slug)
-        desc   = data.get("description", "")
         gd     = data.get("graph_data", {})
         gd_str = json.dumps(gd)
 
         workspace_id = _resolve_workspace(request, user)
-        log.info("use_template: workspace_id=%s", workspace_id)
-
-        g = create_graph(name, desc, gd_str, workspace_id=workspace_id)
-        log.info("use_template: created graph id=%s", g.get("id"))
-
+        g = create_graph(name, data.get("description", ""), gd_str, workspace_id=workspace_id)
         try:
             _sync_cron_triggers(g["id"], gd)
             save_graph_version(g["id"], name, gd_str, note=f"Created from template: {name}")
         except Exception as exc:
-            log.warning("use_template: post-create steps failed: %s", exc)
+            log.warning("use_template post-create steps failed: %s", exc)
 
         return {"id": g["id"], "name": g["name"], "slug": g.get("slug", "")}
 
     except HTTPException:
         raise
     except Exception as exc:
-        log.error("use_template ERROR: %s\n%s", exc, _tb.format_exc())
+        log.error("use_template ERROR for %s: %s\n%s", slug, exc, _tb.format_exc())
         raise HTTPException(500, f"Failed to create flow from template: {exc}")
 
 

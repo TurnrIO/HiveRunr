@@ -94,6 +94,26 @@ app.include_router(oauth_router)
 app.include_router(templates_router)
 app.include_router(approvals_router)
 
+# ── Duplicate route guard ─────────────────────────────────────────────────────
+# Detects shadowed routes at startup so problems are caught immediately
+# rather than silently serving the wrong handler in production.
+_seen_routes: dict = {}
+_dup_warnings: list = []
+for _r in app.routes:
+    if not hasattr(_r, "methods"):
+        continue
+    for _m in _r.methods:
+        _key = f"{_m} {getattr(_r, 'path', '?')}"
+        _owner = getattr(getattr(_r, "endpoint", None), "__module__", "?")
+        if _key in _seen_routes:
+            _dup_warnings.append(f"{_key}  ({_seen_routes[_key]} shadowed by {_owner})")
+        else:
+            _seen_routes[_key] = _owner
+if _dup_warnings:
+    import logging as _lg
+    for _w in _dup_warnings:
+        _lg.getLogger(__name__).error("DUPLICATE ROUTE DETECTED: %s", _w)
+
 # ── Static files ──────────────────────────────────────────────────────────────
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 

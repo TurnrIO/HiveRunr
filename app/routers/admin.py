@@ -524,58 +524,10 @@ async def api_run_script(name: str, request: Request):
     return {"task_id": task_id, "workflow": name}
 
 
-# ── Workflow templates ────────────────────────────────────────────────────────
-@router.get("/api/templates")
-def api_list_templates(request: Request):
-    _check_admin(request)
-    TEMPLATES_DIR.mkdir(exist_ok=True)
-    results = []
-    for p in sorted(TEMPLATES_DIR.glob("*.json")):
-        try:
-            data = json.loads(p.read_text())
-            results.append({
-                "id":          p.stem,
-                "slug":        p.stem,
-                "name":        data.get("name", p.stem),
-                "description": data.get("description", ""),
-                "category":    data.get("category", "General"),
-                "tags":        data.get("tags", []),
-                "node_count":  len(data.get("graph_data", {}).get("nodes", [])),
-                "edge_count":  len(data.get("graph_data", {}).get("edges", [])),
-            })
-        except Exception:
-            pass
-    return results
-
-
-@router.post("/api/templates/{template_id}/use")
-def api_use_template(template_id: str, request: Request):
-    """Instantiate a template as a new graph and return the created graph."""
-    from app.deps import _resolve_workspace
-    from app.core.db import create_graph, save_graph_version
-    from app.routers.graphs import _sync_cron_triggers
-
-    user = _check_admin(request)
-    if not _re.match(r'^[a-zA-Z0-9_\-]+$', template_id):
-        raise HTTPException(400, "Invalid template id")
-    p = TEMPLATES_DIR / f"{template_id}.json"
-    if not p.exists():
-        raise HTTPException(404, f"Template '{template_id}' not found")
-    data      = json.loads(p.read_text())
-    name      = data.get("name", template_id)
-    gd        = data.get("graph_data", {"nodes": [], "edges": []})
-    gd_str    = json.dumps(gd)
-    workspace_id = _resolve_workspace(request, user)
-    g = create_graph(name, data.get("description", ""), gd_str, workspace_id=workspace_id)
-    try:
-        _sync_cron_triggers(g["id"], gd)
-        save_graph_version(g["id"], name, gd_str, note=f"Created from template: {name}")
-    except Exception:
-        pass
-    return {"id": g["id"], "name": g["name"], "slug": g.get("slug", "")}
-
-
 # ── Audit log ─────────────────────────────────────────────────────────────────
+# NOTE: Template endpoints (GET /api/templates, POST /api/templates/{slug}/use,
+# GET /api/templates/{slug}) are owned by app/routers/templates.py.
+# Duplicates were removed from here to prevent silent shadowing.
 @router.get("/api/audit-log")
 def api_get_audit_log(
     request: Request,
