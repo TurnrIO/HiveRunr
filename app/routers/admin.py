@@ -345,26 +345,32 @@ def _version_gt(a: str, b: str) -> bool:
 @router.get("/api/metrics")
 def api_metrics(request: Request):
     from app.core.db import get_run_metrics
-    _check_admin(request)
-    return get_run_metrics()
+    from app.deps import _resolve_workspace
+    user = _check_admin(request)
+    workspace_id = _resolve_workspace(request, user)
+    return get_run_metrics(workspace_id=workspace_id)
 
 
 @router.get("/api/analytics/flows")
 def api_analytics_flows(request: Request, days: int = 30):
     """Per-flow performance stats (avg/P95/P99 duration, error rate)."""
     from app.core.db import get_flow_analytics
-    _check_admin(request)
+    from app.deps import _resolve_workspace
+    user = _check_admin(request)
+    workspace_id = _resolve_workspace(request, user)
     days = max(1, min(days, 365))
-    return get_flow_analytics(days)
+    return get_flow_analytics(days, workspace_id=workspace_id)
 
 
 @router.get("/api/analytics/daily")
 def api_analytics_daily(request: Request, days: int = 30):
     """Daily run volume + average duration."""
     from app.core.db import get_daily_analytics
-    _check_admin(request)
+    from app.deps import _resolve_workspace
+    user = _check_admin(request)
+    workspace_id = _resolve_workspace(request, user)
     days = max(1, min(days, 365))
-    return get_daily_analytics(days)
+    return get_daily_analytics(days, workspace_id=workspace_id)
 
 
 # ── Run logs ──────────────────────────────────────────────────────────────────

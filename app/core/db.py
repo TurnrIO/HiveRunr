@@ -328,7 +328,10 @@ def list_runs(page: int = 1, page_size: int = 50,
         like = f"%{q}%"
         params.extend([like, like, q.strip()])
     if workspace_id is not None:
-        conditions.append("r.workspace_id = %s")
+        # Include runs with NULL workspace_id so pre-workspace-migration data
+        # (scripts, replays, webhooks created before the workspace_id fix)
+        # remains visible rather than permanently disappearing.
+        conditions.append("(r.workspace_id = %s OR r.workspace_id IS NULL)")
         params.append(workspace_id)
 
     where = ("WHERE " + " AND ".join(conditions)) if conditions else ""
@@ -753,12 +756,14 @@ def get_graph_version(version_id):
         return dict(row) if row else None
 
 # ── metrics ───────────────────────────────────────────────────────────────
-def get_run_metrics():
+def get_run_metrics(workspace_id: int | None = None):
+    ws_filter = "(workspace_id = %s OR workspace_id IS NULL)" if workspace_id is not None else "TRUE"
+    ws_params = [workspace_id] if workspace_id is not None else []
     with get_conn() as conn:
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
 
         # 30-day summary
-        cur.execute("""
+        cur.execute(f"""
             SELECT
                 COUNT(*)                                                        AS total,
                 SUM(CASE WHEN status='succeeded' THEN 1 ELSE 0 END)            AS succeeded,
@@ -766,11 +771,13 @@ def get_run_metrics():
                 ROUND(AVG(EXTRACT(EPOCH FROM (updated_at - created_at))*1000)) AS avg_ms
             FROM runs
             WHERE created_at >= NOW() - INTERVAL '30 days'
-        """)
+              AND {ws_filter}
+        """, ws_params)
         s = dict(cur.fetchone())
 
         # Daily counts for the last 14 days (fill gaps with zeros)
         cur.execute("""
+        cur.execute(f"""
             WITH days AS (
                 SELECT generate_series(
                     CURRENT_DATE - 13, CURRENT_DATE, '1 day'::interval
@@ -782,38 +789,41 @@ def get_run_metrics():
                    COALESCE(COUNT(r.id), 0) AS total
             FROM days
             LEFT JOIN runs r ON DATE(r.created_at) = days.day
+              AND {ws_filter}
             GROUP BY days.day
             ORDER BY days.day
-        """)
+        """, ws_params)
         daily = [
             {'day': r['day'], 'succeeded': int(r['succeeded']), 'failed': int(r['failed']), 'total': int(r['total'])}
             for r in cur.fetchall()
         ]
 
         # Top 5 failing flows (last 30 days)
-        cur.execute("""
+        cur.execute(f"""
             SELECT COALESCE(g.name, 'legacy:' || r.workflow) AS name,
                    COUNT(*) AS failures
             FROM runs r
             LEFT JOIN graph_workflows g ON r.graph_id = g.id
             WHERE r.status = 'failed'
               AND r.created_at >= NOW() - INTERVAL '30 days'
+              AND {ws_filter}
             GROUP BY 1
             ORDER BY 2 DESC
             LIMIT 5
-        """)
+        """, ws_params)
         top_failing = [{'name': r['name'], 'failures': int(r['failures'])} for r in cur.fetchall()]
 
         # Last 10 runs for the activity feed
-        cur.execute("""
+        cur.execute(f"""
             SELECT r.id, r.status,
                    r.created_at::text AS created_at,
                    COALESCE(g.name, r.workflow, 'unknown') AS flow_name,
                    GREATEST(ROUND(EXTRACT(EPOCH FROM (r.updated_at - r.created_at))*1000), 0)::int AS duration_ms
             FROM runs r
             LEFT JOIN graph_workflows g ON r.graph_id = g.id
+            WHERE {ws_filter}
             ORDER BY r.id DESC LIMIT 10
-        """)
+        """, ws_params)
         recent = [dict(r) for r in cur.fetchall()]
 
         total     = int(s['total']     or 0)
@@ -831,7 +841,7 @@ def get_run_metrics():
 
 # ── analytics ─────────────────────────────────────────────────────────────
 
-def get_flow_analytics(days: int = 30) -> list:
+def get_flow_analytics(days: int = 30, workspace_id: int | None = None) -> list:
     """Per-flow performance stats for the last N days.
 
     Returns a list of dicts ordered by total runs descending:
@@ -865,10 +875,11 @@ def get_flow_analytics(days: int = 30) -> list:
             LEFT JOIN graph_workflows g ON r.graph_id = g.id
             WHERE r.created_at >= NOW() - (%(days)s || ' days')::interval
               AND r.status IN ('succeeded', 'failed')
+              AND (%(ws)s::int IS NULL OR r.workspace_id = %(ws)s OR r.workspace_id IS NULL)
             GROUP BY r.graph_id, flow_name
             ORDER BY total DESC
             LIMIT 50
-        """, {"days": days})
+        """, {"days": days, "ws": workspace_id})
         rows = cur.fetchall()
         return [
             {
@@ -887,7 +898,7 @@ def get_flow_analytics(days: int = 30) -> list:
         ]
 
 
-def get_daily_analytics(days: int = 30) -> list:
+def get_daily_analytics(days: int = 30, workspace_id: int | None = None) -> list:
     """Daily run volume + average duration for the last N days.
 
     Returns a list of dicts ordered by day ascending:
@@ -915,9 +926,10 @@ def get_daily_analytics(days: int = 30) -> list:
             LEFT JOIN runs r
               ON DATE(r.created_at) = ds.day
              AND r.status IN ('succeeded', 'failed')
+             AND (%(ws)s::int IS NULL OR r.workspace_id = %(ws)s OR r.workspace_id IS NULL)
             GROUP BY ds.day
             ORDER BY ds.day
-        """, {"days": days})
+        """, {"days": days, "ws": workspace_id})
         return [dict(r) for r in cur.fetchall()]
 
 
