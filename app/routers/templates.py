@@ -55,6 +55,12 @@ def list_templates(request: Request):
     return _load_all()
 
 
+@router.post("/api/templates/use-ping")
+def use_template_ping(request: Request):
+    print(">>>PING CALLED", flush=True)
+    return {"pong": True}
+
+
 @router.post("/api/templates/{slug}/use")
 def use_template(slug: str, request: Request):
     """Create a new graph from a built-in template and return its id + name."""
