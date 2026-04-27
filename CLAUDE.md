@@ -512,19 +512,19 @@ The template 500 and CSS mismatch bugs revealed four systemic fragility points:
 
 ### 🟠 S2 — Error visibility
 
-62. **Global exception handler with tracebacks** — add a FastAPI `exception_handler(Exception)` that logs the full traceback before returning 500. Currently some errors (psycopg2, import errors in handler body) produce 500 with zero log output.
+62. ~~**Global exception handler with tracebacks** — add a FastAPI `exception_handler(Exception)` that logs the full traceback before returning 500. Currently some errors (psycopg2, import errors in handler body) produce 500 with zero log output.~~ ✓ Done
 
 ---
 
 ### 🟡 S3 — Remove dist files from git
 
-63. **Move Vite build into Dockerfile** — add `RUN npm ci && npm run build` to the Dockerfile so dist is baked into the image at build time. Remove `app/static/dist/` from git tracking (`.gitignore`). This eliminates the CSS-hash-mismatch class of bug entirely and removes ~50 hashed asset files from the repo.
+63. ~~**Move Vite build into Dockerfile** — add `RUN npm ci && npm run build` to the Dockerfile so dist is baked into the image at build time. Remove `app/static/dist/` from git tracking (`.gitignore`). This eliminates the CSS-hash-mismatch class of bug entirely and removes ~50 hashed asset files from the repo.~~ ✓ Done
 
 ---
 
 ### 🟢 S4 — Git workflow
 
-64. **VM push script** — create `scripts/vm-push.sh` that wraps the git plumbing workflow (read-tree → add → write-tree → commit-tree → push) with automatic lock file cleanup. Single command instead of 10-step ritual.
+64. ~~**VM push script** — create `scripts/vm-push.sh` that wraps the git plumbing workflow (read-tree → add → write-tree → commit-tree → push) with automatic lock file cleanup. Single command instead of 10-step ritual.~~ ✓ Done
 
 ---
 
