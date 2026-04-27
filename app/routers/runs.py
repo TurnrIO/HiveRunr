@@ -346,14 +346,16 @@ def api_replay_run(run_id: int, request: Request, body: _ReplayBody = None):
     """
     user = _require_run_scope(request)
     from app.core.db import get_conn
+    import psycopg2.extras
     from app.worker import enqueue_graph
     with get_conn() as conn:
-        cur = conn.cursor()
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         cur.execute("SELECT graph_id, initial_payload FROM runs WHERE id=%s", (run_id,))
         row = cur.fetchone()
     if not row:
         raise HTTPException(404, f"Run {run_id} not found")
-    graph_id, initial_payload = row["graph_id"], row["initial_payload"]
+    graph_id = row["graph_id"]
+    initial_payload = row["initial_payload"]
     if not graph_id:
         raise HTTPException(400, "Run is not associated with a graph (script run?)")
     g = get_graph(graph_id)

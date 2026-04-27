@@ -237,18 +237,18 @@ export function Dashboard({ showToast }) {
                     <td><span className={`badge badge-${r.status}`}>{r.status}</span></td>
                     <td style={{ color: "#64748b" }}>{r.created_at ? new Date(r.created_at).toLocaleString() : "—"}</td>
                     <td style={{ color: "#64748b", fontVariantNumeric: "tabular-nums" }}>{fmtDur(r)}</td>
-                    <td>
-                      <div style={{ display: "flex", gap: 6 }}>
+                    <td style={{ whiteSpace: "nowrap" }}>
+                      <div style={{ display: "flex", gap: 4, justifyContent: "flex-end" }}>
                         {r.graph_id && (
                           <>
-                            <button className="btn btn-ghost" onClick={e => { e.stopPropagation(); replayRun(r.id); }} title="Replay with original payload">▶ Replay</button>
-                            <button className="btn btn-ghost" onClick={e => { e.stopPropagation(); openReplayEdit(r.id); }} title="Replay with custom payload">✏ Replay…</button>
+                            <button className="btn btn-ghost btn-sm" onClick={e => { e.stopPropagation(); replayRun(r.id); }} title="Replay with original payload">▶ Replay</button>
+                            <button className="btn btn-ghost btn-sm" onClick={e => { e.stopPropagation(); openReplayEdit(r.id); }} title="Replay with custom payload">✏ Replay…</button>
                           </>
                         )}
                         {(r.status === "queued" || r.status === "running") && (
-                          <button className="btn btn-warning" onClick={e => { e.stopPropagation(); cancelRun(r.id); }}>Cancel</button>
+                          <button className="btn btn-ghost btn-sm" style={{ color: "#fbbf24" }} onClick={e => { e.stopPropagation(); cancelRun(r.id); }}>Cancel</button>
                         )}
-                        <button className="btn btn-danger" title="Delete run" aria-label="Delete run"
+                        <button className="btn btn-ghost btn-sm" style={{ color: "#f87171" }} title="Delete run" aria-label="Delete run"
                           onClick={e => { e.stopPropagation(); deleteRun(r.id); }}>✕</button>
                       </div>
                     </td>
