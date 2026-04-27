@@ -535,11 +535,13 @@ def api_list_templates(request: Request):
             data = json.loads(p.read_text())
             results.append({
                 "id":          p.stem,
+                "slug":        p.stem,
                 "name":        data.get("name", p.stem),
                 "description": data.get("description", ""),
                 "category":    data.get("category", "General"),
                 "tags":        data.get("tags", []),
                 "node_count":  len(data.get("graph_data", {}).get("nodes", [])),
+                "edge_count":  len(data.get("graph_data", {}).get("edges", [])),
             })
         except Exception:
             pass
