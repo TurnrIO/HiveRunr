@@ -151,7 +151,17 @@ export function AdminLayout({ showToast }) {
                   onMouseLeave={e => e.currentTarget.style.color = "#4b5563"}>⚙</button>
               )}
             </div>
-            <select value={activeWorkspace?.id || ""} onChange={e => switchWorkspace(parseInt(e.target.value))}
+            <select value={activeWorkspace?.id || ""} onChange={async e => {
+              const nextId = parseInt(e.target.value, 10);
+              if (!nextId || nextId === activeWorkspace?.id) return;
+              try {
+                const workspace = await switchWorkspace(nextId);
+                setSidebarOpen(false);
+                showToast?.(`Switched to ${workspace.name}`);
+              } catch (err) {
+                showToast?.(err.message || "Workspace switch failed", "error");
+              }
+            }}
               style={{ width: "100%", background: "#1e2130", border: "1px solid #2d3148", borderRadius: 6,
                 color: "#a78bfa", fontSize: 12, padding: "5px 8px", cursor: "pointer" }}>
               {workspaces.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}

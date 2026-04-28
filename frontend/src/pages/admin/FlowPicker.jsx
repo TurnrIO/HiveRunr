@@ -15,8 +15,8 @@ export function FlowPicker({ value, onChange, graphs, scripts }) {
   }, [open]);
 
   const q = (query || "").toLowerCase();
-  const filteredGraphs  = (graphs  || []).filter(g => g.name.toLowerCase().includes(q)).slice(0, 20);
-  const filteredScripts = (scripts || []).filter(s => s.name.toLowerCase().includes(q)).slice(0, 20);
+  const filteredGraphs  = (graphs  || []).filter(g => (g.name || "").toLowerCase().includes(q)).slice(0, 20);
+  const filteredScripts = (scripts || []).filter(s => (s.name || "").toLowerCase().includes(q)).slice(0, 20);
   const hasResults = filteredGraphs.length > 0 || filteredScripts.length > 0;
 
   function selectGraph(g)  { setQuery(g.name);              onChange({ workflow: g.name,             graph_id: g.id   }); setOpen(false); }

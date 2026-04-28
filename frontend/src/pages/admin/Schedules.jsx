@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { Fragment, useState, useEffect } from "react";
 import { api } from "../../api/client.js";
 import { ViewerBanner } from "../../components/ViewerBanner.jsx";
 import { ConfirmModal } from "../../components/ConfirmModal.jsx";
@@ -18,6 +18,18 @@ const pill = (active, onClick, label) => (
     color: active ? "#fff" : "#64748b",
   }}>{label}</span>
 );
+
+function parseSchedulePayload(raw) {
+  try {
+    const parsed = JSON.parse(raw || "{}");
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      return { ok: true, value: parsed };
+    }
+    return { ok: false, error: "Payload must be a JSON object" };
+  } catch {
+    return { ok: false, error: "Payload must be valid JSON" };
+  }
+}
 
 export function Schedules({ showToast }) {
   const { currentUser: user } = useAuth();
@@ -57,10 +69,12 @@ export function Schedules({ showToast }) {
     e.preventDefault();
     if (!form.workflow?.trim()) { showToast("Select a flow or script", "error"); return; }
     if (schedMode === "once" && !form.run_at) { showToast("Pick a date/time", "error"); return; }
+    const payload = parseSchedulePayload(form.payload);
+    if (!payload.ok) { showToast(payload.error, "error"); return; }
     try {
       await api("POST", "/api/schedules", {
         ...form,
-        payload: JSON.parse(form.payload || "{}"),
+        payload: payload.value,
         cron:   schedMode === "once" ? null : form.cron,
         run_at: schedMode === "once" ? new Date(form.run_at).toISOString() : null,
       });
@@ -112,12 +126,14 @@ export function Schedules({ showToast }) {
 
   async function saveEdit(e) {
     e.preventDefault();
+    const payload = parseSchedulePayload(editForm.payload);
+    if (!payload.ok) { showToast(payload.error, "error"); return; }
     try {
       await api("PUT", `/api/schedules/${editingId}`, {
         name:     editForm.name,
         workflow: editForm.workflow,
         graph_id: editForm.graph_id,
-        payload:  JSON.parse(editForm.payload || "{}"),
+        payload:  payload.value,
         timezone: editForm.timezone,
         cron:     editForm.mode === "once" ? null : editForm.cron,
         run_at:   editForm.mode === "once" ? new Date(editForm.run_at).toISOString() : null,
@@ -215,7 +231,7 @@ export function Schedules({ showToast }) {
                 ) : <span style={{ fontSize: 11, color: "#475569" }}>never</span>;
 
                 return (
-                  <>
+                  <Fragment key={s.id}>
                     <tr key={s.id}>
                       <td data-label="Name" style={{ fontWeight: 500 }}>{s.name}</td>
                       <td data-label="Flow" style={{ fontSize: 12 }}>
@@ -254,7 +270,7 @@ export function Schedules({ showToast }) {
                       )}
                     </tr>
                     {editingId === s.id && (
-                      <tr key={`${s.id}-edit`} style={{ background: "#0f1117" }}>
+                      <tr style={{ background: "#0f1117" }}>
                         <td colSpan="7" style={{ padding: "16px" }}>
                           <form onSubmit={saveEdit}>
                             <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "flex-end" }}>
@@ -307,7 +323,7 @@ export function Schedules({ showToast }) {
                         </td>
                       </tr>
                     )}
-                  </>
+                  </Fragment>
                 );
               })}
             </tbody>

@@ -8,7 +8,7 @@ const WS_ROLE_COLORS = { owner: "#f59e0b", admin: "#a78bfa", viewer: "#64748b" }
 
 export function Workspaces({ showToast }) {
   const { currentUser: user } = useAuth();
-  const { activeWorkspace, refreshWorkspaces } = useWorkspace();
+  const { activeWorkspace, refreshWorkspaces, switchWorkspace } = useWorkspace();
   const isOwner = user?.role === "owner";
   const isAdmin = isOwner || user?.role === "admin";
 
@@ -136,9 +136,8 @@ export function Workspaces({ showToast }) {
 
   const switchTo = async (w) => {
     try {
-      await api("POST", `/api/workspaces/${w.id}/switch`);
-      showToast(`Switched to ${w.name}`);
-      window.location.reload();
+      const workspace = await switchWorkspace(w.id);
+      showToast(`Switched to ${workspace.name}`);
     } catch (e) { showToast(e.message, "error"); }
   };
 

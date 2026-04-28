@@ -209,6 +209,7 @@ function CanvasApp() {
   const [activeWorkspace, setActiveWorkspace] = useState(null);
   const [contextMenu,     setContextMenu]     = useState(null);
   const [toast,           setToast]           = useState(null);
+  const [confirmState,    setConfirmState]    = useState(null);
   const [saving,          setSaving]          = useState(false);
   const [isDirty,         setIsDirty]         = useState(false);
   const [running,         setRunning]         = useState(false);
@@ -308,6 +309,40 @@ function CanvasApp() {
   const showToast = useCallback((msg, type = "success") => {
     setToast({ msg, type, key: Date.now() });
   }, []);
+
+  function resetCanvasForWorkspaceSwitch(nextWorkspace) {
+    setNodes([]);
+    setEdges([]);
+    setSelectedNode(null);
+    setSelectedEdge(null);
+    setEdgeLabelInput("");
+    setCurrentGraph(null);
+    setGraphName("Untitled Graph");
+    setContextMenu(null);
+    setRunError(null);
+    setRunning(false);
+    setShowModal(false);
+    setShowTestModal(false);
+    setShowHistoryModal(false);
+    setShowPermissionsModal(false);
+    setShowExtractModal(false);
+    setValidationIssues(null);
+    setInspectorRuns([]);
+    setInspectorRunId(null);
+    setInspectorRun(null);
+    setPaletteSearch("");
+    setMobileSidebarOpen(false);
+    setShowSearch(false);
+    setReplayEdit(null);
+    setHoveredNodeId(null);
+    setActiveWorkspace(nextWorkspace || null);
+    setIsDirty(false);
+    histRef.current = [];
+    histIdx.current = -1;
+    syncHistState();
+    sessionStorage.removeItem("canvas_open_graph");
+    window.location.hash = "";
+  }
 
   /* ── Jump viewport to a node ─────────────────────────────────────────── */
   function jumpToNode(n) {
@@ -606,6 +641,36 @@ function CanvasApp() {
   /* ── Graph list ──────────────────────────────────────────────────────── */
   async function loadGraphList() {
     try { setGraphs(await api("GET", "/api/graphs")); } catch (e) { /* silent */ }
+  }
+
+  async function performCanvasWorkspaceSwitch(workspaceId) {
+    try {
+      const res = await api("POST", `/api/workspaces/${workspaceId}/switch`);
+      resetCanvasForWorkspaceSwitch(res.workspace);
+      const [nextGraphs, nextCreds] = await Promise.all([
+        api("GET", "/api/graphs"),
+        api("GET", "/api/credentials"),
+      ]);
+      setGraphs(nextGraphs || []);
+      setCredentials(nextCreds || []);
+      showToast(`Switched to ${res.workspace.name}`);
+    } catch (err) {
+      showToast(err.message || "Workspace switch failed", "error");
+    }
+  }
+
+  function switchCanvasWorkspace(workspaceId) {
+    if (!workspaceId || workspaceId === activeWorkspace?.id) return;
+    if (!isDirty) {
+      performCanvasWorkspaceSwitch(workspaceId);
+      return;
+    }
+    const nextWorkspace = workspaces.find(w => w.id === workspaceId);
+    setConfirmState({
+      message: `Switch to ${nextWorkspace?.name || "that workspace"} and discard unsaved canvas changes?`,
+      confirmLabel: "Switch",
+      fn: () => performCanvasWorkspaceSwitch(workspaceId),
+    });
   }
 
   /* ── Edge events ─────────────────────────────────────────────────────── */
@@ -1253,16 +1318,7 @@ function CanvasApp() {
               style={{ cursor: "pointer", maxWidth: 160, padding: "2px 6px", color: "#a78bfa" }}
               title="Switch workspace"
               value={activeWorkspace?.id || ""}
-              onChange={async e => {
-                const wid = parseInt(e.target.value);
-                if (!wid) return;
-                try {
-                  const res = await api("POST", `/api/workspaces/${wid}/switch`);
-                  setActiveWorkspace(res.workspace);
-                  loadGraphList();
-                  showToast(`Switched to ${res.workspace.name}`);
-                } catch (err) { showToast(err.message, "error"); }
-              }}
+              onChange={e => switchCanvasWorkspace(parseInt(e.target.value, 10))}
             >
               {workspaces.map(w => (
                 <option key={w.id} value={w.id}>🏢 {w.name}</option>
@@ -1493,6 +1549,15 @@ function CanvasApp() {
           issues={validationIssues.issues}
           onClose={() => setValidationIssues(null)}
           onRunAnyway={() => { runGraph(validationIssues.payload); setValidationIssues(null); }}
+        />
+      )}
+
+      {confirmState && (
+        <ConfirmModal
+          message={confirmState.message}
+          confirmLabel={confirmState.confirmLabel}
+          onConfirm={() => { confirmState.fn(); setConfirmState(null); }}
+          onCancel={() => setConfirmState(null)}
         />
       )}
 

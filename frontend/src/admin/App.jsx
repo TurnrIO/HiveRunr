@@ -5,6 +5,7 @@ import { Toast } from "../components/Toast.jsx";
 import { AdminLayout } from "./AdminLayout.jsx";
 import { ErrorBoundary } from "../components/ErrorBoundary.jsx";
 import { useState, useCallback } from "react";
+import { useWorkspace } from "../contexts/WorkspaceContext.jsx";
 
 /** Wrap a page element in a per-route ErrorBoundary. */
 function page(label, element) {
@@ -41,27 +42,36 @@ export function App() {
       <AuthProvider>
         <WorkspaceProvider>
           <BrowserRouter>
-            <Routes>
-              <Route element={<AdminLayout showToast={showToast} />}>
-                <Route index             element={page("Dashboard",   <Dashboard   showToast={showToast} />)} />
-                <Route path="graphs"     element={page("Canvas Flows",<Flows       showToast={showToast} />)} />
-                <Route path="templates"  element={page("Templates",   <Templates   showToast={showToast} />)} />
-                <Route path="metrics"    element={page("Metrics",     <Metrics     showToast={showToast} />)} />
-                <Route path="scripts"    element={page("Scripts",     <Scripts     showToast={showToast} />)} />
-                <Route path="credentials" element={page("Credentials",<Credentials showToast={showToast} />)} />
-                <Route path="schedules"  element={page("Schedules",   <Schedules   showToast={showToast} />)} />
-                <Route path="logs"       element={page("Logs",        <Logs        showToast={showToast} />)} />
-                <Route path="users"      element={page("Users",       <Users       showToast={showToast} />)} />
-                <Route path="audit"      element={page("Audit Log",   <AuditLog    showToast={showToast} />)} />
-                <Route path="settings"   element={page("Settings",    <Settings    showToast={showToast} />)} />
-                <Route path="workspaces" element={page("Workspaces",  <Workspaces  showToast={showToast} />)} />
-                <Route path="system"     element={page("System",      <System      showToast={showToast} />)} />
-              </Route>
-            </Routes>
+            <AdminRoutes showToast={showToast} />
           </BrowserRouter>
           {toast && <Toast key={toast.key} msg={toast.msg} type={toast.type} onDone={() => setToast(null)} />}
         </WorkspaceProvider>
       </AuthProvider>
     </ErrorBoundary>
+  );
+}
+
+function AdminRoutes({ showToast }) {
+  const { activeWorkspace } = useWorkspace();
+  const workspaceKey = activeWorkspace?.id || "workspace:none";
+
+  return (
+    <Routes key={workspaceKey}>
+      <Route element={<AdminLayout showToast={showToast} />}>
+        <Route index             element={page("Dashboard",   <Dashboard   showToast={showToast} />)} />
+        <Route path="graphs"     element={page("Canvas Flows",<Flows       showToast={showToast} />)} />
+        <Route path="templates"  element={page("Templates",   <Templates   showToast={showToast} />)} />
+        <Route path="metrics"    element={page("Metrics",     <Metrics     showToast={showToast} />)} />
+        <Route path="scripts"    element={page("Scripts",     <Scripts     showToast={showToast} />)} />
+        <Route path="credentials" element={page("Credentials",<Credentials showToast={showToast} />)} />
+        <Route path="schedules"  element={page("Schedules",   <Schedules   showToast={showToast} />)} />
+        <Route path="logs"       element={page("Logs",        <Logs        showToast={showToast} />)} />
+        <Route path="users"      element={page("Users",       <Users       showToast={showToast} />)} />
+        <Route path="audit"      element={page("Audit Log",   <AuditLog    showToast={showToast} />)} />
+        <Route path="settings"   element={page("Settings",    <Settings    showToast={showToast} />)} />
+        <Route path="workspaces" element={page("Workspaces",  <Workspaces  showToast={showToast} />)} />
+        <Route path="system"     element={page("System",      <System      showToast={showToast} />)} />
+      </Route>
+    </Routes>
   );
 }

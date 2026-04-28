@@ -46,12 +46,20 @@ ask_yn() {
 ask_val() {
   local label="$1" current="$2"
   if [ -n "$current" ]; then
-    printf "  %s [%s]: " "$label" "$current"
+    printf "  %s [%s]: " "$label" "$current" >/dev/tty
   else
-    printf "  %s: " "$label"
+    printf "  %s: " "$label" >/dev/tty
   fi
   read -r val </dev/tty
   echo "${val:-$current}"
+}
+
+# get_env KEY — reads a value from .env and strips old prompt pollution
+get_env() {
+  local key="$1" value=""
+  value=$(grep "^${key}=" .env 2>/dev/null | head -n1 | cut -d'=' -f2-)
+  value=$(printf '%s' "$value" | sed -E "s/^[[:space:]]*${key}( \\([^)]*\\))?( \\[[^]]*\\])?:[[:space:]]*//")
+  echo "$value"
 }
 
 # set_env KEY VALUE — replaces the line in .env (in-place)
@@ -60,7 +68,11 @@ set_env() {
   # Escape forward-slashes and ampersands in the value for sed
   local escaped
   escaped=$(printf '%s' "$value" | sed 's/[\/&]/\\&/g')
-  sed -i.bak "s|^${key}=.*|${key}=${escaped}|" .env && rm -f .env.bak
+  if grep -q "^${key}=" .env; then
+    sed -i.bak "s|^${key}=.*|${key}=${escaped}|" .env && rm -f .env.bak
+  else
+    printf "\n%s=%s\n" "$key" "$value" >> .env
+  fi
 }
 
 # ── Guard: repo root ──────────────────────────────────────────────────────────
@@ -90,7 +102,7 @@ else
 fi
 
 # Generate SECRET_KEY if blank
-current_key=$(grep '^SECRET_KEY=' .env | cut -d'=' -f2-)
+current_key=$(get_env "SECRET_KEY")
 if [ -z "$current_key" ]; then
   SECRET_KEY=$(python3 -c "import base64,os; print(base64.urlsafe_b64encode(os.urandom(32)).decode())" 2>/dev/null \
     || openssl rand -base64 32 | tr '+/' '-_' | tr -d '=\n')
@@ -107,7 +119,7 @@ fi
 # API_KEY
 banner "Step 2 — API key"
 info "API_KEY protects all inbound /webhook/* endpoints."
-current_api=$(grep '^API_KEY=' .env | cut -d'=' -f2-)
+current_api=$(get_env "API_KEY")
 if [ "$current_api" = "change-me-before-deployment" ] || [ -z "$current_api" ]; then
   # Generate a random default so the placeholder is never left in place
   default_api=$(python3 -c "import secrets; print(secrets.token_urlsafe(24))" 2>/dev/null \
@@ -136,15 +148,15 @@ if ask_yn "Configure email alerts via AgentMail.to?" n; then
   info "Sign up at https://agentmail.to and create an inbox to get your API key."
   echo ""
 
-  current_key=$(grep '^AGENTMAIL_API_KEY=' .env | cut -d'=' -f2-)
+  current_key=$(get_env "AGENTMAIL_API_KEY")
   new_key=$(ask_val "AGENTMAIL_API_KEY" "$current_key")
   [ -n "$new_key" ] && set_env "AGENTMAIL_API_KEY" "$new_key"
 
-  current_from=$(grep '^AGENTMAIL_FROM=' .env | cut -d'=' -f2-)
+  current_from=$(get_env "AGENTMAIL_FROM")
   new_from=$(ask_val "AGENTMAIL_FROM (e.g. alerts@agentmail.to)" "$current_from")
   [ -n "$new_from" ] && set_env "AGENTMAIL_FROM" "$new_from"
 
-  current_owner=$(grep '^OWNER_EMAIL=' .env | cut -d'=' -f2-)
+  current_owner=$(get_env "OWNER_EMAIL")
   new_owner=$(ask_val "OWNER_EMAIL (your email — gets all failure alerts + forgot-password)" "$current_owner")
   [ -n "$new_owner" ] && set_env "OWNER_EMAIL" "$new_owner"
 
@@ -154,17 +166,18 @@ fi
 
 # ── App URL ───────────────────────────────────────────────────────────────────
 echo ""
-current_url=$(grep '^APP_URL=' .env | cut -d'=' -f2-)
+current_url=$(get_env "APP_URL")
+current_url="${current_url:-http://localhost}"
 if [ "$current_url" = "http://localhost" ]; then
-  new_url=$(ask_val "APP_URL (public URL used in email links — press Enter to keep localhost)" "http://localhost")
-  [ "$new_url" != "http://localhost" ] && [ -n "$new_url" ] && set_env "APP_URL" "$new_url" && ok "APP_URL saved"
+  new_url=$(ask_val "APP_URL (public URL used in email links — press Enter to keep localhost)" "$current_url")
+  [ "$new_url" != "$current_url" ] && [ -n "$new_url" ] && set_env "APP_URL" "$new_url" && ok "APP_URL saved"
 fi
 
 # ── Default timezone ──────────────────────────────────────────────────────────
 echo ""
 # Auto-detect system timezone as a sensible default
 detected_tz=$(cat /etc/timezone 2>/dev/null || timedatectl show --property=Timezone --value 2>/dev/null || echo "UTC")
-current_tz=$(grep '^APP_TIMEZONE=' .env 2>/dev/null | cut -d'=' -f2-)
+current_tz=$(get_env "APP_TIMEZONE")
 current_tz="${current_tz:-$detected_tz}"
 new_tz=$(ask_val "APP_TIMEZONE (IANA timezone for the scheduler UI, e.g. Europe/London)" "$current_tz")
 [ -n "$new_tz" ] && set_env "APP_TIMEZONE" "$new_tz" && ok "APP_TIMEZONE set to $new_tz"
@@ -185,12 +198,12 @@ banner "Step 4 — Review"
 echo ""
 echo -e "  ${BOLD}Your .env is ready.${RESET} Key values:"
 echo ""
-printf "  %-22s %s\n" "API_KEY:"           "$(grep '^API_KEY=' .env | cut -d'=' -f2-)"
-printf "  %-22s %s\n" "AGENTMAIL_FROM:"    "$(grep '^AGENTMAIL_FROM=' .env | cut -d'=' -f2-)"
-printf "  %-22s %s\n" "OWNER_EMAIL:"       "$(grep '^OWNER_EMAIL=' .env | cut -d'=' -f2-)"
-printf "  %-22s %s\n" "APP_URL:"           "$(grep '^APP_URL=' .env | cut -d'=' -f2-)"
-printf "  %-22s %s\n" "APP_TIMEZONE:"      "$(grep '^APP_TIMEZONE=' .env | cut -d'=' -f2-);"
-printf "  %-22s %s\n" "RUN_SCRIPT:"        "$(grep '^ENABLE_RUN_SCRIPT=' .env | cut -d'=' -f2-)"
+printf "  %-22s %s\n" "API_KEY:"           "$(get_env "API_KEY")"
+printf "  %-22s %s\n" "AGENTMAIL_FROM:"    "$(get_env "AGENTMAIL_FROM")"
+printf "  %-22s %s\n" "OWNER_EMAIL:"       "$(get_env "OWNER_EMAIL")"
+printf "  %-22s %s\n" "APP_URL:"           "$(get_env "APP_URL")"
+printf "  %-22s %s\n" "APP_TIMEZONE:"      "$(get_env "APP_TIMEZONE")"
+printf "  %-22s %s\n" "RUN_SCRIPT:"        "$(get_env "ENABLE_RUN_SCRIPT")"
 echo ""
 info "Edit .env at any time to add OpenAI, Slack, Telegram, and other integration keys."
 

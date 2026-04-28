@@ -44,10 +44,19 @@ Typical secret JSON stored in the provider:
 import json
 import logging
 import os
+import re
 
 log = logging.getLogger(__name__)
 
 _loaded = False  # process-level guard — load only once
+_INTERACTIVE_ENV_KEYS = {
+    "API_KEY",
+    "AGENTMAIL_API_KEY",
+    "AGENTMAIL_FROM",
+    "OWNER_EMAIL",
+    "APP_URL",
+    "APP_TIMEZONE",
+}
 
 
 def load_secrets() -> None:
@@ -60,6 +69,8 @@ def load_secrets() -> None:
     if _loaded:
         return
     _loaded = True
+
+    _normalize_interactive_env()
 
     provider = os.environ.get("SECRETS_PROVIDER", "").strip().lower()
     if not provider:
@@ -76,6 +87,36 @@ def load_secrets() -> None:
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
+def _strip_interactive_prompt(key: str, value: str) -> str:
+    """Strip setup.sh prompt text accidentally persisted into env values."""
+    if not isinstance(value, str):
+        return value
+    match = re.match(
+        rf"^\s*{re.escape(key)}(?:\s*\([^)]*\))?(?:\s*\[[^\]]*\])?:\s*(.*)$",
+        value,
+        flags=re.S,
+    )
+    return match.group(1).strip() if match else value
+
+
+def _normalize_interactive_env() -> None:
+    """Repair env vars corrupted by older interactive setup.sh versions."""
+    repaired = []
+    for key in _INTERACTIVE_ENV_KEYS:
+        raw = os.environ.get(key)
+        if raw is None:
+            continue
+        cleaned = _strip_interactive_prompt(key, raw)
+        if cleaned != raw:
+            os.environ[key] = cleaned
+            repaired.append(key)
+    if repaired:
+        log.warning(
+            "Normalized malformed .env values for %s. Update .env or re-run setup.sh "
+            "to persist the repaired values.",
+            ", ".join(sorted(repaired)),
+        )
 
 def _merge(secrets: dict, source: str) -> None:
     """Write fetched key/value pairs into os.environ; existing vars win."""

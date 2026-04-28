@@ -32,9 +32,24 @@ const ACTION_GROUPS = [
 
 const PAGE = 100;
 
-function DetailBadge({ detail }) {
+function normalizeDetail(detail) {
   if (!detail) return null;
-  const items = typeof detail === "string" ? JSON.parse(detail) : detail;
+  if (typeof detail === "string") {
+    try {
+      return JSON.parse(detail);
+    } catch {
+      return detail;
+    }
+  }
+  return detail;
+}
+
+function DetailBadge({ detail }) {
+  const items = normalizeDetail(detail);
+  if (!items) return null;
+  if (typeof items !== "object" || Array.isArray(items)) {
+    return <span style={{ color: "#64748b", fontSize: 11 }}>{String(items)}</span>;
+  }
   const parts = Object.entries(items)
     .filter(([, v]) => v !== null && v !== undefined)
     .map(([k, v]) => `${k}: ${typeof v === "object" ? JSON.stringify(v) : v}`);

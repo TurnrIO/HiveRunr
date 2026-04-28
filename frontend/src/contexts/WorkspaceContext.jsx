@@ -42,7 +42,7 @@ export function WorkspaceProvider({ children }) {
   async function switchWorkspace(id) {
     const res = await api("POST", `/api/workspaces/${id}/switch`);
     setActiveWorkspace(res.workspace);
-    window.location.reload();
+    return res.workspace;
   }
 
   return (

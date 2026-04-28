@@ -38,6 +38,8 @@ docker compose up -d --build
 
 Then open **http://localhost** — on first run you will be prompted to create your owner account.
 
+`setup.sh` now safely reuses existing `.env` values, appends missing keys, and avoids the older prompt-capture bug that could write interactive prompt text into `.env`.
+
 ---
 
 ## Authentication
@@ -79,6 +81,20 @@ x-api-token: hr_your_token_here
 | `db` | PostgreSQL | 5432 |
 | `redis` | Celery broker + result backend | 6379 |
 | `flower` | Celery monitoring UI at `/flower/` (auth-gated) | 5555 |
+
+---
+
+## Caddy Entry Point
+
+The default stack keeps **Caddy in front of the app**. `docker compose up -d --build` exposes Caddy on `http://localhost`, and Caddy reverse-proxies both the FastAPI app and Flower.
+
+For local review on a non-default port while still keeping Caddy in the path, use:
+
+```bash
+docker compose --env-file docker-compose.review.env up -d --build
+```
+
+That keeps the same service topology but publishes Caddy on `http://localhost:9999`.
 
 ---
 
@@ -201,6 +217,8 @@ npm run build      # one-shot production build
 ```
 
 FastAPI serves the built files from `app/static/dist/`. In development, run `npm run dev` in one terminal and `docker compose up api worker scheduler db redis` in another — file changes rebuild automatically and are served immediately (no container restart needed thanks to the bind mount).
+
+Workspace switching in both the admin app and canvas now refreshes in-app state without forcing a full page reload, so multi-workspace testing is much smoother during development.
 
 ---
 

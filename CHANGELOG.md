@@ -4,6 +4,23 @@ All notable changes are documented here, newest first.
 
 ---
 
+## [Unreleased] — 2026-04-28 — Workspace UX, Setup Recovery & Admin Polish
+
+### Workspace UX
+- **No forced reload on workspace switch** — admin workspace changes now remount the routed app tree instead of triggering a full browser reload; the shared workspace switch flow also powers the Workspaces page
+- **Canvas workspace safety** — switching workspaces in the canvas now prompts before discarding unsaved edits, clears stale graph state, and reloads workspace-scoped graphs and credentials
+
+### Setup & operations
+- **Prompt-safe setup** — `setup.sh` now writes interactive prompts to `/dev/tty`, appends missing `.env` keys, and safely reuses existing values without capturing prompt text into config entries
+- **Runtime env normalization** — `app/core/secrets.py` repairs older prompt-polluted env values in memory during startup so existing installs recover cleanly
+- **Caddy review port support** — `docker-compose.yml` now parameterises Caddy host ports, and `docker-compose.review.env` exposes the full proxy-backed stack on `http://localhost:9999`
+
+### Admin resilience
+- **Command palette efficiency** — flow and credential searches are prefetched once per open and guarded against stale responses
+- **Safer edge cases** — Audit Log detail parsing, schedule payload validation, flow picker filtering, and the Users reset-password flow all handle malformed data and loading/error states more gracefully
+
+---
+
 ## [0.3.1] — 2026-04-27 — Stability & Bug Fixes
 
 Patch release covering the stability hardening sprint and a set of workspace-scoping bug fixes discovered after 0.3.0.
@@ -231,7 +248,7 @@ This release consolidates all work from the initial commit through the P1 sprint
 
 ---
 
-## [Unreleased] — 2026-04-07 — Sprint 4: UX polish — duplicate flow, version preview, cron validation
+## [Pre-0.1 Archive] — 2026-04-07 — Sprint 4: UX polish — duplicate flow, version preview, cron validation
 
 ### Duplicate/clone flow (#7)
 - New `POST /api/graphs/{id}/duplicate` endpoint — server-side clone with smart naming: appends "(copy)", "(copy 2)", etc. until a unique name is found; replaces the previous client-side GET+POST workaround in the dashboard

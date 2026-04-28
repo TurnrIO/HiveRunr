@@ -1,8 +1,9 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { api } from "../../api/client.js";
 import { useAuth } from "../../contexts/AuthContext.jsx";
 import { ConfirmModal } from "../../components/ConfirmModal.jsx";
 import { RoleBadge } from "../../components/RoleBadge.jsx";
+import { useFocusTrap } from "../../components/useFocusTrap.js";
 
 const ROLE_META = {
   owner:  { label: "Owner",  color: "#f59e0b", bg: "#f59e0b14", desc: "Full access to everything, including user management and danger-zone actions. Only one owner account exists." },
@@ -10,20 +11,67 @@ const ROLE_META = {
   viewer: { label: "Viewer", color: "#64748b", bg: "#64748b14", desc: "Read-only access. Can view flows, runs, metrics, and logs but cannot create, edit, delete, or trigger anything." },
 };
 
+function ResetPasswordModal({ username, newPw, setNewPw, resetting, onSubmit, onClose }) {
+  const ref = useRef(null);
+  useFocusTrap(ref, onClose);
+
+  return (
+    <div
+      className="modal-overlay"
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      aria-hidden="true"
+    >
+      <div
+        className="card"
+        ref={ref}
+        style={{ width: 360, margin: 0 }}
+        role="dialog"
+        aria-modal="true"
+        aria-label={`Reset password for ${username}`}
+      >
+        <div className="card-title">Reset password — {username}</div>
+        <form onSubmit={onSubmit}>
+          <div className="form-group">
+            <label>New Password</label>
+            <input required type="password" value={newPw} onChange={e => setNewPw(e.target.value)} placeholder="At least 8 characters" autoFocus />
+          </div>
+          <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
+            <button type="submit" className="btn btn-primary" disabled={resetting || newPw.length < 8}>
+              {resetting ? "Resetting…" : "Reset Password"}
+            </button>
+            <button type="button" className="btn btn-ghost" onClick={onClose}>Cancel</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 export function Users({ showToast }) {
   const { currentUser: user } = useAuth();
   const isOwner = user?.role === "owner";
   const isAdmin = user?.role === "admin" || isOwner;
 
   const [users,        setUsers]        = useState([]);
+  const [loading,      setLoading]      = useState(true);
   const [form,         setForm]         = useState({ username: "", email: "", password: "", role: "viewer" });
   const [creating,     setCreating]     = useState(false);
   const [resetModal,   setResetModal]   = useState(null);
   const [newPw,        setNewPw]        = useState("");
+  const [resetting,    setResetting]    = useState(false);
   const [confirmState, setConfirmState] = useState(null);
 
-  const load = () => api("GET", "/api/users").then(setUsers).catch(() => {});
-  useEffect(() => { load(); }, []);
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      setUsers(await api("GET", "/api/users"));
+    } catch (err) {
+      showToast(err.message, "error");
+    }
+    setLoading(false);
+  }, [showToast]);
+
+  useEffect(() => { load(); }, [load]);
 
   async function create(e) {
     e.preventDefault();
@@ -54,10 +102,12 @@ export function Users({ showToast }) {
 
   async function resetPassword(e) {
     e.preventDefault();
+    setResetting(true);
     try {
       await api("POST", `/api/users/${resetModal.id}/reset-password`, { new_password: newPw });
       setResetModal(null); setNewPw(""); showToast("Password reset");
     } catch (err) { showToast(err.message, "error"); }
+    setResetting(false);
   }
 
   return (
@@ -120,7 +170,7 @@ export function Users({ showToast }) {
       {/* ── Users table ── */}
       <div className="card">
         <div className="card-title">All Users</div>
-        {users.length === 0 ? <div className="empty-state">No users found.</div> : (
+        {loading ? <div className="empty-state">Loading…</div> : users.length === 0 ? <div className="empty-state">No users found.</div> : (
           <table>
             <thead>
               <tr><th>User</th><th>Email</th><th>Role</th><th>Joined</th>{isAdmin && <th></th>}</tr>
@@ -184,21 +234,14 @@ export function Users({ showToast }) {
 
       {/* ── Reset password modal ── */}
       {resetModal && (
-        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.6)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center" }}>
-          <div className="card" style={{ width: 360, margin: 0 }}>
-            <div className="card-title">Reset password — {resetModal.username}</div>
-            <form onSubmit={resetPassword}>
-              <div className="form-group">
-                <label>New Password</label>
-                <input required type="password" value={newPw} onChange={e => setNewPw(e.target.value)} placeholder="At least 8 characters" autoFocus />
-              </div>
-              <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
-                <button type="submit" className="btn btn-primary" disabled={newPw.length < 8}>Reset Password</button>
-                <button type="button" className="btn btn-ghost" onClick={() => setResetModal(null)}>Cancel</button>
-              </div>
-            </form>
-          </div>
-        </div>
+        <ResetPasswordModal
+          username={resetModal.username}
+          newPw={newPw}
+          setNewPw={setNewPw}
+          resetting={resetting}
+          onSubmit={resetPassword}
+          onClose={() => setResetModal(null)}
+        />
       )}
 
       {confirmState && (

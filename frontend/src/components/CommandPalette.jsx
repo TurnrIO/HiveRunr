@@ -55,9 +55,12 @@ export function CommandPalette({ open, onClose, navigate }) {
   const [results, setResults]   = useState([]);
   const [cursor, setCursor]     = useState(0);
   const [loading, setLoading]   = useState(false);
+  const [catalogVersion, setCatalogVersion] = useState(0);
   const inputRef = useRef(null);
   const listRef  = useRef(null);
   const trapRef  = useFocusTrap(open);
+  const requestIdRef = useRef(0);
+  const catalogRef = useRef({ graphs: [], credentials: [] });
 
   // Reset on open
   useEffect(() => {
@@ -66,46 +69,71 @@ export function CommandPalette({ open, onClose, navigate }) {
       setResults(STATIC_PAGES.slice(0, 8));
       setCursor(0);
       setTimeout(() => inputRef.current?.focus(), 0);
+    } else {
+      requestIdRef.current += 1;
+      setLoading(false);
     }
+  }, [open]);
+
+  // Prefetch relatively static catalogs once per open instead of once per keystroke.
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    Promise.all([
+      api("GET", "/api/graphs").catch(() => []),
+      api("GET", "/api/credentials").catch(() => []),
+    ]).then(([graphs, credentials]) => {
+      if (cancelled) return;
+      catalogRef.current = {
+        graphs: graphs || [],
+        credentials: credentials || [],
+      };
+      setCatalogVersion(v => v + 1);
+    });
+    return () => { cancelled = true; };
   }, [open]);
 
   // Search
   useEffect(() => {
+    if (!open) return;
     const q = query.trim();
-    if (!q) { setResults(STATIC_PAGES.slice(0, 8)); setCursor(0); return; }
+    if (!q) {
+      setResults(STATIC_PAGES.slice(0, 8));
+      setCursor(0);
+      setLoading(false);
+      return;
+    }
 
-    let cancelled = false;
+    const requestId = ++requestIdRef.current;
     setLoading(true);
 
     async function search() {
       const items = [];
+      const qLower = q.toLowerCase();
+      const { graphs, credentials } = catalogRef.current;
 
       // Static pages
       STATIC_PAGES.forEach(p => {
-        if (p.label.toLowerCase().includes(q.toLowerCase()))
+        if (p.label.toLowerCase().includes(qLower))
           items.push(p);
       });
 
-      // Flows
-      try {
-        const graphs = await api("GET", "/api/graphs");
-        (graphs || []).forEach(g => {
-          if (
-            g.name.toLowerCase().includes(q.toLowerCase()) ||
-            (g.description || "").toLowerCase().includes(q.toLowerCase())
-          ) {
-            items.push({
-              type: "flow",
-              label: g.name,
-              sub: g.description || `#${g.id} · ${g.enabled ? "enabled" : "disabled"}`,
-              icon: "🔄",
-              path: `/graphs`,
-              hash: `graph-${g.id}`,
-              canvasHref: `/canvas#graph-${g.id}`,
-            });
-          }
-        });
-      } catch {}
+      // Flows — filter the prefetched graph list locally.
+      (graphs || []).forEach(g => {
+        const name = (g.name || "").toLowerCase();
+        const description = (g.description || "").toLowerCase();
+        if (name.includes(qLower) || description.includes(qLower)) {
+          items.push({
+            type: "flow",
+            label: g.name,
+            sub: g.description || `#${g.id} · ${g.enabled ? "enabled" : "disabled"}`,
+            icon: "🔄",
+            path: `/graphs`,
+            hash: `graph-${g.id}`,
+            canvasHref: `/canvas#graph-${g.id}`,
+          });
+        }
+      });
 
       // Runs — search by ID or flow name
       try {
@@ -122,23 +150,20 @@ export function CommandPalette({ open, onClose, navigate }) {
         });
       } catch {}
 
-      // Credentials
-      try {
-        const creds = await api("GET", "/api/credentials");
-        (creds || []).forEach(c => {
-          if (c.name.toLowerCase().includes(q.toLowerCase())) {
-            items.push({
-              type: "credential",
-              label: c.name,
-              sub: c.type || "credential",
-              icon: "🔑",
-              path: "/credentials",
-            });
-          }
-        });
-      } catch {}
+      // Credentials — filter the prefetched list locally.
+      (credentials || []).forEach(c => {
+        if ((c.name || "").toLowerCase().includes(qLower)) {
+          items.push({
+            type: "credential",
+            label: c.name,
+            sub: c.type || "credential",
+            icon: "🔑",
+            path: "/credentials",
+          });
+        }
+      });
 
-      if (!cancelled) {
+      if (requestId === requestIdRef.current) {
         setResults(items.slice(0, 12));
         setCursor(0);
         setLoading(false);
@@ -146,8 +171,8 @@ export function CommandPalette({ open, onClose, navigate }) {
     }
 
     const t = setTimeout(search, 180);
-    return () => { cancelled = true; clearTimeout(t); };
-  }, [query]);
+    return () => { clearTimeout(t); };
+  }, [open, query, catalogVersion]);
 
   // Scroll selected item into view
   useEffect(() => {
