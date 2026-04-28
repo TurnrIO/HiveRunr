@@ -164,11 +164,12 @@ if _dup_warnings:
         _lg.getLogger(__name__).error("DUPLICATE ROUTE DETECTED: %s", _w)
 
 # ── Static files ──────────────────────────────────────────────────────────────
-app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
-# Serve Vite-built assets from /static/dist/ — works whether they live in
-# /app/frontend_dist (Docker image) or app/static/dist (local npm dev).
+# IMPORTANT: /static/dist must be mounted BEFORE /static so Starlette's
+# first-match routing serves the Vite assets from DIST_DIR instead of the
+# empty app/static/dist/ directory on the host.
 if DIST_DIR.is_dir():
     app.mount("/static/dist", StaticFiles(directory=str(DIST_DIR)), name="static_dist")
+app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 
 @app.get("/favicon.ico", include_in_schema=False)
