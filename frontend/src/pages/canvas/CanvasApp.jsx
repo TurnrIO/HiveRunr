@@ -226,6 +226,7 @@ function CanvasApp() {
   const [showSearch,      setShowSearch]      = useState(false);
   const [replayEdit,      setReplayEdit]      = useState(null);
   const [hoveredNodeId,   setHoveredNodeId]   = useState(null);
+  const [spacePanning,    setSpacePanning]    = useState(false); // Space-to-pan mode
 
   // Dependency highlight — compute upstream (blue) + downstream (green) sets when hovering
   const { upstreamIds, downstreamIds } = useMemo(() => {
@@ -391,8 +392,23 @@ function CanvasApp() {
       }
       if (e.key === "?") { kb.setShowShortcuts(s => !s); }
     }
+    function onSpaceDown(e) {
+      if (e.code === "Space" && !["INPUT","TEXTAREA","SELECT"].includes(document.activeElement?.tagName)) {
+        e.preventDefault();
+        setSpacePanning(true);
+      }
+    }
+    function onSpaceUp(e) {
+      if (e.code === "Space") setSpacePanning(false);
+    }
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    window.addEventListener("keydown", onSpaceDown);
+    window.addEventListener("keyup",   onSpaceUp);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("keydown", onSpaceDown);
+      window.removeEventListener("keyup",   onSpaceUp);
+    };
   }, []);
 
   /* ── Dirty-state beforeunload guard ─────────────────────────────────── */
@@ -1381,10 +1397,12 @@ function CanvasApp() {
             fitView
             deleteKeyCode="Delete"
             multiSelectionKeyCode="Shift"
-            selectionOnDrag
-            panOnDrag={[1, 2]}
+            selectionOnDrag={!spacePanning}
+            panOnDrag={spacePanning ? true : [1, 2]}
+            panOnScroll
+            panOnScrollMode="free"
             selectionMode={SelectionMode.Partial}
-            style={{ background: "#0f1117" }}
+            style={{ background: "#0f1117", cursor: spacePanning ? "grab" : "default" }}
           >
             <Background variant={BackgroundVariant.Dots} color="#2a2d3e" gap={20} size={1}/>
             <Controls/>
