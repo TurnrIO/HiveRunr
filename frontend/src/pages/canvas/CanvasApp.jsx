@@ -225,6 +225,60 @@ function CanvasApp() {
   const [showShortcuts,   setShowShortcuts]   = useState(false);
   const [showSearch,      setShowSearch]      = useState(false);
   const [replayEdit,      setReplayEdit]      = useState(null);
+  const [hoveredNodeId,   setHoveredNodeId]   = useState(null);
+
+  // Dependency highlight — compute upstream (blue) + downstream (green) sets when hovering
+  const { upstreamIds, downstreamIds } = useMemo(() => {
+    if (!hoveredNodeId) return { upstreamIds: new Set(), downstreamIds: new Set() };
+    const pred  = {};
+    const succ  = {};
+    nodes.forEach(n => { pred[n.id] = []; succ[n.id] = []; });
+    edges.forEach(e => {
+      if (pred[e.target]) pred[e.target].push(e.source);
+      if (succ[e.source]) succ[e.source].push(e.target);
+    });
+    const bfs = (start, adj) => {
+      const visited = new Set();
+      const q = [start];
+      while (q.length) {
+        const cur = q.shift();
+        for (const nb of (adj[cur] || [])) {
+          if (!visited.has(nb)) { visited.add(nb); q.push(nb); }
+        }
+      }
+      return visited;
+    };
+    return { upstreamIds: bfs(hoveredNodeId, pred), downstreamIds: bfs(hoveredNodeId, succ) };
+  }, [hoveredNodeId, edges, nodes]);
+
+  // Apply hover dimming — dim unrelated nodes/edges when hovering
+  const displayNodes = useMemo(() => {
+    if (!hoveredNodeId || (!upstreamIds.size && !downstreamIds.size)) return nodes;
+    return nodes.map(n => {
+      if (n.id === hoveredNodeId) return n;
+      const isUp   = upstreamIds.has(n.id);
+      const isDown = downstreamIds.has(n.id);
+      const opacity = isUp || isDown ? 1 : 0.2;
+      return { ...n, style: { ...(n.style || {}), opacity } };
+    });
+  }, [hoveredNodeId, upstreamIds, downstreamIds, nodes]);
+
+  const displayEdges = useMemo(() => {
+    if (!hoveredNodeId) return edges;
+    return edges.map(e => {
+      const srcUp   = e.source === hoveredNodeId || upstreamIds.has(e.source);
+      const dstDown = e.target === hoveredNodeId || downstreamIds.has(e.target);
+      const isUpstream   = upstreamIds.has(e.source) && (e.target === hoveredNodeId || upstreamIds.has(e.target));
+      const isDownstream = (e.source === hoveredNodeId || downstreamIds.has(e.source)) && downstreamIds.has(e.target);
+      if (isUpstream) {
+        return { ...e, style: { ...(e.style || {}), stroke: "#60a5fa", opacity: 1 }, markerEnd: { type: "arrowclosed", color: "#60a5fa" } };
+      }
+      if (isDownstream) {
+        return { ...e, style: { ...(e.style || {}), stroke: "#4ade80", opacity: 1 }, markerEnd: { type: "arrowclosed", color: "#4ade80" } };
+      }
+      return { ...e, style: { ...(e.style || {}), opacity: 0.1 } };
+    });
+  }, [hoveredNodeId, upstreamIds, downstreamIds, edges]);
 
   // Live per-node validation map — recomputed on every nodes/edges/credentials change
   const validationMap = useMemo(() => {
@@ -1309,15 +1363,17 @@ function CanvasApp() {
           )}
 
           <ReactFlow
-            nodes={nodes}
-            edges={edges}
+            nodes={displayNodes}
+            edges={displayEdges}
             onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}
             onConnect={onConnect}
             onNodeClick={onNodeClick}
-            onPaneClick={onPaneClick}
+            onPaneClick={() => { onPaneClick(); setHoveredNodeId(null); }}
             onNodeContextMenu={onNodeContextMenu}
             onEdgeClick={onEdgeClick}
+            onNodeMouseEnter={(_, node) => setHoveredNodeId(node.id)}
+            onNodeMouseLeave={() => setHoveredNodeId(null)}
             onMoveStart={() => setContextMenu(null)}
             onDrop={onDrop}
             onDragOver={onDragOver}
