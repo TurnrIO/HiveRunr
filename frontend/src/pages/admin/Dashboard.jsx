@@ -3,9 +3,11 @@ import { api } from "../../api/client.js";
 import { ViewerBanner } from "../../components/ViewerBanner.jsx";
 import { ReplayEditModal } from "../../components/ReplayEditModal.jsx";
 import { useAuth } from "../../contexts/AuthContext.jsx";
+import { useWorkspace } from "../../contexts/WorkspaceContext.jsx";
 
 export function Dashboard({ showToast }) {
   const { currentUser: user } = useAuth();
+  const { activeWorkspace } = useWorkspace();
   const [metrics, setMetrics]       = useState(null);   // server-side accurate stats
   const [runs, setRuns]             = useState([]);      // last 20 runs for the feed
   const [workflows, setWfs]         = useState([]);
@@ -105,7 +107,18 @@ export function Dashboard({ showToast }) {
 
   return (
     <div>
-      <h1 className="page-title">Dashboard</h1>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
+        <h1 className="page-title" style={{ marginBottom: 0 }}>Dashboard</h1>
+        {activeWorkspace && (
+          <span style={{
+            fontSize: 11, color: "#6366f1", background: "#1e1b4b",
+            border: "1px solid #3730a3", borderRadius: 12,
+            padding: "3px 10px", display: "flex", alignItems: "center", gap: 5,
+          }}>
+            🏢 {activeWorkspace.name}
+          </span>
+        )}
+      </div>
       {ro && <ViewerBanner />}
 
       <div className="stat-grid">

@@ -349,7 +349,11 @@ def list_runs(page: int = 1, page_size: int = 50,
         total = cur.fetchone()["n"]
 
         cur.execute(
-            f"""SELECT r.*, COALESCE(g.name, r.workflow) AS flow_name
+            f"""SELECT r.*,
+                    COALESCE(
+                        g.name,
+                        INITCAP(REPLACE(REPLACE(r.workflow, '_', ' '), '.py', ''))
+                    ) AS flow_name
                 {base_query}
                 ORDER BY r.id DESC
                 LIMIT %s OFFSET %s""",
