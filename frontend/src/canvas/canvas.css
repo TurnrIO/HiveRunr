@@ -140,13 +140,13 @@ select.field-input{appearance:none;cursor:pointer;background-image:url("data:ima
 
 /* ── Node Editor Modal (n8n-style 3-column) ── */
 .nem-overlay{position:fixed;inset:0;z-index:800;display:flex;pointer-events:none}
-.nem-backdrop{flex:1;pointer-events:all;cursor:default}
+.nem-backdrop{flex:1;pointer-events:none;cursor:default}
 .nem-panel{width:min(940px,94vw);background:#0f1117;border-left:1px solid #2a2d3e;display:flex;flex-direction:column;pointer-events:all;box-shadow:-12px 0 40px #0009;overflow:hidden}
 .nem-hdr{display:flex;align-items:center;gap:10px;padding:10px 16px;border-bottom:1px solid #2a2d3e;background:#13161f;flex-shrink:0}
 .nem-hdr-icon{font-size:20px;flex-shrink:0}
 .nem-hdr-title{flex:1;font-size:13px;font-weight:600;color:#e2e8f0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.nem-hdr-close{background:none;border:none;color:#64748b;font-size:20px;cursor:pointer;line-height:1;padding:0 4px;flex-shrink:0}
-.nem-hdr-close:hover{color:#e2e8f0}
+.nem-hdr-close{background:#1e2235;border:1px solid #2a2d3e;border-radius:5px;color:#94a3b8;font-size:16px;cursor:pointer;line-height:1;padding:4px 8px;flex-shrink:0;transition:all .12s}
+.nem-hdr-close:hover{color:#e2e8f0;background:#2a2d3e;border-color:#475569}
 .nem-columns{flex:1;display:flex;overflow:hidden;min-height:0}
 .nem-io-col{width:240px;flex-shrink:0;display:flex;flex-direction:column;overflow:hidden;background:#0c0e14}
 .nem-io-col.left{border-right:1px solid #2a2d3e}

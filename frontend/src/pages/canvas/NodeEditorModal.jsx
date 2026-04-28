@@ -447,7 +447,9 @@ export function NodeEditorModal({
 
   return (
     <div className="nem-overlay">
-      <div className="nem-backdrop" onClick={onClose} />
+      {/* Backdrop is pointer-events:none so canvas stays interactive.
+          Click the ✕ button or press Escape to close. */}
+      <div className="nem-backdrop" />
       <div className="nem-panel">
 
         {/* Header */}
