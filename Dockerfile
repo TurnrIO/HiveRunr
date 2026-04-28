@@ -30,8 +30,11 @@ COPY app/ ./app/
 COPY migrations/ ./migrations/
 COPY alembic.ini .
 
-# Copy Vite build output into the static directory FastAPI serves
-COPY --from=frontend-build /frontend/dist/ ./app/static/dist/
+# Copy Vite build output to /app/frontend_dist — deliberately OUTSIDE
+# the ./app bind mount so docker-compose hot-reload doesn't clobber it.
+# main.py checks this path first, then falls back to app/static/dist/
+# for local npm-dev-server workflows.
+COPY --from=frontend-build /frontend/dist/ ./frontend_dist/
 
 # Hand ownership of the working directory to the app user
 RUN chown -R hiverunr:hiverunr /app

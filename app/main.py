@@ -42,7 +42,11 @@ from app.routers.approvals   import router as approvals_router
 
 log          = logging.getLogger(__name__)
 STATIC_DIR   = Path(__file__).parent / "static"
-DIST_DIR     = STATIC_DIR / "dist"
+# DIST_DIR: prefer /app/frontend_dist/ (Docker image, outside bind mount) so
+# the ./app bind mount in docker-compose doesn't clobber the built assets.
+# Fall back to app/static/dist/ for local "npm run dev" workflows.
+_docker_dist = Path("/app/frontend_dist")
+DIST_DIR     = _docker_dist if _docker_dist.is_dir() else STATIC_DIR / "dist"
 WORKFLOWS    = ["example"]
 API_KEY      = os.environ.get("API_KEY", "dev_api_key")
 
@@ -65,14 +69,34 @@ _MIGRATED_PAGES: set[str] = {
 }
 
 
-def _serve_page(filename: str) -> "FileResponse":
+def _serve_page(filename: str):
     """Serve from Vite dist/ if migrated, else fall back to legacy app/static/."""
     if filename in _MIGRATED_PAGES:
         dist_file = DIST_DIR / filename
         if dist_file.exists():
             return FileResponse(str(dist_file), media_type="text/html")
-        log.warning("_MIGRATED_PAGES includes %s but dist file not found — serving legacy", filename)
-    return FileResponse(str(STATIC_DIR / filename), media_type="text/html")
+        # dist not found — give an actionable error instead of a cryptic 500
+        log.error(
+            "Frontend dist missing: %s not found. DIST_DIR=%s. "
+            "Run 'docker compose up -d --build' to rebuild the image.",
+            filename, DIST_DIR,
+        )
+        from fastapi.responses import HTMLResponse as _HTML
+        return _HTML(
+            "<html><body style='font:16px sans-serif;padding:40px;"
+            "background:#0f1117;color:#e2e8f0'>"
+            f"<h2>⚠ Frontend assets not built</h2>"
+            f"<p><code>{filename}</code> not found in <code>{DIST_DIR}</code>.</p>"
+            "<p>Fix: <code>docker compose up -d --build</code></p>"
+            "</body></html>",
+            status_code=503,
+        )
+    legacy = STATIC_DIR / filename
+    if not legacy.exists():
+        from fastapi.responses import HTMLResponse as _HTML
+        log.error("Legacy page missing: %s", legacy)
+        return _HTML(f"<html><body>Page {filename} not found.</body></html>", status_code=404)
+    return FileResponse(str(legacy), media_type="text/html")
 
 from app._version import __version__
 
@@ -141,6 +165,10 @@ if _dup_warnings:
 
 # ── Static files ──────────────────────────────────────────────────────────────
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+# Serve Vite-built assets from /static/dist/ — works whether they live in
+# /app/frontend_dist (Docker image) or app/static/dist (local npm dev).
+if DIST_DIR.is_dir():
+    app.mount("/static/dist", StaticFiles(directory=str(DIST_DIR)), name="static_dist")
 
 
 @app.get("/favicon.ico", include_in_schema=False)
