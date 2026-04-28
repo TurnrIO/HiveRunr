@@ -753,6 +753,32 @@ export function ConfigPanel({ node, onChange, onDelete, edges }) {
             </div>
           </div>
         )}
+        {node.data.type === "action.linear" && (
+          <div style={{ background: "#0f1117", border: "1px solid #2a2d3e", borderRadius: 6, padding: "8px 10px", fontSize: 10, color: "#94a3b8", marginTop: 6, lineHeight: 1.8 }}>
+            <div style={{ color: "#5e6ad2", fontWeight: 600, marginBottom: 4 }}>🔺 Linear</div>
+            Create a credential with <code style={{ color: "#a78bfa" }}>api_key</code> (from linear.app → Settings → API → Personal API keys).<br />
+            <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: "0 10px", marginTop: 6 }}>
+              <code style={{ color: "#4ade80" }}>get_issue</code><span>→ {"{ issue{id,identifier,title,state,…}, title, state }"}</span>
+              <code style={{ color: "#60a5fa" }}>create_issue</code><span>→ requires team_id + title → {"{ issue{id,url,…} }"}</span>
+              <code style={{ color: "#a78bfa" }}>update_issue</code><span>→ issue_id + updates JSON {"{ stateId, priority, title, … }"}</span>
+              <code style={{ color: "#fbbf24" }}>search_issues</code><span>→ query string → {"{ issues[], count }"}</span>
+            </div>
+          </div>
+        )}
+        {node.data.type === "action.openai_assistant" && (
+          <div style={{ background: "#0f1117", border: "1px solid #2a2d3e", borderRadius: 6, padding: "8px 10px", fontSize: 10, color: "#94a3b8", marginTop: 6, lineHeight: 1.8 }}>
+            <div style={{ color: "#10a37f", fontWeight: 600, marginBottom: 4 }}>🤖 OpenAI Assistants v2</div>
+            Use your existing OpenAI API key. Create an assistant at platform.openai.com → Assistants.<br />
+            <strong style={{ color: "#e2e8f0" }}>Typical flow:</strong> create_thread → add_message → run_thread (polls until done) → get reply text.<br />
+            <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: "0 10px", marginTop: 6 }}>
+              <code style={{ color: "#4ade80" }}>create_thread</code><span>→ {"{ thread_id }"}</span>
+              <code style={{ color: "#60a5fa" }}>add_message</code><span>→ thread_id + content + role → {"{ message_id }"}</span>
+              <code style={{ color: "#a78bfa" }}>run_thread</code><span>→ polls until complete → {"{ reply, run_id, messages[], status }"}</span>
+              <code style={{ color: "#fbbf24" }}>get_run_status</code><span>→ thread_id + run_id → {"{ status, run }"}</span>
+              <code style={{ color: "#94a3b8" }}>list_messages</code><span>→ thread_id → {"{ messages[{role,text}], count }"}</span>
+            </div>
+          </div>
+        )}
         {node.data.type === "note" && (
           <div style={{ background: "#0f1117", border: "1px solid #2a2d3e", borderRadius: 6, padding: "8px 10px", fontSize: 10, color: "#94a3b8", marginTop: 6 }}>
             <div style={{ color: "#ca8a04", fontWeight: 600, marginBottom: 5 }}>📝 Sticky notes are skipped by the executor</div>
