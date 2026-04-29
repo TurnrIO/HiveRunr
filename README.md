@@ -129,7 +129,7 @@ That keeps the same service topology but publishes Caddy on `http://localhost:99
 
 The admin UI is a React Router SPA (`/admin`). The canvas editor is a separate Vite entry point (`/canvas`). Both are built to `app/static/dist/` and served by FastAPI.
 
-Recent admin hardening work focused on post-action consistency and clearer failure states. Flow, template, workspace, script, and user-management screens now await their refreshes more consistently and show explicit load errors instead of silently leaving stale data onscreen.
+Recent admin hardening work focused on post-action consistency and clearer failure states. Flow, template, workspace, script, user-management, dashboard, logs, settings, and diagnostics screens now await their refreshes more consistently, preserve good data during quiet background refresh failures, and show explicit load errors instead of silently leaving stale or misleading UI onscreen.
 
 ---
 

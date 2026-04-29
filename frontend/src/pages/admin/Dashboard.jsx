@@ -1,4 +1,4 @@
-import { Fragment, useState, useEffect, useCallback } from "react";
+import { Fragment, useState, useEffect, useCallback, useRef } from "react";
 import { api } from "../../api/client.js";
 import { ViewerBanner } from "../../components/ViewerBanner.jsx";
 import { ReplayEditModal } from "../../components/ReplayEditModal.jsx";
@@ -13,12 +13,14 @@ export function Dashboard({ showToast }) {
   const [workflows, setWfs]         = useState([]);
   const [graphs, setGraphs]         = useState([]);
   const [loading, setLoading]       = useState(true);
+  const [loadError, setLoadError]   = useState("");
   const [expandedRunId, setExpanded] = useState(null);
   const [replayEdit, setReplayEdit] = useState(null);
   const [queue, setQueue]           = useState(null);
+  const hasDataRef                  = useRef(false);
 
   const load = useCallback(async ({ silent = false } = {}) => {
-    if (!silent) setLoading(true);
+    if (!silent || !hasDataRef.current) setLoading(true);
     try {
       const [m, r, w, g] = await Promise.all([
         api("GET", "/api/metrics"),
@@ -30,7 +32,12 @@ export function Dashboard({ showToast }) {
       setRuns(r.runs ?? r);
       setWfs(w);
       setGraphs(g);
+      setLoadError("");
+      hasDataRef.current = true;
     } catch (e) {
+      if (silent && hasDataRef.current) {
+        return;
+      }
       if (!silent) {
         showToast(e.message, "error");
       }
@@ -38,8 +45,12 @@ export function Dashboard({ showToast }) {
       setRuns([]);
       setWfs([]);
       setGraphs([]);
+      setLoadError(e.message || "Failed to load dashboard");
+      hasDataRef.current = false;
     } finally {
-      setLoading(false);
+      if (!silent || !hasDataRef.current) {
+        setLoading(false);
+      }
     }
   }, [showToast]);
 
@@ -252,6 +263,8 @@ export function Dashboard({ showToast }) {
 
         {loading ? (
           <div className="empty-state">Loading…</div>
+        ) : loadError ? (
+          <div className="empty-state">{loadError}</div>
         ) : runs.length === 0 ? (
           <div className="empty-state">No runs yet. Trigger a workflow to get started.</div>
         ) : (

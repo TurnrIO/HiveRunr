@@ -190,8 +190,8 @@ python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().d
 
 1. Create `app/nodes/action_xyz.py` exporting `NODE_TYPE`, `LABEL`, and `run(config, inp, context, logger, creds=None, **kwargs) -> dict`.
 2. The node registry (`app/nodes/__init__.py`) auto-discovers it on next reload — no registration needed.
-3. Add a `NODE_DEFS` entry in `app/static/canvas.html` (search for `NODE_DEFS` — around line 286). Include `label`, `icon`, `color`, `group`, and `fields[]`.
-4. Add hint JSX panels in **two** places in `canvas.html`: the node edit panel (~line 822) and the history/detail panel (~line 1855). Search for `action.slack` for a complete example.
+3. Add a `NODE_DEFS` entry in `frontend/src/pages/canvas/nodeDefs.js`. Include `label`, `icon`, `color`, `group`, and `fields[]`.
+4. Add any richer field UI or help panels in the React canvas components, usually `frontend/src/pages/canvas/ConfigPanel.jsx` and `frontend/src/pages/canvas/NodeEditorModal.jsx`. Search for an existing node such as `action.slack` for a complete example.
 5. Custom nodes in `app/nodes/custom/` can be hot-reloaded via **Admin → Nodes → Reload** without restarting.
 
 ---
@@ -396,4 +396,3 @@ find /backups -name "hiverunr_*.sql.gz" -mtime +30 -delete
 | RTO (recovery time) | ≤ 30 min | Pre-provision standby host with `docker compose pull` |
 | Scheduler failover | ≤ 45 s | Reduce `SCHEDULER_LOCK_TTL_MS`; run ≥2 scheduler replicas |
 | Worker failover | Immediate | Run ≥2 worker replicas; Celery re-queues in-flight tasks on worker death (only with `acks_late=True` — not default) |
-

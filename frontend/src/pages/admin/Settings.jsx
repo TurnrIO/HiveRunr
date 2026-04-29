@@ -54,6 +54,7 @@ export function Settings({ showToast }) {
 
   const [status,          setStatus]          = useState(null);
   const [loadingSt,       setLoadingSt]        = useState(true);
+  const [statusError,     setStatusError]      = useState("");
   const [nodes,           setNodes]            = useState([]);
   const [reloading,       setReloading]        = useState(false);
   const [resetting,       setResetting]        = useState(false);
@@ -72,15 +73,33 @@ export function Settings({ showToast }) {
   const [tokensLoading,   setTokensLoading]    = useState(isOwner);
   const [tokensError,     setTokensError]      = useState("");
   const [confirmState,    setConfirmState]     = useState(null);
+  const hasStatusRef = useRef(false);
+  const hasTokensRef = useRef(false);
 
   const webhookBase = `${window.location.origin}/webhook/`;
 
-  const loadStatus = useCallback(async () => {
-    setLoadingSt(true);
-    try { setStatus(await api("GET", "/api/system/status")); }
-    catch { setStatus(null); }
-    setLoadingSt(false);
-  }, []);
+  const loadStatus = useCallback(async ({ silent = false } = {}) => {
+    if (!silent || !hasStatusRef.current) setLoadingSt(true);
+    try {
+      setStatus(await api("GET", "/api/system/status"));
+      setStatusError("");
+      hasStatusRef.current = true;
+    } catch (err) {
+      if (silent && hasStatusRef.current) {
+        return;
+      }
+      setStatus(null);
+      setStatusError(err.message || "Failed to load system health");
+      hasStatusRef.current = false;
+      if (!silent) {
+        showToast(err.message || "Failed to load system health", "error");
+      }
+    } finally {
+      if (!silent || !hasStatusRef.current) {
+        setLoadingSt(false);
+      }
+    }
+  }, [showToast]);
 
   const loadNodes = useCallback(async ({ silent = true } = {}) => {
     try {
@@ -115,18 +134,25 @@ export function Settings({ showToast }) {
   }, [showToast]);
 
   const loadTokens = useCallback(async ({ silent = false } = {}) => {
-    setTokensLoading(true);
+    if (!silent || !hasTokensRef.current) setTokensLoading(true);
     try {
       setTokens(await api("GET", "/api/tokens"));
       setTokensError("");
+      hasTokensRef.current = true;
     } catch (err) {
+      if (silent && hasTokensRef.current) {
+        return;
+      }
       setTokens([]);
       setTokensError(err.message || "Failed to load API tokens");
+      hasTokensRef.current = false;
       if (!silent) {
         showToast(err.message, "error");
       }
     } finally {
-      setTokensLoading(false);
+      if (!silent || !hasTokensRef.current) {
+        setTokensLoading(false);
+      }
     }
   }, [showToast]);
 
@@ -151,7 +177,7 @@ export function Settings({ showToast }) {
       setNewTokenName(""); setNewTokenExpiry("");
       await loadTokens({ silent: true });
     } catch (err) { showToast(err.message, "error"); }
-    setCreatingToken(false);
+    finally { setCreatingToken(false); }
   }
 
   async function revokeToken(id, name) {
@@ -172,7 +198,7 @@ export function Settings({ showToast }) {
       setNodes(r.node_types || []);
       showToast(`Reloaded — ${(r.node_types || []).length} node types registered`);
     } catch (e) { showToast(e.message, "error"); }
-    setReloading(false);
+    finally { setReloading(false); }
   }
 
   async function clearRuns() {
@@ -183,7 +209,7 @@ export function Settings({ showToast }) {
         setClearing(true);
         try { await api("DELETE", "/api/runs"); showToast("Run history cleared"); await loadStatus(); }
         catch (e) { showToast(e.message, "error"); }
-        setClearing(false);
+        finally { setClearing(false); }
       }
     });
   }
@@ -195,7 +221,7 @@ export function Settings({ showToast }) {
       setRatelimit(r => ({ ...r, ...saved }));
       showToast("Rate limit policy saved");
     } catch (e) { showToast(e.message, "error"); }
-    setSavingRL(false);
+    finally { setSavingRL(false); }
   }
 
   async function saveRetention() {
@@ -205,7 +231,7 @@ export function Settings({ showToast }) {
       setRetention(saved);
       showToast("Retention policy saved");
     } catch (e) { showToast(e.message, "error"); }
-    setSavingRetention(false);
+    finally { setSavingRetention(false); }
   }
 
   async function trimNow() {
@@ -223,7 +249,7 @@ export function Settings({ showToast }) {
           showToast(`Trimmed ${r.deleted} old run${r.deleted !== 1 ? "s" : ""}`);
           await loadStatus();
         } catch (e) { showToast(e.message, "error"); }
-        setTrimming(false);
+        finally { setTrimming(false); }
       }
     });
   }
@@ -236,7 +262,7 @@ export function Settings({ showToast }) {
         setResetting(true);
         try { await api("POST", "/api/maintenance/reset_sequences"); showToast("Sequences reset"); }
         catch (e) { showToast(e.message, "error"); }
-        setResetting(false);
+        finally { setResetting(false); }
       }
     });
   }
@@ -268,10 +294,13 @@ export function Settings({ showToast }) {
       <div className="card">
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
           <div className="card-title" style={{ margin: 0 }}>System Health</div>
-          <button className="btn btn-ghost btn-sm" onClick={loadStatus} disabled={loadingSt}>
+          <button className="btn btn-ghost btn-sm" onClick={() => loadStatus()} disabled={loadingSt}>
             {loadingSt ? "Checking…" : "↺ Refresh"}
           </button>
         </div>
+        {!loadingSt && statusError && (
+          <div className="empty-state" style={{ marginBottom: 16 }}>{statusError}</div>
+        )}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 12, marginBottom: 16 }}>
           {[
             { label: "Database",      s: statusOf(db),     detail: db.status === "ok" ? `${db.db_size} · ${db.run_count} runs · ${db.flow_count} flows` : db.error },
@@ -324,7 +353,7 @@ export function Settings({ showToast }) {
           {tokensLoading ? (
             <div className="empty-state" style={{ padding: "12px 0" }}>Loading tokens…</div>
           ) : tokensError ? (
-            <div className="empty-state" style={{ padding: "12px 0" }}>Failed to load API tokens.</div>
+            <div className="empty-state" style={{ padding: "12px 0" }}>{tokensError}</div>
           ) : tokens.length === 0 ? (
             <div className="empty-state" style={{ padding: "12px 0" }}>No API tokens yet.</div>
           ) : (

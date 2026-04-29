@@ -1,4 +1,4 @@
-import { Fragment, useState, useEffect, useCallback } from "react";
+import { Fragment, useState, useEffect, useCallback, useRef } from "react";
 import { api } from "../../api/client.js";
 import { TraceRow } from "../../components/TraceRow.jsx";
 import { ReplayEditModal } from "../../components/ReplayEditModal.jsx";
@@ -26,6 +26,7 @@ export function Logs({ showToast }) {
   const [pages, setPages]             = useState(1);
   const PAGE_SIZE                     = 50;
   const [loading, setLoading]         = useState(true);
+  const [loadError, setLoadError]     = useState("");
   const [selected, setSelected]       = useState(null);
   const [checked, setChecked]         = useState(new Set());
   const [bulkDeleting, setBulkDeleting] = useState(false);
@@ -40,9 +41,10 @@ export function Logs({ showToast }) {
   });
   const [showSaveFilter, setShowSaveFilter] = useState(false);
   const [filterName, setFilterName]   = useState("");
+  const hasDataRef                    = useRef(false);
 
   const load = useCallback(async (pg, st, sq, { silent = false } = {}) => {
-    setLoading(true);
+    if (!silent || !hasDataRef.current) setLoading(true);
     try {
       const params = new URLSearchParams({ page: pg, page_size: PAGE_SIZE });
       if (st && st !== "all") params.set("status", st);
@@ -52,12 +54,26 @@ export function Logs({ showToast }) {
       setTotal(data.total ?? (data.runs ?? data).length);
       setPage(data.page ?? pg);
       setPages(data.pages ?? 1);
+      setLoadError("");
+      hasDataRef.current = true;
     } catch (e) {
+      if (silent && hasDataRef.current) {
+        return;
+      }
       if (!silent) {
         showToast(e.message, "error");
       }
+      setRuns([]);
+      setTotal(0);
+      setPage(pg);
+      setPages(1);
+      setSelected(null);
+      setLoadError(e.message || "Failed to load run logs");
+      hasDataRef.current = false;
     } finally {
-      setLoading(false);
+      if (!silent || !hasDataRef.current) {
+        setLoading(false);
+      }
     }
   }, [showToast]);
 
@@ -259,7 +275,8 @@ export function Logs({ showToast }) {
               </div>
             )}
             {loading && <div className="empty-state" style={{ padding: "30px 0" }}>Loading…</div>}
-            {!loading && runs.length === 0 && <div className="empty-state" style={{ padding: "30px 0" }}>No runs match.</div>}
+            {!loading && loadError && <div className="empty-state" style={{ padding: "30px 0" }}>{loadError}</div>}
+            {!loading && !loadError && runs.length === 0 && <div className="empty-state" style={{ padding: "30px 0" }}>No runs match.</div>}
               {runs.map(r => (
                 <div key={r.id} onClick={() => setSelected(r.id === selected ? null : r.id)}
                 style={{

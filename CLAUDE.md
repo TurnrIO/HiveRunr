@@ -12,7 +12,7 @@
 | Workers | Celery + Redis (broker + result backend) |
 | DB | PostgreSQL via psycopg2 (`RealDictCursor`) + Alembic migrations |
 | Scheduler | APScheduler `BlockingScheduler` + Redis leader-lock |
-| Frontend | **Vite + React** (F-series migration in progress — see backlog) |
+| Frontend | **Vite + React** multi-page app (F-series complete; ongoing polish tracked below) |
 | Reverse proxy | Caddy |
 | Email | AgentMail.to REST API (`POST /v0/inboxes/{inbox_id}/messages/send`, Bearer auth) |
 | Container | Docker Compose — bind-mount `./app:/app/app` so host files are live |
@@ -25,7 +25,7 @@
 app/
   core/db.py          — all DB helpers (psycopg2, RealDictCursor)
   routers/            — FastAPI routers (auth, graphs, runs, nodes, tokens, …)
-  static/             — legacy monolithic HTML pages (being replaced by F-series)
+  static/             — bundled frontend output and other static assets served by FastAPI
   static/dist/        — Vite build output (served by FastAPI in production)
   worker.py           — Celery tasks, alert/webhook dispatch
   scheduler.py        — APScheduler entry point + nightly jobs
@@ -41,11 +41,11 @@ setup.sh              — interactive first-run configurator
 
 ---
 
-## Frontend architecture (F-series migration)
+## Frontend architecture
 
-The frontend is being migrated from two monolithic inline-JSX files to a proper
-Vite + React multi-page application.  The old files stay in `app/static/` until
-their replacement sprint is complete — the app is always fully functional.
+The frontend now runs as a Vite + React multi-page application. The old
+monolithic `admin.html` and `canvas.html` files have been deleted from the app
+source; FastAPI serves the built assets from `app/static/dist/`.
 
 **Key decisions:**
 
@@ -59,7 +59,7 @@ their replacement sprint is complete — the app is always fully functional.
 | Output | `app/static/dist/` — FastAPI's existing StaticFiles mount serves it |
 | Dev mode | `npm run dev` (`vite build --watch`) — continuous rebuild, FastAPI serves dist/ |
 
-**Directory structure (target state):**
+**Directory structure:**
 ```
 frontend/
   src/
@@ -116,9 +116,10 @@ frontend/
   package.json
 ```
 
-**NODE_DEFS note (post-F7):** After F7 ships, add new nodes to
-`frontend/src/pages/canvas/nodeDefs.js` instead of `app/static/canvas.html`.
-Until then the old canvas.html file is the source of truth.
+**NODE_DEFS note:** Add new nodes to
+`frontend/src/pages/canvas/nodeDefs.js`. Canvas field hints and help panels now
+live alongside the React canvas components, primarily in
+`frontend/src/pages/canvas/ConfigPanel.jsx`.
 
 ---
 
@@ -133,7 +134,11 @@ The registry (`__init__.py`) auto-discovers all modules on startup. Custom nodes
 
 Template rendering: `_render(text, context, creds)` in `_utils.py` resolves `{{node_id.field}}` and `{{creds.name.field}}` in any string config value.
 
-**Canvas UI**: each node must also have an entry in `NODE_DEFS` in `app/static/canvas.html` (line ~286) with `label`, `icon`, `color`, `group`, and `fields[]` (each field: `{k, l, ph, mono?, textarea?, secret?, type?, options?}`). Special help panels below the fields can be added via `node.data.type === "action.xyz"` JSX blocks starting at line ~822.
+**Canvas UI**: each node must also have an entry in
+`frontend/src/pages/canvas/nodeDefs.js` with `label`, `icon`, `color`,
+`group`, and `fields[]` (each field: `{k, l, ph, mono?, textarea?, secret?,
+type?, options?}`). Special help panels and richer field rendering now live in
+the React canvas components, mainly `ConfigPanel.jsx` and related modal files.
 
 ### Trigger nodes
 
@@ -195,7 +200,11 @@ Template rendering: `_render(text, context, creds)` in `_utils.py` resolves `{{n
 - **JSX Fragments `<>…</>`** — every opened `<>` needs a matching `</>` before the closing `);`. A missing close breaks the Babel parser for the entire remainder of the `<script>` block.
 - **AgentMail.to** — `inbox_id` = full `AGENTMAIL_FROM` address (e.g. `alerts@agentmail.to`). Endpoint: `POST /v0/inboxes/{inbox_id}/messages/send`. Auth: `Authorization: Bearer <AGENTMAIL_API_KEY>`.
 - **app_settings KV table** — generic key/value store for system config (added in 0005). Use `get_setting(key, default)` / `set_setting(key, value)` rather than adding new columns for simple scalar config.
-- **NODE_DEFS in canvas.html** — every new node needs both a Python module in `app/nodes/` AND a `NODE_DEFS` entry + optional hint JSX block in `canvas.html`. There are TWO hint sections: ~line 822 (node edit panel) and ~line 1855 (history/detail panel). Both need the hint if it matters.
+- **NODE_DEFS live in the React canvas now** — every new node needs both a
+  Python module in `app/nodes/` AND a `NODE_DEFS` entry in
+  `frontend/src/pages/canvas/nodeDefs.js`. If the node needs richer help or
+  custom field behavior, add it in the React canvas components such as
+  `ConfigPanel.jsx` or `NodeEditorModal.jsx`.
 
 ---
 
