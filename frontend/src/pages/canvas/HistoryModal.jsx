@@ -1,6 +1,7 @@
-import { useState, useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api } from "../../api/client.js";
 import { ConfirmModal } from "../../components/ConfirmModal.jsx";
+import { useFocusTrap } from "../../components/useFocusTrap.js";
 
 function fmtDate(iso) {
   try {
@@ -22,6 +23,8 @@ export function HistoryModal({ isOpen, onClose, graphId, showToast, onRestored }
   const [preview,       setPreview]       = useState(null);   // { nodes, edges }
   const [restoring,     setRestoring]     = useState(false);
   const [confirmState,  setConfirmState]  = useState(null);
+  const dialogRef = useRef(null);
+  useFocusTrap(dialogRef, onClose);
 
   useEffect(() => {
     if (!isOpen || !graphId) return;
@@ -33,12 +36,14 @@ export function HistoryModal({ isOpen, onClose, graphId, showToast, onRestored }
         const v = await api("GET", `/api/graphs/${graphId}/versions`);
         setVersions(v || []);
       } catch (e) {
+        setVersions([]);
         showToast(e.message, "error");
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     }
     load();
-  }, [isOpen, graphId]);
+  }, [isOpen, graphId, showToast]);
 
   async function selectVersion(v) {
     setSelected(v);
@@ -47,7 +52,9 @@ export function HistoryModal({ isOpen, onClose, graphId, showToast, onRestored }
       const detail = await api("GET", `/api/graphs/${graphId}/versions/${v.version}`);
       const gd = detail.graph_data || {};
       setPreview({ nodes: gd.nodes || [], edges: gd.edges || [] });
-    } catch { /* preview is optional */ }
+    } catch {
+      setPreview({ nodes: [], edges: [] });
+    }
   }
 
   function restore() {
@@ -64,8 +71,9 @@ export function HistoryModal({ isOpen, onClose, graphId, showToast, onRestored }
           onClose();
         } catch (e) {
           showToast(e.message, "error");
+        } finally {
+          setRestoring(false);
         }
-        setRestoring(false);
       },
     });
   }
@@ -87,6 +95,7 @@ export function HistoryModal({ isOpen, onClose, graphId, showToast, onRestored }
           role="dialog"
           aria-modal="true"
           aria-label="Version History"
+          ref={dialogRef}
         >
           <div style={{ display: "flex", height: 480 }}>
 

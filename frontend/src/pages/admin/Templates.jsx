@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { api } from "../../api/client.js";
 
 const CATEGORY_COLORS = {
@@ -14,13 +14,26 @@ export function Templates({ showToast }) {
   const [templates, setTemplates] = useState([]);
   const [loading,   setLoading]   = useState(true);
   const [importing, setImporting] = useState(null);
+  const [loadError, setLoadError] = useState("");
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setLoadError("");
+    try {
+      const rows = await api("GET", "/api/templates");
+      setTemplates(rows || []);
+    } catch (e) {
+      setTemplates([]);
+      setLoadError(e.message || "Failed to load templates");
+      showToast(e.message, "error");
+    } finally {
+      setLoading(false);
+    }
+  }, [showToast]);
 
   useEffect(() => {
-    api("GET", "/api/templates")
-      .then(setTemplates)
-      .catch(e => showToast(e.message, "error"))
-      .finally(() => setLoading(false));
-  }, []);
+    load();
+  }, [load]);
 
   async function useTemplate(t) {
     setImporting(t.id);
@@ -29,8 +42,9 @@ export function Templates({ showToast }) {
       showToast(`Flow "${g.name}" created! Open it in Canvas Flows.`);
     } catch (e) {
       showToast("Failed: " + e.message, "error");
+    } finally {
+      setImporting(null);
     }
-    setImporting(null);
   }
 
   // Group by category
@@ -52,13 +66,18 @@ export function Templates({ showToast }) {
       </div>
 
       {loading && <div style={{ color: "#64748b", padding: 24 }}>Loading templates…</div>}
-      {!loading && templates.length === 0 && (
+      {!loading && loadError && (
+        <div style={{ color: "#fca5a5", padding: 24 }}>
+          {loadError}
+        </div>
+      )}
+      {!loading && !loadError && templates.length === 0 && (
         <div style={{ color: "#64748b", padding: 24 }}>
           No templates found. Add JSON files to <code>app/templates/</code>.
         </div>
       )}
 
-      {Object.entries(groups).map(([category, items]) => (
+      {!loading && !loadError && Object.entries(groups).map(([category, items]) => (
         <div key={category} style={{ marginBottom: 32 }}>
           <div style={{
             fontSize: 11, fontWeight: 600, color: CATEGORY_COLORS[category] || "#94a3b8",

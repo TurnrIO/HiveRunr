@@ -1,5 +1,6 @@
-import { useState, useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api } from "../../api/client.js";
+import { useFocusTrap } from "../../components/useFocusTrap.js";
 
 const ROLES     = ["viewer", "runner", "editor"];
 const ROLE_DESC = { viewer: "View-only", runner: "Can trigger runs", editor: "Can edit flow" };
@@ -18,6 +19,8 @@ export function PermissionsModal({ isOpen, onClose, graphId, showToast }) {
   const [invRole,     setInvRole]     = useState("viewer");
   const [inviting,    setInviting]    = useState(false);
   const [inviteLink,  setInviteLink]  = useState(null);
+  const dialogRef = useRef(null);
+  useFocusTrap(dialogRef, onClose);
 
   async function load() {
     if (!graphId) return;
@@ -27,9 +30,12 @@ export function PermissionsModal({ isOpen, onClose, graphId, showToast }) {
       setPerms(data.permissions || []);
       setUsers(data.users || []);
     } catch (e) {
+      setPerms([]);
+      setUsers([]);
       showToast(e.message, "error");
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }
 
   useEffect(() => {
@@ -38,7 +44,7 @@ export function PermissionsModal({ isOpen, onClose, graphId, showToast }) {
       setInviteLink(null);
       setInvEmail("");
     }
-  }, [isOpen, graphId]);
+  }, [isOpen, graphId, showToast]);
 
   async function grantPermission() {
     if (!selUser) return;
@@ -50,8 +56,9 @@ export function PermissionsModal({ isOpen, onClose, graphId, showToast }) {
       await load();
     } catch (e) {
       showToast(e.message, "error");
+    } finally {
+      setSaving(false);
     }
-    setSaving(false);
   }
 
   async function removePermission(userId) {
@@ -89,8 +96,9 @@ export function PermissionsModal({ isOpen, onClose, graphId, showToast }) {
       await load();
     } catch (e) {
       showToast(e.message, "error");
+    } finally {
+      setInviting(false);
     }
-    setInviting(false);
   }
 
   if (!isOpen) return null;
@@ -115,6 +123,7 @@ export function PermissionsModal({ isOpen, onClose, graphId, showToast }) {
         role="dialog"
         aria-modal="true"
         aria-label="Flow Permissions"
+        ref={dialogRef}
       >
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
           <h3 style={{ margin: 0, fontSize: 15 }}>🔐 Flow Permissions</h3>
@@ -261,7 +270,11 @@ export function PermissionsModal({ isOpen, onClose, graphId, showToast }) {
                     />
                     <button
                       className="btn btn-ghost btn-sm"
-                      onClick={() => { navigator.clipboard.writeText(inviteLink); showToast("Copied!"); }}
+                      onClick={() => {
+                        navigator.clipboard.writeText(inviteLink)
+                          .then(() => showToast("Copied!"))
+                          .catch(() => showToast("Copy failed", "error"));
+                      }}
                     >
                       Copy
                     </button>

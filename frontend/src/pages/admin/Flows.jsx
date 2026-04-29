@@ -24,16 +24,24 @@ export function Flows({ showToast }) {
       const m = {};
       (rows || []).forEach(r => { m[r.graph_id] = r; });
       setHealthMap(m);
-    } catch { /* analytics optional */ }
+    } catch {
+      setHealthMap({});
+    }
   }, []);
 
-  const load = useCallback(async () => {
-    try { setGraphs(await api("GET", "/api/graphs")); }
-    catch (e) { showToast(e.message, "error"); }
-    setLoading(false);
-  }, []);
+  const load = useCallback(async ({ silent = false } = {}) => {
+    if (!silent) setLoading(true);
+    try {
+      setGraphs(await api("GET", "/api/graphs"));
+    } catch (e) {
+      setGraphs([]);
+      if (!silent) showToast(e.message, "error");
+    } finally {
+      if (!silent) setLoading(false);
+    }
+  }, [showToast]);
 
-  useEffect(() => { load(); loadHealth(); }, []);
+  useEffect(() => { load(); loadHealth(); }, [load, loadHealth]);
 
   async function reseedExamples() {
     setConfirmState({
@@ -41,9 +49,16 @@ export function Flows({ showToast }) {
       confirmLabel: "Re-seed",
       fn: async () => {
         setReseeding(true);
-        try { await api("POST", "/api/graphs/reseed"); showToast("Examples re-seeded"); load(); }
-        catch (e) { showToast(e.message, "error"); }
-        setReseeding(false);
+        try {
+          await api("POST", "/api/graphs/reseed");
+          await load({ silent: true });
+          await loadHealth();
+          showToast("Examples re-seeded");
+        } catch (e) {
+          showToast(e.message, "error");
+        } finally {
+          setReseeding(false);
+        }
       },
     });
   }
@@ -51,26 +66,39 @@ export function Flows({ showToast }) {
   async function renameGraph(g) {
     const newName = window.prompt("Rename flow:", g.name);
     if (!newName || newName.trim() === g.name) return;
-    try { await api("PUT", `/api/graphs/${g.id}`, { name: newName.trim() }); showToast("Renamed"); load(); }
+    try {
+      await api("PUT", `/api/graphs/${g.id}`, { name: newName.trim() });
+      await load({ silent: true });
+      showToast("Renamed");
+    }
     catch (e) { showToast(e.message, "error"); }
   }
 
   async function runGraph(id, name) {
     setRunning(id);
-    try { await api("POST", `/api/graphs/${id}/run`, { source: "admin" }); showToast(`Queued: ${name}`); }
+    try {
+      await api("POST", `/api/graphs/${id}/run`, { source: "admin" });
+      await loadHealth();
+      showToast(`Queued: ${name}`);
+    }
     catch (e) { showToast(e.message, "error"); }
-    setRunning(null);
+    finally { setRunning(null); }
   }
 
   async function toggleGraph(id, enabled) {
-    try { await api("PUT", `/api/graphs/${id}`, { enabled: !enabled }); load(); showToast(enabled ? "Disabled" : "Enabled"); }
+    try {
+      await api("PUT", `/api/graphs/${id}`, { enabled: !enabled });
+      await load({ silent: true });
+      showToast(enabled ? "Disabled" : "Enabled");
+    }
     catch (e) { showToast(e.message, "error"); }
   }
 
   async function duplicateGraph(g) {
     try {
       const copy = await api("POST", `/api/graphs/${g.id}/duplicate`);
-      showToast(`Duplicated as "${copy.name}"`); load();
+      await load({ silent: true });
+      showToast(`Duplicated as "${copy.name}"`);
     } catch (e) { showToast(e.message, "error"); }
   }
 
@@ -79,7 +107,12 @@ export function Flows({ showToast }) {
       message: `Delete "${name}"? This cannot be undone.`,
       confirmLabel: "Delete",
       fn: async () => {
-        try { await api("DELETE", `/api/graphs/${id}`); showToast("Deleted"); load(); }
+        try {
+          await api("DELETE", `/api/graphs/${id}`);
+          await load({ silent: true });
+          await loadHealth();
+          showToast("Deleted");
+        }
         catch (e) { showToast(e.message, "error"); }
       },
     });

@@ -24,10 +24,12 @@ const RUN_STATUS_COLOR = {
 };
 
 export function Scripts({ showToast }) {
-  const { user }                              = useAuth();
+  const { currentUser: user }                 = useAuth();
   const [scripts, setScripts]                 = useState([]);
   const [selectedScript, setSelectedScript]   = useState(null);
+  const [loadingList, setLoadingList]         = useState(true);
   const [loadingContent, setLoadingContent]   = useState(false);
+  const [loadError, setLoadError]             = useState("");
   const [newName, setNewName]                 = useState("");
   const [creating, setCreating]               = useState(false);
   const [confirmState, setConfirmState]       = useState(null);
@@ -35,48 +37,81 @@ export function Scripts({ showToast }) {
   const [runStatus, setRunStatus]             = useState({});
   // last run info per script name: { status, created_at }
   const [lastRuns, setLastRuns]               = useState({});
+  const selectedNameRef     = useRef(null);
   const monacoRef          = useRef(null);
   const editorContainerRef = useRef(null);
   const pollRef            = useRef({});
 
+  const selectScript = useCallback(async (name) => {
+    setLoadingContent(true);
+    try {
+      const full = await api("GET", `/api/scripts/${name}`);
+      selectedNameRef.current = full?.name || name;
+      setSelectedScript(full);
+    } catch (e) {
+      showToast(e.message, "error");
+    } finally {
+      setLoadingContent(false);
+    }
+  }, [showToast]);
+
   /* ── fetch list + last-run info ──────────────────────────────────────── */
-  const load = useCallback(async (keepSelected = false) => {
+  const load = useCallback(async ({ preserveSelection = true, silent = false } = {}) => {
+    if (!silent) setLoadingList(true);
+    setLoadError("");
     try {
       const s = await api("GET", "/api/scripts");
       const list = Array.isArray(s) ? s : [];
       setScripts(list);
-      if (!keepSelected && list.length > 0) {
-        await selectScript(list[0].name);
-      }
-      // Load last run for each script
-      await Promise.allSettled(list.map(async sc => {
+      const names = new Set(list.map(sc => sc.name));
+      setRunStatus(prev => Object.fromEntries(Object.entries(prev).filter(([name]) => names.has(name))));
+      const lastRunEntries = await Promise.all(list.map(async sc => {
         try {
           const runs = await api("GET", `/api/runs?q=${encodeURIComponent(sc.name)}&page_size=1`);
           const latest = (runs.runs ?? runs)[0];
           if (latest) {
-            setLastRuns(prev => ({ ...prev, [sc.name]: {
+            return [sc.name, {
               status: latest.status,
               created_at: latest.created_at,
-            }}));
+            }];
           }
-        } catch { /* optional */ }
+        } catch {
+          return null;
+        }
+        return null;
       }));
-    } catch (e) { showToast(e.message, "error"); }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+      setLastRuns(Object.fromEntries(lastRunEntries.filter(Boolean)));
 
-  async function selectScript(name) {
-    setLoadingContent(true);
-    try {
-      const full = await api("GET", `/api/scripts/${name}`);
-      setSelectedScript(full);
-    } catch (e) { showToast(e.message, "error"); }
-    setLoadingContent(false);
-  }
+      if (list.length === 0) {
+        selectedNameRef.current = null;
+        setSelectedScript(null);
+        return;
+      }
+      const preferredName = preserveSelection && selectedNameRef.current && names.has(selectedNameRef.current)
+        ? selectedNameRef.current
+        : list[0].name;
+      if (selectedNameRef.current !== preferredName) {
+        await selectScript(preferredName);
+      }
+    } catch (e) {
+      setScripts([]);
+      selectedNameRef.current = null;
+      setSelectedScript(null);
+      setLastRuns({});
+      setRunStatus({});
+      if (!silent) {
+        setLoadError(e.message || "Failed to load scripts");
+        showToast(e.message, "error");
+      }
+    } finally {
+      if (!silent) setLoadingList(false);
+    }
+  }, [selectScript, showToast]);
 
   useEffect(() => {
-    load(false);
+    load({ preserveSelection: false });
     return () => { Object.values(pollRef.current).forEach(clearInterval); };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [load]);
 
   /* ── Monaco editor lifecycle ─────────────────────────────────────────── */
   useEffect(() => {
@@ -108,11 +143,14 @@ export function Scripts({ showToast }) {
       await api("POST", "/api/scripts", { name: newName, content: `# ${newName}.py\n` });
       const created = newName;
       setNewName("");
-      await load(true);
+      await load({ preserveSelection: true, silent: true });
       await selectScript(created);
       showToast("Script created");
-    } catch (e) { showToast(e.message, "error"); }
-    setCreating(false);
+    } catch (e) {
+      showToast(e.message, "error");
+    } finally {
+      setCreating(false);
+    }
   }
 
   async function saveScript() {
@@ -121,7 +159,7 @@ export function Scripts({ showToast }) {
       const content = monacoRef.current.getValue();
       await api("PUT", `/api/scripts/${selectedScript.name}`, { content });
       setSelectedScript(s => ({ ...s, content }));
-      await load(true);
+      await load({ preserveSelection: true, silent: true });
       showToast("Saved");
     } catch (e) { showToast(e.message, "error"); }
   }
@@ -135,8 +173,9 @@ export function Scripts({ showToast }) {
         try {
           await api("DELETE", `/api/scripts/${selectedScript.name}`);
           showToast("Deleted");
+          selectedNameRef.current = null;
           setSelectedScript(null);
-          await load(false);
+          await load({ preserveSelection: false, silent: true });
         } catch (e) { showToast(e.message, "error"); }
       },
     });
@@ -159,11 +198,15 @@ export function Scripts({ showToast }) {
           setRunStatus(prev => ({ ...prev, [name]: { taskId: res.task_id, status: run.status, error: run.result?.error } }));
           if (["succeeded","failed","dead","cancelled"].includes(run.status)) {
             clearInterval(pollRef.current[name]);
+            delete pollRef.current[name];
             setLastRuns(prev => ({ ...prev, [name]: { status: run.status, created_at: run.created_at } }));
             if (run.status === "succeeded") showToast(`✓ ${name} succeeded`);
             else showToast(`✗ ${name} ${run.status}${run.result?.error ? `: ${run.result.error}` : ""}`, "error");
           }
-        } catch { clearInterval(pollRef.current[name]); }
+        } catch {
+          clearInterval(pollRef.current[name]);
+          delete pollRef.current[name];
+        }
       }, 2000);
     } catch (e) { showToast(e.message, "error"); }
   }
@@ -205,12 +248,22 @@ export function Scripts({ showToast }) {
           )}
 
           <div style={{ flex: 1, overflowY: "auto" }}>
-            {scripts.length === 0 && (
+            {loadingList && (
+              <div style={{ padding: "16px 14px", color: "#64748b", fontSize: 12 }}>
+                Loading scripts…
+              </div>
+            )}
+            {!loadingList && loadError && (
+              <div style={{ padding: "16px 14px", color: "#fca5a5", fontSize: 12 }}>
+                {loadError}
+              </div>
+            )}
+            {!loadingList && !loadError && scripts.length === 0 && (
               <div style={{ padding: "16px 14px", color: "#475569", fontSize: 12 }}>
                 No scripts yet. Create one above.
               </div>
             )}
-            {scripts.map(s => {
+            {!loadingList && !loadError && scripts.map(s => {
               const live = runStatus[s.name];
               const last = lastRuns[s.name];
               const isRunning = live && ["queued","running","retrying"].includes(live.status);

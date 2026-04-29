@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { api } from "../../api/client.js";
 import { useAuth } from "../../contexts/AuthContext.jsx";
 import { useWorkspace } from "../../contexts/WorkspaceContext.jsx";
@@ -28,8 +28,8 @@ export function Workspaces({ showToast }) {
   const [createBusy,   setCreateBusy]   = useState(false);
   const [confirmState, setConfirmState] = useState(null);
 
-  const load = async () => {
-    setLoading(true);
+  const load = useCallback(async ({ silent = false } = {}) => {
+    if (!silent) setLoading(true);
     try {
       const _isOwner = user?.role === "owner";
       const [myList, usersResp] = await Promise.all([
@@ -38,7 +38,7 @@ export function Workspaces({ showToast }) {
       ]);
       const list = myList || [];
       setAllUsers(usersResp || []);
-      if (_isOwner) setAllWs(list);
+      setAllWs(_isOwner ? list : []);
       const wsId = activeWorkspace?.id;
       const active = (wsId ? list.find(w => String(w.id) === String(wsId)) : null) || list[0];
       if (active) {
@@ -47,12 +47,22 @@ export function Workspaces({ showToast }) {
         setEditingName(false);
         const mem = await api("GET", `/api/workspaces/${active.id}/members`);
         setMembers(mem || []);
+      } else {
+        setWs(null);
+        setMembers([]);
       }
-    } catch (e) { showToast(e.message, "error"); }
-    setLoading(false);
-  };
+    } catch (e) {
+      setWs(null);
+      setAllWs([]);
+      setMembers([]);
+      setAllUsers([]);
+      if (!silent) showToast(e.message, "error");
+    } finally {
+      if (!silent) setLoading(false);
+    }
+  }, [activeWorkspace?.id, showToast, user?.role]);
 
-  useEffect(() => { if (user?.id) load(); }, [user?.id]);
+  useEffect(() => { if (user?.id) load(); }, [load, user?.id]);
 
   const rename = async (e) => {
     e.preventDefault();
@@ -64,9 +74,13 @@ export function Workspaces({ showToast }) {
       setNewName(updated.name);
       setEditingName(false);
       setAllWs(prev => prev.map(w => w.id === updated.id ? { ...w, name: updated.name } : w));
+      await refreshWorkspaces();
       showToast("Workspace renamed");
-    } catch (e) { showToast(e.message, "error"); }
-    setRenaming(false);
+    } catch (e) {
+      showToast(e.message, "error");
+    } finally {
+      setRenaming(false);
+    }
   };
 
   const addMember = async (e) => {
@@ -75,19 +89,21 @@ export function Workspaces({ showToast }) {
     setAddBusy(true);
     try {
       await api("PUT", `/api/workspaces/${ws.id}/members`, { user_id: parseInt(addUserId), role: addRole });
-      const mem = await api("GET", `/api/workspaces/${ws.id}/members`);
-      setMembers(mem || []);
+      await load({ silent: true });
       setAddUserId(""); setAddRole("viewer");
       showToast("Member added");
-    } catch (e) { showToast(e.message, "error"); }
-    setAddBusy(false);
+    } catch (e) {
+      showToast(e.message, "error");
+    } finally {
+      setAddBusy(false);
+    }
   };
 
   const changeRole = async (userId, role) => {
     if (!ws) return;
     try {
       await api("PUT", `/api/workspaces/${ws.id}/members`, { user_id: userId, role });
-      setMembers(m => m.map(x => x.user_id === userId ? { ...x, role } : x));
+      await load({ silent: true });
       showToast("Role updated");
     } catch (e) { showToast(e.message, "error"); }
   };
@@ -99,7 +115,7 @@ export function Workspaces({ showToast }) {
       fn: async () => {
         try {
           await api("DELETE", `/api/workspaces/${ws.id}/members/${userId}`);
-          setMembers(m => m.filter(x => x.user_id !== userId));
+          await load({ silent: true });
           showToast("Member removed");
         } catch (e) { showToast(e.message, "error"); }
       }
@@ -116,8 +132,11 @@ export function Workspaces({ showToast }) {
       await load();
       await refreshWorkspaces();
       showToast("Workspace created — switch to it using the sidebar or the table below");
-    } catch (e) { showToast(e.message, "error"); }
-    setCreateBusy(false);
+    } catch (e) {
+      showToast(e.message, "error");
+    } finally {
+      setCreateBusy(false);
+    }
   };
 
   const deleteWorkspace = (w) => {
@@ -127,9 +146,12 @@ export function Workspaces({ showToast }) {
       fn: async () => {
         try {
           await api("DELETE", `/api/workspaces/${w.id}`);
-          setAllWs(prev => prev.filter(x => x.id !== w.id));
+          await load({ silent: true });
+          await refreshWorkspaces();
           showToast("Workspace deleted");
-        } catch (e) { showToast(e.message, "error"); }
+        } catch (e) {
+          showToast(e.message, "error");
+        }
       }
     });
   };
