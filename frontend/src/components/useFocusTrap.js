@@ -19,6 +19,7 @@ export function useFocusTrap(ref, onEscape) {
   useEffect(() => {
     const el = ref?.current;
     if (!el) return;
+    const escapeHandler = typeof onEscape === "function" ? onEscape : null;
 
     const first = () => el.querySelectorAll(FOCUSABLE)[0];
     const last  = () => {
@@ -35,7 +36,7 @@ export function useFocusTrap(ref, onEscape) {
 
     const trap = (e) => {
       if (e.key === "Escape") {
-        onEscape?.();
+        escapeHandler?.();
         return;
       }
       if (e.key !== "Tab") return;
@@ -60,5 +61,5 @@ export function useFocusTrap(ref, onEscape) {
       el.removeEventListener("keydown", trap);
       prev?.focus?.();
     };
-  }, []);
+  }, [ref, onEscape]);
 }

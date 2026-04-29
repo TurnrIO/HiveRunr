@@ -113,9 +113,12 @@ export function System({ showToast }) {
       setData(d);
       setLastFetch(new Date());
     } catch (e) {
-      showToast("Failed to load diagnostics: " + e.message, "error");
+      if (!silent) {
+        showToast("Failed to load diagnostics: " + e.message, "error");
+      }
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }, [showToast]);
 
   useEffect(() => {

@@ -58,7 +58,8 @@ export function CommandPalette({ open, onClose, navigate }) {
   const [catalogVersion, setCatalogVersion] = useState(0);
   const inputRef = useRef(null);
   const listRef  = useRef(null);
-  const trapRef  = useFocusTrap(open);
+  const dialogRef = useRef(null);
+  useFocusTrap(dialogRef, onClose);
   const requestIdRef = useRef(0);
   const catalogRef = useRef({ graphs: [], credentials: [] });
 
@@ -208,7 +209,7 @@ export function CommandPalette({ open, onClose, navigate }) {
         alignItems: "flex-start", justifyContent: "center", paddingTop: "12vh",
       }}
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}
-      ref={trapRef}
+      ref={dialogRef}
     >
       <div style={{
         width: "min(580px, 94vw)", background: "#13152a",

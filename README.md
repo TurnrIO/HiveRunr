@@ -196,6 +196,7 @@ The visual canvas editor lets you build flows by connecting nodes on a graph. Ea
 - **Retry policy** — configurable max attempts + delay per node
 - **Fail mode** — `abort` (default) or `continue` (stores error in context, keeps flow running)
 - **Disable/enable** per node without deleting it
+- **Quick-start templates** — the empty canvas view can create starter flows directly from built-in templates like Email → Slack, Webhook → Notion, Sheets report, and CSV → Database
 - **Live data inspector** — overlay run input/output on any node from a past run
 - **Real-time streaming** — nodes colour in as they execute via SSE
 - **Undo/redo** — full history within a session

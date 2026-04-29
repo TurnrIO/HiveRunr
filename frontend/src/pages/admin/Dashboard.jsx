@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { Fragment, useState, useEffect, useCallback } from "react";
 import { api } from "../../api/client.js";
 import { ViewerBanner } from "../../components/ViewerBanner.jsx";
 import { ReplayEditModal } from "../../components/ReplayEditModal.jsx";
@@ -17,7 +17,8 @@ export function Dashboard({ showToast }) {
   const [replayEdit, setReplayEdit] = useState(null);
   const [queue, setQueue]           = useState(null);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async ({ silent = false } = {}) => {
+    if (!silent) setLoading(true);
     try {
       const [m, r, w, g] = await Promise.all([
         api("GET", "/api/metrics"),
@@ -29,9 +30,18 @@ export function Dashboard({ showToast }) {
       setRuns(r.runs ?? r);
       setWfs(w);
       setGraphs(g);
-    } catch (e) { showToast(e.message, "error"); }
-    setLoading(false);
-  }, []);
+    } catch (e) {
+      if (!silent) {
+        showToast(e.message, "error");
+      }
+      setMetrics(null);
+      setRuns([]);
+      setWfs([]);
+      setGraphs([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [showToast]);
 
   const loadQueue = useCallback(async () => {
     try { setQueue(await api("GET", "/api/runs/queue")); }
@@ -41,10 +51,10 @@ export function Dashboard({ showToast }) {
   useEffect(() => {
     load();
     loadQueue();
-    const t1 = setInterval(load, 5000);
+    const t1 = setInterval(() => load({ silent: true }), 5000);
     const t2 = setInterval(loadQueue, 10000);
     return () => { clearInterval(t1); clearInterval(t2); };
-  }, []);
+  }, [load, loadQueue]);
 
   // Use server-side accurate counts from /api/metrics; fall back to run list while loading
   const activeCount = runs.filter(r => r.status === "running" || r.status === "queued").length;
@@ -59,23 +69,23 @@ export function Dashboard({ showToast }) {
   };
 
   async function toggleWf(name) {
-    try { await api("POST", `/api/workflows/${name}/toggle`); load(); showToast("Toggled"); }
+    try { await api("POST", `/api/workflows/${name}/toggle`); await load({ silent: true }); showToast("Toggled"); }
     catch (e) { showToast(e.message, "error"); }
   }
   async function runWf(name) {
-    try { await api("POST", `/api/workflows/${name}/run`, { payload: {} }); load(); showToast("Queued!"); }
+    try { await api("POST", `/api/workflows/${name}/run`, { payload: {} }); await load({ silent: true }); showToast("Queued!"); }
     catch (e) { showToast(e.message, "error"); }
   }
   async function deleteRun(id) {
-    try { await api("DELETE", `/api/runs/${id}`); load(); }
+    try { await api("DELETE", `/api/runs/${id}`); await load({ silent: true }); }
     catch (e) { showToast(e.message, "error"); }
   }
   async function cancelRun(id) {
-    try { await api("POST", `/api/runs/${id}/cancel`); load(); showToast("Cancelled"); }
+    try { await api("POST", `/api/runs/${id}/cancel`); await load({ silent: true }); showToast("Cancelled"); }
     catch (e) { showToast(e.message, "error"); }
   }
   async function replayRun(id) {
-    try { await api("POST", `/api/runs/${id}/replay`); load(); showToast("Queued for replay"); }
+    try { await api("POST", `/api/runs/${id}/replay`); await load({ silent: true }); showToast("Queued for replay"); }
     catch (e) { showToast(e.message, "error"); }
   }
   async function openReplayEdit(id) {
@@ -90,10 +100,20 @@ export function Dashboard({ showToast }) {
       try { payload = JSON.parse(payloadStr); }
       catch { showToast("Invalid JSON payload", "error"); return; }
       await api("POST", `/api/runs/${runId}/replay`, { payload });
-      load();
+      await load({ silent: true });
       showToast("Queued for replay with custom payload");
       setReplayEdit(null);
     } catch (e) { showToast(e.message, "error"); }
+  }
+
+  async function clearAllRuns() {
+    try {
+      await api("DELETE", "/api/runs");
+      await load({ silent: true });
+      showToast("Run history cleared");
+    } catch (e) {
+      showToast(e.message, "error");
+    }
   }
 
   function fmtDur(r) {
@@ -210,7 +230,7 @@ export function Dashboard({ showToast }) {
                       <a className="btn btn-ghost" href={`/canvas#graph-${g.id}`}>✏️ Edit</a>
                       <button className="btn btn-success" disabled={!g.enabled}
                         onClick={async () => {
-                          try { await api("POST", `/api/graphs/${g.id}/run`, { payload: {} }); load(); showToast("Queued!"); }
+                          try { await api("POST", `/api/graphs/${g.id}/run`, { payload: {} }); await load({ silent: true }); showToast("Queued!"); }
                           catch (e) { showToast(e.message, "error"); }
                         }}>▶ Run</button>
                     </div>
@@ -226,7 +246,7 @@ export function Dashboard({ showToast }) {
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
           <div className="card-title" style={{ marginBottom: 0 }}>Recent Runs</div>
           {!ro && runs.length > 0 && (
-            <button className="btn btn-ghost" onClick={() => api("DELETE", "/api/runs").then(load)}>Clear all</button>
+            <button className="btn btn-ghost" onClick={clearAllRuns}>Clear all</button>
           )}
         </div>
 
@@ -241,7 +261,7 @@ export function Dashboard({ showToast }) {
             </thead>
             <tbody>
               {runs.map(r => (
-                <>
+                <Fragment key={r.id}>
                   <tr key={r.id} className="expandable-row"
                     onClick={() => setExpanded(expandedRunId === r.id ? null : r.id)}
                     style={{ cursor: "pointer" }}>
@@ -330,7 +350,7 @@ export function Dashboard({ showToast }) {
                       </td>
                     </tr>
                   )}
-                </>
+                </Fragment>
               ))}
             </tbody>
           </table>

@@ -16,18 +16,11 @@ export function ExtractSubflowModal({ isOpen, nodeCount, onConfirm, onClose }) {
   const [desc, setDesc]   = useState("");
   const [busy, setBusy]   = useState(false);
   const ref               = useRef(null);
-  useFocusTrap(ref, isOpen);
+  useFocusTrap(ref, onClose);
 
   useEffect(() => {
     if (isOpen) { setName("New Subflow"); setDesc(""); setBusy(false); }
   }, [isOpen]);
-
-  useEffect(() => {
-    if (!isOpen) return;
-    const handler = (e) => { if (e.key === "Escape") onClose(); };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, [isOpen, onClose]);
 
   if (!isOpen) return null;
 

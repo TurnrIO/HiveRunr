@@ -31,6 +31,13 @@ import { validateFlow, computeAutoLayout, nodeIssues } from "./canvasHelpers.js"
 /** Per-node validation issues — Map<nodeId, {level,msg}[]> */
 export const ValidationContext = createContext(new Map());
 
+const QUICK_START_TEMPLATES = [
+  { slug: "email_to_slack", icon: "📧", label: "Email → Slack" },
+  { slug: "webhook_to_notion", icon: "🔗", label: "Webhook → Notion" },
+  { slug: "sheets_to_slack_report", icon: "⏰", label: "Sheets report" },
+  { slug: "csv_to_db", icon: "🔄", label: "CSV → Database" },
+];
+
 /* ── RFC 4122 v4 UUID ──────────────────────────────────────────────────── */
 function uid() {
   if (typeof crypto !== "undefined" && crypto.randomUUID) return crypto.randomUUID();
@@ -228,6 +235,7 @@ function CanvasApp() {
   const [replayEdit,      setReplayEdit]      = useState(null);
   const [hoveredNodeId,   setHoveredNodeId]   = useState(null);
   const [spacePanning,    setSpacePanning]    = useState(false); // Space-to-pan mode
+  const [quickTemplateBusy, setQuickTemplateBusy] = useState(null);
 
   // Dependency highlight — compute upstream (blue) + downstream (green) sets when hovering
   const { upstreamIds, downstreamIds } = useMemo(() => {
@@ -1166,6 +1174,23 @@ function CanvasApp() {
     } catch (e) { showToast(e.message, "error"); }
   }
 
+  async function startFromQuickTemplate(slug) {
+    setQuickTemplateBusy(slug);
+    try {
+      const tpl = await api("GET", `/api/templates/${slug}`);
+      const created = await api("POST", "/api/graphs/import", {
+        name: tpl.name,
+        description: tpl.description || "",
+        graph_data: tpl.graph_data,
+      });
+      await onFromTemplate(created);
+    } catch (e) {
+      showToast(`Template import failed: ${e.message}`, "error");
+    } finally {
+      setQuickTemplateBusy(null);
+    }
+  }
+
   async function duplicateGraph(g) {
     try {
       const full = await api("GET", `/api/graphs/${g.id}`);
@@ -1412,18 +1437,14 @@ function CanvasApp() {
                   </button>
                 </div>
                 <div style={{ display: "flex", gap: 8, justifyContent: "center", flexWrap: "wrap" }}>
-                  {[
-                    { icon: "📧", label: "Email alert" },
-                    { icon: "🔗", label: "Webhook → Slack" },
-                    { icon: "⏰", label: "Scheduled report" },
-                    { icon: "🔄", label: "Data sync" },
-                  ].map(t => (
-                    <button key={t.label} className="btn btn-ghost"
+                  {QUICK_START_TEMPLATES.map(t => (
+                    <button key={t.slug} className="btn btn-ghost"
                       style={{ fontSize: 11, padding: "4px 10px", color: "#94a3b8" }}
-                      onClick={() => setShowModal(true)}
-                      title={`Start from a ${t.label} template`}
+                      onClick={() => startFromQuickTemplate(t.slug)}
+                      disabled={quickTemplateBusy != null}
+                      title={`Start from the ${t.label} template`}
                     >
-                      {t.icon} {t.label}
+                      {quickTemplateBusy === t.slug ? "⟳ Creating…" : `${t.icon} ${t.label}`}
                     </button>
                   ))}
                 </div>

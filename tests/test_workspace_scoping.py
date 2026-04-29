@@ -105,6 +105,37 @@ def test_list_runs_no_workspace_filter_when_none():
             "workspace_id filter must not appear when workspace_id=None"
 
 
+def test_list_schedules_places_workspace_filter_after_lateral_join():
+    """list_schedules must emit JOINs before WHERE to avoid SQL syntax errors."""
+    import app.core.db as db_mod
+
+    captured_sql = []
+
+    def fake_execute(sql, params=None):
+        captured_sql.append((str(sql), params))
+
+    fake_cur = mock.MagicMock()
+    fake_cur.execute.side_effect = fake_execute
+    fake_cur.fetchall.return_value = []
+    fake_cur.__enter__ = lambda s: s
+    fake_cur.__exit__ = mock.MagicMock(return_value=False)
+
+    fake_conn = mock.MagicMock()
+    fake_conn.__enter__ = lambda s: s
+    fake_conn.__exit__ = mock.MagicMock(return_value=False)
+    fake_conn.cursor.return_value = fake_cur
+
+    with mock.patch.object(db_mod, "get_conn", return_value=fake_conn):
+        db_mod.list_schedules(workspace_id=42)
+
+    assert captured_sql, "Expected list_schedules to execute SQL"
+    sql = captured_sql[0][0].upper()
+    assert "LEFT JOIN LATERAL" in sql, "Expected lateral join in schedule query"
+    assert "WHERE S.WORKSPACE_ID = %(WID)S" in sql, "Expected workspace filter in schedule query"
+    assert sql.index("LEFT JOIN LATERAL") < sql.index("WHERE S.WORKSPACE_ID = %(WID)S"), \
+        "Workspace WHERE clause must come after the lateral join"
+
+
 # ── workspace_id stamped on run creation ──────────────────────────────────────
 
 class _FakeRequest:

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { Fragment, useState, useEffect, useCallback } from "react";
 import { api } from "../../api/client.js";
 import { TraceRow } from "../../components/TraceRow.jsx";
 import { ReplayEditModal } from "../../components/ReplayEditModal.jsx";
@@ -41,7 +41,7 @@ export function Logs({ showToast }) {
   const [showSaveFilter, setShowSaveFilter] = useState(false);
   const [filterName, setFilterName]   = useState("");
 
-  const load = async (pg, st, sq) => {
+  const load = useCallback(async (pg, st, sq, { silent = false } = {}) => {
     setLoading(true);
     try {
       const params = new URLSearchParams({ page: pg, page_size: PAGE_SIZE });
@@ -52,11 +52,16 @@ export function Logs({ showToast }) {
       setTotal(data.total ?? (data.runs ?? data).length);
       setPage(data.page ?? pg);
       setPages(data.pages ?? 1);
-    } catch (e) { showToast(e.message, "error"); }
-    setLoading(false);
-  };
+    } catch (e) {
+      if (!silent) {
+        showToast(e.message, "error");
+      }
+    } finally {
+      setLoading(false);
+    }
+  }, [showToast]);
 
-  useEffect(() => { load(1, statusFilter, search); }, []);
+  useEffect(() => { load(1, statusFilter, search); }, [load]); 
 
   const handleStatusChange = val => {
     setStatus(val); setPage(1); setSelected(null); setChecked(new Set());
@@ -90,14 +95,27 @@ export function Logs({ showToast }) {
       showToast(`Deleted ${res.deleted} run${res.deleted !== 1 ? "s" : ""}`);
       setChecked(new Set());
       if (selected && checked.has(selected)) setSelected(null);
-      load(page, statusFilter, search);
+      await load(page, statusFilter, search, { silent: true });
     } catch (e) { showToast(e.message, "error"); }
     setBulkDeleting(false);
   };
 
   async function replayRun(id) {
-    try { await api("POST", `/api/runs/${id}/replay`); load(page, statusFilter, search); showToast("Queued for replay"); }
+    try { await api("POST", `/api/runs/${id}/replay`); await load(page, statusFilter, search, { silent: true }); showToast("Queued for replay"); }
     catch (e) { showToast(e.message, "error"); }
+  }
+  async function deleteRun(id) {
+    try {
+      await api("DELETE", `/api/runs/${id}`);
+      await load(page, statusFilter, search, { silent: true });
+    } catch (e) { showToast(e.message, "error"); }
+  }
+  async function cancelRun(id) {
+    try {
+      await api("POST", `/api/runs/${id}/cancel`);
+      await load(page, statusFilter, search, { silent: true });
+      showToast("Cancelled");
+    } catch (e) { showToast(e.message, "error"); }
   }
   async function openReplayEdit(id) {
     try {
@@ -111,7 +129,7 @@ export function Logs({ showToast }) {
       try { payload = JSON.parse(payloadStr); }
       catch { showToast("Invalid JSON payload", "error"); return; }
       await api("POST", `/api/runs/${runId}/replay`, { payload });
-      load(page, statusFilter, search);
+      await load(page, statusFilter, search, { silent: true });
       showToast("Queued for replay with custom payload");
       setReplayEdit(null);
     } catch (e) { showToast(e.message, "error"); }
@@ -218,7 +236,7 @@ export function Logs({ showToast }) {
           <option value="cancelled">Cancelled</option>
         </select>
         <button className="btn btn-ghost" aria-label="Refresh run logs"
-          onClick={() => load(page, statusFilter, search)}>↻ Refresh</button>
+          onClick={() => load(page, statusFilter, search, { silent: false })}>↻ Refresh</button>
         {checked.size > 0 && (
           <button className="btn btn-danger" style={{ marginLeft: 4 }} disabled={bulkDeleting} onClick={bulkDelete}>
             {bulkDeleting ? "Deleting…" : `Delete selected (${checked.size})`}
@@ -242,8 +260,8 @@ export function Logs({ showToast }) {
             )}
             {loading && <div className="empty-state" style={{ padding: "30px 0" }}>Loading…</div>}
             {!loading && runs.length === 0 && <div className="empty-state" style={{ padding: "30px 0" }}>No runs match.</div>}
-            {runs.map(r => (
-              <div key={r.id} onClick={() => setSelected(r.id === selected ? null : r.id)}
+              {runs.map(r => (
+                <div key={r.id} onClick={() => setSelected(r.id === selected ? null : r.id)}
                 style={{
                   padding: "10px 14px", borderBottom: "1px solid #1e2235", cursor: "pointer",
                   background: checked.has(r.id) ? "#1e1a35" : selected === r.id ? "#252840" : "transparent",
@@ -330,7 +348,7 @@ export function Logs({ showToast }) {
               ← Select a run to view its node traces
             </div>
           ) : (
-            <>
+            <Fragment>
               <div className="card" style={{ marginBottom: 12 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
                   <div>
@@ -346,12 +364,12 @@ export function Logs({ showToast }) {
                   </div>
                   <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
                     {selRun.graph_id && (
-                      <>
+                      <Fragment>
                         <button className="btn btn-ghost btn-sm" style={{ fontSize: 11 }}
                           onClick={() => replayRun(selRun.id)} title="Re-run with original payload">▶ Replay</button>
                         <button className="btn btn-ghost btn-sm" style={{ fontSize: 11 }}
                           onClick={() => openReplayEdit(selRun.id)} title="Re-run with custom payload">✏ Replay…</button>
-                      </>
+                      </Fragment>
                     )}
                     <span style={{
                       fontSize: 12, fontWeight: 700, padding: "4px 10px", borderRadius: 20,
@@ -406,7 +424,7 @@ export function Logs({ showToast }) {
                   </table>
                 </div>
               )}
-            </>
+            </Fragment>
           )}
         </div>
       </div>

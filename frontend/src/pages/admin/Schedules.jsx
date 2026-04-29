@@ -1,4 +1,4 @@
-import { Fragment, useState, useEffect } from "react";
+import { Fragment, useState, useEffect, useCallback } from "react";
 import { api } from "../../api/client.js";
 import { ViewerBanner } from "../../components/ViewerBanner.jsx";
 import { ConfirmModal } from "../../components/ConfirmModal.jsx";
@@ -34,6 +34,7 @@ function parseSchedulePayload(raw) {
 export function Schedules({ showToast }) {
   const { currentUser: user } = useAuth();
   const [schedules, setSchedules]       = useState([]);
+  const [loading, setLoading]           = useState(true);
   const [graphs, setGraphs]             = useState([]);
   const [scripts, setScripts]           = useState([]);
   const [confirmState, setConfirmState] = useState(null);
@@ -51,9 +52,19 @@ export function Schedules({ showToast }) {
   const [editingId, setEditingId] = useState(null);
   const [editForm, setEditForm]   = useState({});
 
-  const load = async () => {
-    try { setSchedules(await api("GET", "/api/schedules")); } catch (e) {}
-  };
+  const load = useCallback(async ({ silent = false } = {}) => {
+    setLoading(true);
+    try {
+      setSchedules(await api("GET", "/api/schedules"));
+    } catch (e) {
+      setSchedules([]);
+      if (!silent) {
+        showToast(e.message || "Failed to load schedules", "error");
+      }
+    } finally {
+      setLoading(false);
+    }
+  }, [showToast]);
 
   useEffect(() => {
     load();
@@ -63,7 +74,7 @@ export function Schedules({ showToast }) {
       const tz = st?.system?.app_timezone;
       if (tz) { setDefaultTz(tz); setForm(f => ({ ...f, timezone: tz })); }
     }).catch(() => {});
-  }, []);
+  }, [load]);
 
   async function create(e) {
     e.preventDefault();
@@ -80,13 +91,13 @@ export function Schedules({ showToast }) {
       });
       setForm({ name: "", workflow: "", graph_id: null, cron: "0 9 * * *", payload: "{}", timezone: defaultTz, run_at: "" });
       setSchedMode("recurring");
-      load();
+      await load({ silent: true });
       showToast("Schedule created");
     } catch (err) { showToast(err.message, "error"); }
   }
 
   async function toggle(id) {
-    try { await api("POST", `/api/schedules/${id}/toggle`); load(); }
+    try { await api("POST", `/api/schedules/${id}/toggle`); await load({ silent: true }); }
     catch (e) { showToast(e.message, "error"); }
   }
 
@@ -104,7 +115,7 @@ export function Schedules({ showToast }) {
       message: `Delete schedule "${name}"? This cannot be undone.`,
       confirmLabel: "Delete",
       fn: async () => {
-        try { await api("DELETE", `/api/schedules/${id}`); load(); showToast("Schedule deleted"); }
+        try { await api("DELETE", `/api/schedules/${id}`); await load({ silent: true }); showToast("Schedule deleted"); }
         catch (e) { showToast(e.message, "error"); }
       },
     });
@@ -139,7 +150,7 @@ export function Schedules({ showToast }) {
         run_at:   editForm.mode === "once" ? new Date(editForm.run_at).toISOString() : null,
       });
       setEditingId(null); setEditForm({});
-      load(); showToast("Schedule updated");
+      await load({ silent: true }); showToast("Schedule updated");
     } catch (ex) { showToast(ex.message, "error"); }
   }
 
@@ -209,7 +220,9 @@ export function Schedules({ showToast }) {
 
       <div className="card">
         <div className="card-title">Scheduled Jobs</div>
-        {schedules.length === 0 ? (
+        {loading ? (
+          <div className="empty-state">Loading…</div>
+        ) : schedules.length === 0 ? (
           <div className="empty-state">No schedules yet.</div>
         ) : (
           <table className="mobile-cards">

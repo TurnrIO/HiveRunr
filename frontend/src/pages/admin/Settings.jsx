@@ -1,8 +1,52 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { api } from "../../api/client.js";
 import { useAuth } from "../../contexts/AuthContext.jsx";
 import { ConfirmModal } from "../../components/ConfirmModal.jsx";
 import { StatusDot } from "../../components/StatusDot.jsx";
+import { useFocusTrap } from "../../components/useFocusTrap.js";
+
+function TokenRevealModal({ token, onCopy, onClose }) {
+  const ref = useRef(null);
+  useFocusTrap(ref, onClose);
+
+  return (
+    <div
+      className="modal-overlay"
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      aria-hidden="true"
+    >
+      <div
+        ref={ref}
+        className="card"
+        style={{ width: 500, margin: 0 }}
+        role="dialog"
+        aria-modal="true"
+        aria-label="New API token"
+      >
+        <div className="card-title" style={{ color: "#4ade80" }}>✓ Token created — copy it now</div>
+        <p style={{ fontSize: 13, color: "#f87171", marginBottom: 12 }}>
+          This token will <strong>not</strong> be shown again. Copy it and store it securely.
+        </p>
+        <div style={{ background: "#0d0f1a", border: "1px solid #2a2d3e", borderRadius: 8, padding: "10px 12px",
+          fontFamily: "monospace", fontSize: 13, color: "#a78bfa", wordBreak: "break-all", marginBottom: 12,
+          userSelect: "all", cursor: "text" }}>
+          {token.token}
+        </div>
+        <div style={{ fontSize: 12, color: "#64748b", marginBottom: 12, display: "flex", gap: 16 }}>
+          <span>Scope: <strong style={{ color: "#c4b5fd" }}>{token.scope || "manage"}</strong></span>
+          <span>Expires: <strong style={{ color: "#94a3b8" }}>{token.expires_at ? new Date(token.expires_at).toLocaleDateString() : "Never"}</strong></span>
+        </div>
+        <div style={{ fontSize: 12, color: "#64748b", marginBottom: 12 }}>
+          Use as: <code style={{ color: "#7dd3fc" }}>Authorization: Bearer {token.token.slice(0, 12)}…</code>
+        </div>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button className="btn btn-primary" onClick={onCopy}>⎘ Copy</button>
+          <button className="btn btn-ghost" onClick={onClose}>Done — I've saved it</button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export function Settings({ showToast }) {
   const { currentUser: user } = useAuth();
@@ -25,9 +69,66 @@ export function Settings({ showToast }) {
   const [newTokenExpiry,  setNewTokenExpiry]   = useState("");
   const [creatingToken,   setCreatingToken]    = useState(false);
   const [revealedToken,   setRevealedToken]    = useState(null);
+  const [tokensLoading,   setTokensLoading]    = useState(isOwner);
+  const [tokensError,     setTokensError]      = useState("");
   const [confirmState,    setConfirmState]     = useState(null);
 
   const webhookBase = `${window.location.origin}/webhook/`;
+
+  const loadStatus = useCallback(async () => {
+    setLoadingSt(true);
+    try { setStatus(await api("GET", "/api/system/status")); }
+    catch { setStatus(null); }
+    setLoadingSt(false);
+  }, []);
+
+  const loadNodes = useCallback(async ({ silent = true } = {}) => {
+    try {
+      const r = await api("GET", "/api/nodes");
+      setNodes(r.node_types || []);
+    } catch (e) {
+      setNodes([]);
+      if (!silent) {
+        showToast(e.message, "error");
+      }
+    }
+  }, [showToast]);
+
+  const loadRetention = useCallback(async ({ silent = true } = {}) => {
+    try {
+      setRetention(await api("GET", "/api/runs/retention"));
+    } catch (e) {
+      if (!silent) {
+        showToast(e.message, "error");
+      }
+    }
+  }, [showToast]);
+
+  const loadRatelimit = useCallback(async ({ silent = true } = {}) => {
+    try {
+      setRatelimit(await api("GET", "/api/settings/ratelimit"));
+    } catch (e) {
+      if (!silent) {
+        showToast(e.message, "error");
+      }
+    }
+  }, [showToast]);
+
+  const loadTokens = useCallback(async ({ silent = false } = {}) => {
+    setTokensLoading(true);
+    try {
+      setTokens(await api("GET", "/api/tokens"));
+      setTokensError("");
+    } catch (err) {
+      setTokens([]);
+      setTokensError(err.message || "Failed to load API tokens");
+      if (!silent) {
+        showToast(err.message, "error");
+      }
+    } finally {
+      setTokensLoading(false);
+    }
+  }, [showToast]);
 
   useEffect(() => {
     loadStatus();
@@ -35,11 +136,7 @@ export function Settings({ showToast }) {
     loadRetention();
     loadRatelimit();
     if (isOwner) loadTokens();
-  }, [isOwner]);
-
-  function loadTokens() {
-    api("GET", "/api/tokens").then(setTokens).catch(() => {});
-  }
+  }, [isOwner, loadNodes, loadRatelimit, loadRetention, loadStatus, loadTokens]);
 
   async function createToken(e) {
     e.preventDefault();
@@ -52,7 +149,7 @@ export function Settings({ showToast }) {
       const t = await api("POST", "/api/tokens", body);
       setRevealedToken(t);
       setNewTokenName(""); setNewTokenExpiry("");
-      loadTokens();
+      await loadTokens({ silent: true });
     } catch (err) { showToast(err.message, "error"); }
     setCreatingToken(false);
   }
@@ -62,22 +159,10 @@ export function Settings({ showToast }) {
       message: `Revoke token "${name}"? Any services using it will lose access immediately.`,
       confirmLabel: "Revoke",
       fn: async () => {
-        try { await api("DELETE", `/api/tokens/${id}`); loadTokens(); showToast("Token revoked"); }
+        try { await api("DELETE", `/api/tokens/${id}`); await loadTokens({ silent: true }); showToast("Token revoked"); }
         catch (err) { showToast(err.message, "error"); }
       }
     });
-  }
-
-  async function loadStatus() {
-    setLoadingSt(true);
-    try { setStatus(await api("GET", "/api/system/status")); }
-    catch (e) { setStatus(null); }
-    setLoadingSt(false);
-  }
-
-  async function loadNodes() {
-    try { const r = await api("GET", "/api/nodes"); setNodes(r.node_types || []); }
-    catch (e) {}
   }
 
   async function reloadNodes() {
@@ -96,21 +181,11 @@ export function Settings({ showToast }) {
       confirmLabel: "Delete",
       fn: async () => {
         setClearing(true);
-        try { await api("DELETE", "/api/runs"); showToast("Run history cleared"); loadStatus(); }
+        try { await api("DELETE", "/api/runs"); showToast("Run history cleared"); await loadStatus(); }
         catch (e) { showToast(e.message, "error"); }
         setClearing(false);
       }
     });
-  }
-
-  async function loadRetention() {
-    try { setRetention(await api("GET", "/api/runs/retention")); }
-    catch (e) {}
-  }
-
-  async function loadRatelimit() {
-    try { setRatelimit(await api("GET", "/api/settings/ratelimit")); }
-    catch (e) {}
   }
 
   async function saveRatelimit() {
@@ -146,7 +221,7 @@ export function Settings({ showToast }) {
         try {
           const r = await api("POST", "/api/runs/trim", body);
           showToast(`Trimmed ${r.deleted} old run${r.deleted !== 1 ? "s" : ""}`);
-          loadStatus();
+          await loadStatus();
         } catch (e) { showToast(e.message, "error"); }
         setTrimming(false);
       }
@@ -167,7 +242,15 @@ export function Settings({ showToast }) {
   }
 
   function copyWebhook() {
-    navigator.clipboard.writeText(webhookBase).then(() => showToast("Webhook URL copied")).catch(() => {});
+    navigator.clipboard.writeText(webhookBase)
+      .then(() => showToast("Webhook URL copied"))
+      .catch(() => showToast("Failed to copy webhook URL", "error"));
+  }
+
+  function copyRevealedToken() {
+    navigator.clipboard.writeText(revealedToken.token)
+      .then(() => showToast("Token copied to clipboard"))
+      .catch(() => showToast("Failed to copy token", "error"));
   }
 
   const st  = status || {};
@@ -238,7 +321,11 @@ export function Settings({ showToast }) {
               {creatingToken ? "Generating…" : "+ Generate"}
             </button>
           </form>
-          {tokens.length === 0 ? (
+          {tokensLoading ? (
+            <div className="empty-state" style={{ padding: "12px 0" }}>Loading tokens…</div>
+          ) : tokensError ? (
+            <div className="empty-state" style={{ padding: "12px 0" }}>Failed to load API tokens.</div>
+          ) : tokens.length === 0 ? (
             <div className="empty-state" style={{ padding: "12px 0" }}>No API tokens yet.</div>
           ) : (
             <table>
@@ -276,33 +363,11 @@ export function Settings({ showToast }) {
 
       {/* ── Token reveal modal ── */}
       {revealedToken && (
-        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.7)", zIndex: 2000, display: "flex", alignItems: "center", justifyContent: "center" }}>
-          <div className="card" style={{ width: 500, margin: 0 }}>
-            <div className="card-title" style={{ color: "#4ade80" }}>✓ Token created — copy it now</div>
-            <p style={{ fontSize: 13, color: "#f87171", marginBottom: 12 }}>
-              This token will <strong>not</strong> be shown again. Copy it and store it securely.
-            </p>
-            <div style={{ background: "#0d0f1a", border: "1px solid #2a2d3e", borderRadius: 8, padding: "10px 12px",
-              fontFamily: "monospace", fontSize: 13, color: "#a78bfa", wordBreak: "break-all", marginBottom: 12,
-              userSelect: "all", cursor: "text" }}>
-              {revealedToken.token}
-            </div>
-            <div style={{ fontSize: 12, color: "#64748b", marginBottom: 12, display: "flex", gap: 16 }}>
-              <span>Scope: <strong style={{ color: "#c4b5fd" }}>{revealedToken.scope || "manage"}</strong></span>
-              <span>Expires: <strong style={{ color: "#94a3b8" }}>{revealedToken.expires_at ? new Date(revealedToken.expires_at).toLocaleDateString() : "Never"}</strong></span>
-            </div>
-            <div style={{ fontSize: 12, color: "#64748b", marginBottom: 12 }}>
-              Use as: <code style={{ color: "#7dd3fc" }}>Authorization: Bearer {revealedToken.token.slice(0, 12)}…</code>
-            </div>
-            <div style={{ display: "flex", gap: 8 }}>
-              <button className="btn btn-primary" onClick={() => {
-                navigator.clipboard.writeText(revealedToken.token);
-                showToast("Token copied to clipboard");
-              }}>⎘ Copy</button>
-              <button className="btn btn-ghost" onClick={() => setRevealedToken(null)}>Done — I've saved it</button>
-            </div>
-          </div>
-        </div>
+        <TokenRevealModal
+          token={revealedToken}
+          onCopy={copyRevealedToken}
+          onClose={() => setRevealedToken(null)}
+        />
       )}
 
       {/* ── Webhook URL ── */}
@@ -427,7 +492,7 @@ export function Settings({ showToast }) {
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
             <label style={{ fontSize: 11, color: "#64748b", fontWeight: 600, textTransform: "uppercase", letterSpacing: ".04em" }}>&nbsp;</label>
-            <button className="btn btn-ghost btn-sm" onClick={loadRatelimit}>↻ Refresh</button>
+            <button className="btn btn-ghost btn-sm" onClick={() => loadRatelimit({ silent: false })}>↻ Refresh</button>
           </div>
         </div>
         <div style={{ fontSize: 11, color: ratelimit.limit === 0 ? "#f59e0b" : "#475569", marginBottom: ratelimit.counters?.length ? 16 : 0 }}>

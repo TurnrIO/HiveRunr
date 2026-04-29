@@ -215,11 +215,12 @@ export function Metrics({ showToast }) {
       setFlows(flowData);
     } catch (e) {
       showToast(e.message, "error");
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [showToast]);
 
-  useEffect(() => { load(days); }, [days]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { load(days); }, [days, load]);
 
   function openFlow(graphId) {
     sessionStorage.setItem("canvas_open_graph", graphId);

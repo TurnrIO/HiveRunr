@@ -4,7 +4,7 @@ All notable changes are documented here, newest first.
 
 ---
 
-## [Unreleased] — 2026-04-28 — Workspace UX, Setup Recovery & Admin Polish
+## [Unreleased] — 2026-04-29 — Workspace UX, Setup Recovery & Admin Polish
 
 ### Workspace UX
 - **No forced reload on workspace switch** — admin workspace changes now remount the routed app tree instead of triggering a full browser reload; the shared workspace switch flow also powers the Workspaces page
@@ -18,6 +18,12 @@ All notable changes are documented here, newest first.
 ### Admin resilience
 - **Command palette efficiency** — flow and credential searches are prefetched once per open and guarded against stale responses
 - **Safer edge cases** — Audit Log detail parsing, schedule payload validation, flow picker filtering, and the Users reset-password flow all handle malformed data and loading/error states more gracefully
+- **UI stability pass** — Dashboard, Logs, Metrics, Credentials, Settings, System, and Schedules now await their post-action refreshes more consistently, background polling is quieter on transient failures, and modal/focus handling is more robust across the admin UI and canvas
+
+### Canvas & schedules fixes
+- **Quick-start templates now work** — the canvas welcome-state starter buttons now import and open real built-in templates directly instead of just reopening the flow browser, and their labels now match actual shipped templates
+- **Schedules SQL fix** — `list_schedules()` now places the workspace filter after the lateral join, fixing the PostgreSQL syntax error that could break `/api/schedules`
+- **Regression coverage** — `tests/test_workspace_scoping.py` now checks the schedule query order so the lateral-join syntax bug does not regress
 
 ---
 

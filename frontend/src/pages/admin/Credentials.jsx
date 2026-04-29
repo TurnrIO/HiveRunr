@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { Fragment, useState, useEffect, useCallback } from "react";
 import { api } from "../../api/client.js";
 import { ViewerBanner } from "../../components/ViewerBanner.jsx";
 import { ConfirmModal } from "../../components/ConfirmModal.jsx";
@@ -97,17 +97,25 @@ export function Credentials({ showToast }) {
   const [testResults, setTestResults]   = useState({}); // {credId: {ok, message, latency_ms}}
   const [testing, setTesting]           = useState({}); // {credId: true}
 
-  const load = useCallback(async () => {
-    try { setCredentials(await api("GET", "/api/credentials")); }
-    catch (e) { showToast(e.message, "error"); }
-    setLoading(false);
-  }, []);
+  const load = useCallback(async ({ silent = false } = {}) => {
+    setLoading(true);
+    try {
+      setCredentials(await api("GET", "/api/credentials"));
+    } catch (e) {
+      setCredentials([]);
+      if (!silent) {
+        showToast(e.message, "error");
+      }
+    } finally {
+      setLoading(false);
+    }
+  }, [showToast]);
 
   useEffect(() => {
     api("GET", "/api/oauth/providers").then(setOauthProviders).catch(() => {});
   }, []);
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); }, [load]);
 
   const validateName = name => /^[a-zA-Z0-9_-]+$/.test(name);
 
@@ -124,7 +132,7 @@ export function Credentials({ showToast }) {
     try {
       await api("POST", "/api/credentials", { name: form.name, type: form.type, secret, note: form.note });
       setForm({ name: "", type: "generic", note: "", sub: blankSubFields("generic") });
-      load();
+      await load({ silent: true });
       showToast("Credential created");
     } catch (err) { showToast(err.message, "error"); }
   }
@@ -134,7 +142,7 @@ export function Credentials({ showToast }) {
       message: "Delete this credential? This cannot be undone.",
       confirmLabel: "Delete",
       fn: async () => {
-        try { await api("DELETE", `/api/credentials/${id}`); load(); showToast("Deleted"); }
+        try { await api("DELETE", `/api/credentials/${id}`); await load({ silent: true }); showToast("Deleted"); }
         catch (e) { showToast(e.message, "error"); }
       },
     });
@@ -150,7 +158,7 @@ export function Credentials({ showToast }) {
     try {
       await api("PUT", `/api/credentials/${editingId}`, editForm);
       setEditingId(null); setEditForm({});
-      load(); showToast("Credential updated");
+      await load({ silent: true }); showToast("Credential updated");
     } catch (ex) { showToast(ex.message, "error"); }
   }
 
@@ -297,7 +305,7 @@ export function Credentials({ showToast }) {
             </thead>
             <tbody>
               {credentials.map(c => (
-                <>
+                <Fragment key={c.id}>
                   <tr key={c.id}>
                     <td data-label="Name">
                       <code className="badge-credential" style={{ background: "#0f1117", color: "#a78bfa" }}>{c.name}</code>
@@ -368,7 +376,7 @@ export function Credentials({ showToast }) {
                       </td>
                     </tr>
                   )}
-                </>
+                </Fragment>
               ))}
             </tbody>
           </table>

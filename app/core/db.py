@@ -476,7 +476,6 @@ def list_schedules(workspace_id: int | None = None):
                 lr.duration_ms     AS last_run_duration_ms
             FROM schedules s
             LEFT JOIN graph_workflows g ON g.id = s.graph_id
-            {ws_filter}
             LEFT JOIN LATERAL (
                 SELECT
                     id,
@@ -492,6 +491,7 @@ def list_schedules(workspace_id: int | None = None):
                 ORDER  BY created_at DESC
                 LIMIT  1
             ) lr ON TRUE
+            {ws_filter}
             ORDER BY s.id
         """, {"wid": workspace_id} if workspace_id is not None else {})
         return [dict(r) for r in cur.fetchall()]
