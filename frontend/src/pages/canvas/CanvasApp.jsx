@@ -1091,7 +1091,9 @@ function CanvasApp() {
         .filter(r => r.workflow === currentGraph.name || String(r.graph_id) === String(currentGraph.id))
         .slice(0, 20);
       setInspectorRuns(graphRuns);
-    } catch { /* silent */ }
+    } catch {
+      setInspectorRuns([]);
+    }
   }
 
   async function loadInspectorRun(runId) {

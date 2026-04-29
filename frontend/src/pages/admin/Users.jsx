@@ -60,15 +60,22 @@ export function Users({ showToast }) {
   const [newPw,        setNewPw]        = useState("");
   const [resetting,    setResetting]    = useState(false);
   const [confirmState, setConfirmState] = useState(null);
+  const [loadError,    setLoadError]    = useState("");
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  const load = useCallback(async ({ silent = false } = {}) => {
+    if (!silent) setLoading(true);
+    setLoadError("");
     try {
       setUsers(await api("GET", "/api/users"));
     } catch (err) {
-      showToast(err.message, "error");
+      setUsers([]);
+      if (!silent) {
+        setLoadError(err.message || "Failed to load users");
+        showToast(err.message, "error");
+      }
+    } finally {
+      if (!silent) setLoading(false);
     }
-    setLoading(false);
   }, [showToast]);
 
   useEffect(() => { load(); }, [load]);
@@ -79,13 +86,21 @@ export function Users({ showToast }) {
     try {
       await api("POST", "/api/users", form);
       setForm({ username: "", email: "", password: "", role: "viewer" });
-      load(); showToast("User created");
-    } catch (err) { showToast(err.message, "error"); }
-    setCreating(false);
+      await load({ silent: true });
+      showToast("User created");
+    } catch (err) {
+      showToast(err.message, "error");
+    } finally {
+      setCreating(false);
+    }
   }
 
   async function changeRole(id, role) {
-    try { await api("PATCH", `/api/users/${id}/role`, { role }); load(); showToast("Role updated"); }
+    try {
+      await api("PATCH", `/api/users/${id}/role`, { role });
+      await load({ silent: true });
+      showToast("Role updated");
+    }
     catch (err) { showToast(err.message, "error"); }
   }
 
@@ -94,7 +109,11 @@ export function Users({ showToast }) {
       message: `Delete user "${username}"? This cannot be undone.`,
       confirmLabel: "Delete",
       fn: async () => {
-        try { await api("DELETE", `/api/users/${id}`); load(); showToast("User deleted"); }
+        try {
+          await api("DELETE", `/api/users/${id}`);
+          await load({ silent: true });
+          showToast("User deleted");
+        }
         catch (err) { showToast(err.message, "error"); }
       }
     });
@@ -106,8 +125,11 @@ export function Users({ showToast }) {
     try {
       await api("POST", `/api/users/${resetModal.id}/reset-password`, { new_password: newPw });
       setResetModal(null); setNewPw(""); showToast("Password reset");
-    } catch (err) { showToast(err.message, "error"); }
-    setResetting(false);
+    } catch (err) {
+      showToast(err.message, "error");
+    } finally {
+      setResetting(false);
+    }
   }
 
   return (
@@ -170,7 +192,7 @@ export function Users({ showToast }) {
       {/* ── Users table ── */}
       <div className="card">
         <div className="card-title">All Users</div>
-        {loading ? <div className="empty-state">Loading…</div> : users.length === 0 ? <div className="empty-state">No users found.</div> : (
+        {loading ? <div className="empty-state">Loading…</div> : loadError ? <div className="empty-state">{loadError}</div> : users.length === 0 ? <div className="empty-state">No users found.</div> : (
           <table>
             <thead>
               <tr><th>User</th><th>Email</th><th>Role</th><th>Joined</th>{isAdmin && <th></th>}</tr>

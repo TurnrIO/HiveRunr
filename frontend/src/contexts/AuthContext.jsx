@@ -23,8 +23,10 @@ export function AuthProvider({ children }) {
   const refreshUser = useCallback(async () => {
     try {
       const u = await api("GET", "/api/auth/me");
-      if (u) setCurrentUser(u);
-    } catch (_) {}
+      setCurrentUser(u || null);
+    } catch (_) {
+      setCurrentUser(null);
+    }
   }, []);
 
   useEffect(() => {

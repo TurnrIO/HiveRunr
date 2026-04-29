@@ -19,6 +19,8 @@ All notable changes are documented here, newest first.
 - **Command palette efficiency** — flow and credential searches are prefetched once per open and guarded against stale responses
 - **Safer edge cases** — Audit Log detail parsing, schedule payload validation, flow picker filtering, and the Users reset-password flow all handle malformed data and loading/error states more gracefully
 - **UI stability pass** — Dashboard, Logs, Metrics, Credentials, Settings, System, and Schedules now await their post-action refreshes more consistently, background polling is quieter on transient failures, and modal/focus handling is more robust across the admin UI and canvas
+- **Follow-up reliability sweep** — Workspaces, Flows, Templates, Scripts, Users, canvas History/Permissions modals, and the canvas run inspector now clear stale state more aggressively on failures, await mutation-triggered refreshes more consistently, and surface real error states instead of silently leaving outdated data visible
+- **Auth/session correctness** — `AuthContext.jsx` now clears `currentUser` when `/api/auth/me` fails so expired sessions do not leave privileged UI state hanging around until a manual reload
 
 ### Canvas & schedules fixes
 - **Quick-start templates now work** — the canvas welcome-state starter buttons now import and open real built-in templates directly instead of just reopening the flow browser, and their labels now match actual shipped templates

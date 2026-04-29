@@ -68,6 +68,8 @@ For CI/CD and service-to-service calls, owners can generate API tokens from **Se
 x-api-token: hr_your_token_here
 ```
 
+Recent reliability polish in the React admin/canvas UI also tightened session expiry handling: if the authenticated session disappears, the shared auth context now clears stale user state instead of leaving privileged UI visible until a full reload.
+
 ---
 
 ## Services
@@ -126,6 +128,8 @@ That keeps the same service topology but publishes Caddy on `http://localhost:99
 | **Settings** | API token management, maintenance tools |
 
 The admin UI is a React Router SPA (`/admin`). The canvas editor is a separate Vite entry point (`/canvas`). Both are built to `app/static/dist/` and served by FastAPI.
+
+Recent admin hardening work focused on post-action consistency and clearer failure states. Flow, template, workspace, script, and user-management screens now await their refreshes more consistently and show explicit load errors instead of silently leaving stale data onscreen.
 
 ---
 
