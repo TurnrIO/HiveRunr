@@ -1,6 +1,7 @@
-import { useState, useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api } from "../../api/client.js";
 import { ConfirmModal } from "../../components/ConfirmModal.jsx";
+import { useFocusTrap } from "../../components/useFocusTrap.js";
 import { isTemplate } from "./canvasHelpers.js";
 
 const CAT_COLOR = {
@@ -22,7 +23,7 @@ const CAT_COLOR = {
  *   onRename(g)
  *   onFromTemplate(created) — called after importing a built-in template
  */
-export function OpenModal({ graphs, onClose, onSelect, onNew, onDuplicate, onDelete, onRename, onFromTemplate }) {
+export function OpenModal({ graphs, onClose, onSelect, onNew, onDuplicate, onDelete, onRename, onFromTemplate, showToast }) {
   const [tab,              setTab]             = useState("flows");  // "flows" | "templates"
   const [name,             setName]            = useState("");
   const [search,           setSearch]          = useState("");
@@ -31,8 +32,11 @@ export function OpenModal({ graphs, onClose, onSelect, onNew, onDuplicate, onDel
   // Built-in template gallery
   const [builtinTemplates, setBuiltinTemplates] = useState([]);
   const [tmplLoading,      setTmplLoading]      = useState(false);
+  const [tmplError,        setTmplError]        = useState("");
   const [tmplCategory,     setTmplCategory]     = useState("All");
   const [tmplBusy,         setTmplBusy]         = useState(null);
+  const dialogRef = useRef(null);
+  useFocusTrap(dialogRef, onClose);
 
   const q          = search.toLowerCase();
   const allFiltered = q
@@ -45,11 +49,19 @@ export function OpenModal({ graphs, onClose, onSelect, onNew, onDuplicate, onDel
   useEffect(() => {
     if (tab !== "templates" || builtinTemplates.length > 0) return;
     setTmplLoading(true);
+    setTmplError("");
     api("GET", "/api/templates")
-      .then(setBuiltinTemplates)
-      .catch(() => {})
+      .then((templates) => {
+        setBuiltinTemplates(templates);
+      })
+      .catch((err) => {
+        const message = err.message || "Failed to load templates";
+        setBuiltinTemplates([]);
+        setTmplError(message);
+        showToast?.(message, "error");
+      })
       .finally(() => setTmplLoading(false));
-  }, [tab]);
+  }, [tab, builtinTemplates.length, showToast]);
 
   async function handleUseTemplate(slug) {
     setTmplBusy(slug);
@@ -60,9 +72,12 @@ export function OpenModal({ graphs, onClose, onSelect, onNew, onDuplicate, onDel
         description: tpl.description || "",
         graph_data:  tpl.graph_data,
       });
-      onFromTemplate(created);
-    } catch { /* parent handles errors */ }
-    setTmplBusy(null);
+      await onFromTemplate(created);
+    } catch (err) {
+      showToast?.(`Template import failed: ${err.message || "Unknown error"}`, "error");
+    } finally {
+      setTmplBusy(null);
+    }
   }
 
   const tmplCategories = ["All", ...Array.from(new Set(builtinTemplates.map(t => t.category).filter(Boolean)))];
@@ -142,7 +157,7 @@ export function OpenModal({ graphs, onClose, onSelect, onNew, onDuplicate, onDel
         aria-hidden="true"
         onClick={e => { if (e.target.className === "modal-overlay") onClose(); }}
       >
-        <div className="modal" role="dialog" aria-modal="true" aria-label="Flows" style={{ maxWidth: 580 }}>
+        <div className="modal" role="dialog" aria-modal="true" aria-label="Flows" style={{ maxWidth: 580 }} ref={dialogRef}>
           <h2>📂 Flows</h2>
 
           {/* Tab bar */}
@@ -250,7 +265,12 @@ export function OpenModal({ graphs, onClose, onSelect, onNew, onDuplicate, onDel
                   Loading templates…
                 </div>
               )}
-              {!tmplLoading && filteredTmpls.length === 0 && (
+              {!tmplLoading && tmplError && (
+                <div style={{ color: "#fca5a5", fontSize: 12, textAlign: "center", padding: "20px 0" }}>
+                  {tmplError}
+                </div>
+              )}
+              {!tmplLoading && !tmplError && filteredTmpls.length === 0 && (
                 <div style={{ color: "#64748b", fontSize: 12, textAlign: "center", padding: "20px 0" }}>
                   No templates in this category.
                 </div>

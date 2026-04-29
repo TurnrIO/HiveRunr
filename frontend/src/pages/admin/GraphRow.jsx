@@ -1,6 +1,7 @@
-import { useState, useEffect } from "react";
+import { useRef, useState } from "react";
 import { api } from "../../api/client.js";
 import { ConfirmModal } from "../../components/ConfirmModal.jsx";
+import { useFocusTrap } from "../../components/useFocusTrap.js";
 
 /**
  * GraphRow — one row in the Flows list.
@@ -42,6 +43,148 @@ function HealthBadge({ health }) {
   );
 }
 
+function VersionHistoryModal({ g, ro, versions, previewVersion, loadingPreview, onClose, onPreview, onRestore, setPreviewVersion }) {
+  const ref = useRef(null);
+  useFocusTrap(ref, onClose);
+
+  return (
+    <div className="modal-overlay" aria-hidden="true"
+      onClick={e => { if (e.target === e.currentTarget) { onClose(); setPreviewVersion(null); } }}>
+      <div className="modal" style={{ width: previewVersion ? 700 : 480, maxWidth: "95vw" }}
+        role="dialog" aria-modal="true" aria-label="Version History" ref={ref}>
+        <h2>📜 Version History — {g.name}</h2>
+        <div style={{ display: "grid", gridTemplateColumns: previewVersion ? "220px 1fr" : "1fr", gap: 16, marginTop: 12 }}>
+          <div>
+            {versions.length === 0 ? (
+              <div className="empty-state" style={{ padding: "20px 0" }}>
+                No versions yet — versions are saved automatically each time you save the flow.
+              </div>
+            ) : versions.map((v) => (
+              <div key={v.id} className="version-row"
+                style={{
+                  background: previewVersion?.id === v.id ? "#252840" : "transparent",
+                  borderLeft: `3px solid ${previewVersion?.id === v.id ? "#7c3aed" : "transparent"}`,
+                  borderRadius: 4, paddingLeft: 6,
+                }}>
+                <div className="version-info" style={{ flex: 1, cursor: "pointer" }} onClick={() => onPreview(v)}>
+                  <div className="version-num">v{v.version}</div>
+                  <div className="version-date">{new Date(v.saved_at).toLocaleString()}</div>
+                  {v.note && <div className="version-note">{v.note}</div>}
+                </div>
+                <div style={{ display: "flex", gap: 4 }}>
+                  <button className="btn btn-ghost btn-sm" disabled={loadingPreview === v.id} onClick={() => onPreview(v)}>
+                    {loadingPreview === v.id ? "…" : "👁"}
+                  </button>
+                  {!ro && <button className="btn btn-ghost btn-sm" onClick={() => onRestore(v.version)}>↩</button>}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {previewVersion && (
+            <div style={{ borderLeft: "1px solid #2a2d3e", paddingLeft: 16 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                <span style={{ fontWeight: 600, color: "#e2e8f0" }}>v{previewVersion.version} preview</span>
+                <div style={{ display: "flex", gap: 6 }}>
+                  {!ro && (
+                    <button className="btn btn-primary btn-sm" onClick={() => onRestore(previewVersion.version)}>
+                      ↩ Restore this version
+                    </button>
+                  )}
+                  <button className="btn btn-ghost btn-sm" onClick={() => setPreviewVersion(null)}>✕</button>
+                </div>
+              </div>
+              {previewVersion.note && (
+                <div style={{ fontSize: 12, color: "#94a3b8", marginBottom: 10, fontStyle: "italic" }}>{previewVersion.note}</div>
+              )}
+              <div style={{ fontSize: 11, color: "#64748b", marginBottom: 8 }}>
+                {(() => {
+                  const nodes = (previewVersion.graph_data?.nodes || []).filter(n => n.type !== "note");
+                  const edges = previewVersion.graph_data?.edges || [];
+                  return `${nodes.length} node${nodes.length !== 1 ? "s" : ""} · ${edges.length} edge${edges.length !== 1 ? "s" : ""}`;
+                })()}
+              </div>
+              <div style={{ fontSize: 11, color: "#64748b", marginBottom: 6, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em" }}>Nodes</div>
+              <div style={{ maxHeight: 180, overflowY: "auto", marginBottom: 10 }}>
+                {(previewVersion.graph_data?.nodes || []).filter(n => n.type !== "note").map((n) => (
+                  <div key={n.id} style={{ display: "flex", gap: 8, padding: "3px 0", borderBottom: "1px solid #1e2130", fontSize: 12 }}>
+                    <span style={{ color: "#94a3b8", fontFamily: "monospace", fontSize: 10, flex: "none", width: 90, overflow: "hidden", textOverflow: "ellipsis" }}>{n.type}</span>
+                    <span style={{ color: "#e2e8f0" }}>{n.data?.label || n.id}</span>
+                  </div>
+                ))}
+              </div>
+              <details>
+                <summary style={{ fontSize: 11, color: "#475569", cursor: "pointer", marginBottom: 4 }}>Raw JSON</summary>
+                <pre style={{ background: "#0a0c14", border: "1px solid #1e2235", borderRadius: 6, padding: "8px 10px", fontSize: 10, color: "#64748b", maxHeight: 160, overflowY: "auto", whiteSpace: "pre-wrap", margin: 0 }}>
+                  {JSON.stringify(previewVersion.graph_data, null, 2)}
+                </pre>
+              </details>
+            </div>
+          )}
+        </div>
+        <div className="modal-btns">
+          <button className="btn btn-ghost" onClick={() => { onClose(); setPreviewVersion(null); }}>Close</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AlertSettingsModal({ g, alertCfg, setAlertCfg, savingAlerts, onClose, onSave }) {
+  const ref = useRef(null);
+  useFocusTrap(ref, onClose);
+
+  return (
+    <div className="modal-overlay" aria-hidden="true"
+      onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="modal" style={{ maxWidth: 480 }} role="dialog" aria-modal="true" aria-label="Alert Settings" ref={ref}>
+        <h2>🔔 Alert Settings — {g.name}</h2>
+        <p style={{ fontSize: 13, color: "#64748b", marginBottom: 20 }}>
+          Notifications are sent when this flow fails. Enable "also on success" to alert on every run.
+        </p>
+        <div className="form-group">
+          <label>Email recipients</label>
+          <input type="text" placeholder="alice@example.com, bob@example.com"
+            value={alertCfg.alert_emails}
+            onChange={e => setAlertCfg(c => ({ ...c, alert_emails: e.target.value }))} />
+          <div style={{ fontSize: 11, color: "#475569", marginTop: 4 }}>Comma-separated. Requires AGENTMAIL_API_KEY in .env.</div>
+        </div>
+        <div className="form-group">
+          <label>Webhook URL</label>
+          <input type="url" placeholder="https://hooks.example.com/…"
+            value={alertCfg.alert_webhook}
+            onChange={e => setAlertCfg(c => ({ ...c, alert_webhook: e.target.value }))} />
+          <div style={{ fontSize: 11, color: "#475569", marginTop: 4 }}>POST JSON with event, flow, task_id, status, error.</div>
+        </div>
+        <div className="form-group" style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+          <input type="checkbox" id={`alert-success-${g.id}`} checked={alertCfg.alert_on_success}
+            onChange={e => setAlertCfg(c => ({ ...c, alert_on_success: e.target.checked }))}
+            style={{ width: 16, height: 16, accentColor: "#7c3aed", cursor: "pointer" }} />
+          <label htmlFor={`alert-success-${g.id}`} style={{ fontSize: 13, color: "#94a3b8", cursor: "pointer", margin: 0 }}>
+            Also alert on successful runs
+          </label>
+        </div>
+        <div className="form-group">
+          <label>Alert after N consecutive failures</label>
+          <input type="number" min="1" max="100"
+            value={alertCfg.alert_min_failures}
+            onChange={e => setAlertCfg(c => ({ ...c, alert_min_failures: e.target.value }))}
+            style={{ width: 80 }} />
+          <div style={{ fontSize: 11, color: "#475569", marginTop: 4 }}>
+            Default 1 — alert on every failure. Set to 3 to only alert after 3 failures in a row.
+          </div>
+        </div>
+        <div className="modal-btns">
+          <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
+          <button className="btn btn-primary" disabled={savingAlerts} onClick={onSave}>
+            {savingAlerts ? "Saving…" : "Save alerts"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function GraphRow({ g, running, onRun, onToggle, onDuplicate, onDelete, onRename, showToast, load, isExample, ro, health }) {
   const [open, setOpen]                     = useState(false);
   const [showVersions, setShowVersions]     = useState(false);
@@ -62,12 +205,12 @@ export function GraphRow({ g, running, onRun, onToggle, onDuplicate, onDelete, o
   async function addTag(tag) {
     const t = tag.trim().toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
     if (!t || tags.includes(t)) return;
-    try { await api("PUT", `/api/graphs/${g.id}`, { tags: [...tags, t] }); load(); }
+    try { await api("PUT", `/api/graphs/${g.id}`, { tags: [...tags, t] }); await load(); }
     catch (e) { showToast(e.message, "error"); }
   }
 
   async function removeTag(tag) {
-    try { await api("PUT", `/api/graphs/${g.id}`, { tags: tags.filter(t => t !== tag) }); load(); }
+    try { await api("PUT", `/api/graphs/${g.id}`, { tags: tags.filter(t => t !== tag) }); await load(); }
     catch (e) { showToast(e.message, "error"); }
   }
 
@@ -82,21 +225,17 @@ export function GraphRow({ g, running, onRun, onToggle, onDuplicate, onDelete, o
     }
   }
 
-  useEffect(() => {
-    if (!showVersions) return;
-    const h = e => { if (e.key === "Escape") setShowVersions(false); };
-    document.addEventListener("keydown", h);
-    return () => document.removeEventListener("keydown", h);
-  }, [showVersions]);
-
   async function openVersionHistory() {
     setLoadingVers(true);
     try {
       const v = await api("GET", `/api/graphs/${g.id}/versions`);
       setVersions(v);
       setShowVersions(true);
-    } catch (e) { showToast(e.message, "error"); }
-    setLoadingVers(false);
+    } catch (e) {
+      showToast(e.message, "error");
+    } finally {
+      setLoadingVers(false);
+    }
   }
 
   async function previewVer(v) {
@@ -104,8 +243,11 @@ export function GraphRow({ g, running, onRun, onToggle, onDuplicate, onDelete, o
     try {
       const full = await api("GET", `/api/graphs/${g.id}/versions/${v.id}`);
       setPreviewVersion(full);
-    } catch (e) { showToast(e.message, "error"); }
-    setLoadingPreview(false);
+    } catch (e) {
+      showToast(e.message, "error");
+    } finally {
+      setLoadingPreview(false);
+    }
   }
 
   async function openAlerts() {
@@ -132,8 +274,11 @@ export function GraphRow({ g, running, onRun, onToggle, onDuplicate, onDelete, o
       });
       showToast("Alert settings saved");
       setShowAlerts(false);
-    } catch (e) { showToast(e.message, "error"); }
-    setSavingAlerts(false);
+    } catch (e) {
+      showToast(e.message, "error");
+    } finally {
+      setSavingAlerts(false);
+    }
   }
 
   function restoreVersion(vid) {
@@ -144,7 +289,7 @@ export function GraphRow({ g, running, onRun, onToggle, onDuplicate, onDelete, o
         try {
           await api("POST", `/api/graphs/${g.id}/versions/${vid}/restore`);
           showToast("Version restored");
-          load();
+          await load();
           setShowVersions(false);
           setPreviewVersion(null);
         } catch (e) { showToast(e.message, "error"); }
@@ -195,7 +340,7 @@ export function GraphRow({ g, running, onRun, onToggle, onDuplicate, onDelete, o
         {open && (
           <div style={{ display: "flex", gap: 8, marginTop: 10, paddingTop: 10, borderTop: "1px solid #1e2235", flexWrap: "wrap" }}>
             <button className="btn btn-ghost" onClick={async () => {
-              try { await api("PUT", `/api/graphs/${g.id}`, { pinned: !g.pinned }); load(); showToast(g.pinned ? "Unpinned" : "Pinned"); }
+              try { await api("PUT", `/api/graphs/${g.id}`, { pinned: !g.pinned }); await load(); showToast(g.pinned ? "Unpinned" : "Pinned"); }
               catch (e) { showToast(e.message, "error"); }
             }}>{g.pinned ? "📌 Unpin" : "📌 Pin"}</button>
             <button className="btn btn-ghost" onClick={() => onRename(g)}>✏ Rename</button>
@@ -209,7 +354,7 @@ export function GraphRow({ g, running, onRun, onToggle, onDuplicate, onDelete, o
               <select
                 value={g.priority ?? 5}
                 onChange={async e => {
-                  try { await api("PUT", `/api/graphs/${g.id}`, { priority: Number(e.target.value) }); load(); showToast("Priority updated"); }
+                  try { await api("PUT", `/api/graphs/${g.id}`, { priority: Number(e.target.value) }); await load(); showToast("Priority updated"); }
                   catch (err) { showToast(err.message, "error"); }
                 }}
                 style={{ background: "#1a1d2e", color: "#e2e8f0", border: "1px solid #2a2d3e", borderRadius: 4, padding: "2px 6px", fontSize: 12 }}
@@ -285,136 +430,29 @@ export function GraphRow({ g, running, onRun, onToggle, onDuplicate, onDelete, o
 
       {/* ── Version History Modal ── */}
       {showVersions && (
-        <div className="modal-overlay" aria-hidden="true"
-          onClick={e => { if (e.target === e.currentTarget) { setShowVersions(false); setPreviewVersion(null); } }}>
-          <div className="modal" style={{ width: previewVersion ? 700 : 480, maxWidth: "95vw" }}
-            role="dialog" aria-modal="true" aria-label="Version History">
-            <h2>📜 Version History — {g.name}</h2>
-            <div style={{ display: "grid", gridTemplateColumns: previewVersion ? "220px 1fr" : "1fr", gap: 16, marginTop: 12 }}>
-              <div>
-                {versions.length === 0 ? (
-                  <div className="empty-state" style={{ padding: "20px 0" }}>
-                    No versions yet — versions are saved automatically each time you save the flow.
-                  </div>
-                ) : versions.map((v, idx) => (
-                  <div key={idx} className="version-row"
-                    style={{
-                      background: previewVersion?.id === v.id ? "#252840" : "transparent",
-                      borderLeft: `3px solid ${previewVersion?.id === v.id ? "#7c3aed" : "transparent"}`,
-                      borderRadius: 4, paddingLeft: 6,
-                    }}>
-                    <div className="version-info" style={{ flex: 1, cursor: "pointer" }} onClick={() => previewVer(v)}>
-                      <div className="version-num">v{v.version}</div>
-                      <div className="version-date">{new Date(v.saved_at).toLocaleString()}</div>
-                      {v.note && <div className="version-note">{v.note}</div>}
-                    </div>
-                    <div style={{ display: "flex", gap: 4 }}>
-                      <button className="btn btn-ghost btn-sm" disabled={loadingPreview === v.id} onClick={() => previewVer(v)}>
-                        {loadingPreview === v.id ? "…" : "👁"}
-                      </button>
-                      {!ro && <button className="btn btn-ghost btn-sm" onClick={() => restoreVersion(v.version)}>↩</button>}
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              {previewVersion && (
-                <div style={{ borderLeft: "1px solid #2a2d3e", paddingLeft: 16 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-                    <span style={{ fontWeight: 600, color: "#e2e8f0" }}>v{previewVersion.version} preview</span>
-                    <div style={{ display: "flex", gap: 6 }}>
-                      {!ro && (
-                        <button className="btn btn-primary btn-sm" onClick={() => restoreVersion(previewVersion.version)}>
-                          ↩ Restore this version
-                        </button>
-                      )}
-                      <button className="btn btn-ghost btn-sm" onClick={() => setPreviewVersion(null)}>✕</button>
-                    </div>
-                  </div>
-                  {previewVersion.note && (
-                    <div style={{ fontSize: 12, color: "#94a3b8", marginBottom: 10, fontStyle: "italic" }}>{previewVersion.note}</div>
-                  )}
-                  <div style={{ fontSize: 11, color: "#64748b", marginBottom: 8 }}>
-                    {(() => {
-                      const nodes = (previewVersion.graph_data?.nodes || []).filter(n => n.type !== "note");
-                      const edges = previewVersion.graph_data?.edges || [];
-                      return `${nodes.length} node${nodes.length !== 1 ? "s" : ""} · ${edges.length} edge${edges.length !== 1 ? "s" : ""}`;
-                    })()}
-                  </div>
-                  <div style={{ fontSize: 11, color: "#64748b", marginBottom: 6, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em" }}>Nodes</div>
-                  <div style={{ maxHeight: 180, overflowY: "auto", marginBottom: 10 }}>
-                    {(previewVersion.graph_data?.nodes || []).filter(n => n.type !== "note").map((n, i) => (
-                      <div key={i} style={{ display: "flex", gap: 8, padding: "3px 0", borderBottom: "1px solid #1e2130", fontSize: 12 }}>
-                        <span style={{ color: "#94a3b8", fontFamily: "monospace", fontSize: 10, flex: "none", width: 90, overflow: "hidden", textOverflow: "ellipsis" }}>{n.type}</span>
-                        <span style={{ color: "#e2e8f0" }}>{n.data?.label || n.id}</span>
-                      </div>
-                    ))}
-                  </div>
-                  <details>
-                    <summary style={{ fontSize: 11, color: "#475569", cursor: "pointer", marginBottom: 4 }}>Raw JSON</summary>
-                    <pre style={{ background: "#0a0c14", border: "1px solid #1e2235", borderRadius: 6, padding: "8px 10px", fontSize: 10, color: "#64748b", maxHeight: 160, overflowY: "auto", whiteSpace: "pre-wrap", margin: 0 }}>
-                      {JSON.stringify(previewVersion.graph_data, null, 2)}
-                    </pre>
-                  </details>
-                </div>
-              )}
-            </div>
-            <div className="modal-btns">
-              <button className="btn btn-ghost" onClick={() => { setShowVersions(false); setPreviewVersion(null); }}>Close</button>
-            </div>
-          </div>
-        </div>
+        <VersionHistoryModal
+          g={g}
+          ro={ro}
+          versions={versions}
+          previewVersion={previewVersion}
+          loadingPreview={loadingPreview}
+          onClose={() => setShowVersions(false)}
+          onPreview={previewVer}
+          onRestore={restoreVersion}
+          setPreviewVersion={setPreviewVersion}
+        />
       )}
 
       {/* ── Alert Settings Modal ── */}
       {showAlerts && (
-        <div className="modal-overlay" aria-hidden="true"
-          onClick={e => { if (e.target === e.currentTarget) setShowAlerts(false); }}>
-          <div className="modal" style={{ maxWidth: 480 }} role="dialog" aria-modal="true" aria-label="Alert Settings">
-            <h2>🔔 Alert Settings — {g.name}</h2>
-            <p style={{ fontSize: 13, color: "#64748b", marginBottom: 20 }}>
-              Notifications are sent when this flow fails. Enable "also on success" to alert on every run.
-            </p>
-            <div className="form-group">
-              <label>Email recipients</label>
-              <input type="text" placeholder="alice@example.com, bob@example.com"
-                value={alertCfg.alert_emails}
-                onChange={e => setAlertCfg(c => ({ ...c, alert_emails: e.target.value }))} />
-              <div style={{ fontSize: 11, color: "#475569", marginTop: 4 }}>Comma-separated. Requires AGENTMAIL_API_KEY in .env.</div>
-            </div>
-            <div className="form-group">
-              <label>Webhook URL</label>
-              <input type="url" placeholder="https://hooks.example.com/…"
-                value={alertCfg.alert_webhook}
-                onChange={e => setAlertCfg(c => ({ ...c, alert_webhook: e.target.value }))} />
-              <div style={{ fontSize: 11, color: "#475569", marginTop: 4 }}>POST JSON with event, flow, task_id, status, error.</div>
-            </div>
-            <div className="form-group" style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
-              <input type="checkbox" id={`alert-success-${g.id}`} checked={alertCfg.alert_on_success}
-                onChange={e => setAlertCfg(c => ({ ...c, alert_on_success: e.target.checked }))}
-                style={{ width: 16, height: 16, accentColor: "#7c3aed", cursor: "pointer" }} />
-              <label htmlFor={`alert-success-${g.id}`} style={{ fontSize: 13, color: "#94a3b8", cursor: "pointer", margin: 0 }}>
-                Also alert on successful runs
-              </label>
-            </div>
-            <div className="form-group">
-              <label>Alert after N consecutive failures</label>
-              <input type="number" min="1" max="100"
-                value={alertCfg.alert_min_failures}
-                onChange={e => setAlertCfg(c => ({ ...c, alert_min_failures: e.target.value }))}
-                style={{ width: 80 }} />
-              <div style={{ fontSize: 11, color: "#475569", marginTop: 4 }}>
-                Default 1 — alert on every failure. Set to 3 to only alert after 3 failures in a row.
-              </div>
-            </div>
-            <div className="modal-btns">
-              <button className="btn btn-ghost" onClick={() => setShowAlerts(false)}>Cancel</button>
-              <button className="btn btn-primary" disabled={savingAlerts} onClick={saveAlerts}>
-                {savingAlerts ? "Saving…" : "Save alerts"}
-              </button>
-            </div>
-          </div>
-        </div>
+        <AlertSettingsModal
+          g={g}
+          alertCfg={alertCfg}
+          setAlertCfg={setAlertCfg}
+          savingAlerts={savingAlerts}
+          onClose={() => setShowAlerts(false)}
+          onSave={saveAlerts}
+        />
       )}
 
       {confirmState && (

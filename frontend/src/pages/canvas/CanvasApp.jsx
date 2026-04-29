@@ -1529,6 +1529,7 @@ function CanvasApp() {
           onDelete={deleteGraph}
           onRename={renameGraph}
           onFromTemplate={onFromTemplate}
+          showToast={showToast}
         />
       )}
 
