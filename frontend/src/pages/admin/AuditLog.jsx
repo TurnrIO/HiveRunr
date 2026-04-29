@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { api } from "../../api/client.js";
 
 const ACTION_COLORS = {
@@ -63,7 +63,7 @@ export function AuditLog({ showToast }) {
   const [filterAction, setFilterAction] = useState("");
   const [offset,       setOffset]       = useState(0);
 
-  async function load(off = 0, actor = "", action = "") {
+  const load = useCallback(async (off = 0, actor = "", action = "") => {
     setLoading(true);
     try {
       const params = new URLSearchParams({ limit: PAGE, offset: off });
@@ -73,13 +73,14 @@ export function AuditLog({ showToast }) {
       setRows(data || []);
       setOffset(off);
     } catch (e) {
+      setRows([]);
       showToast("Failed to load audit log", "error");
     } finally {
       setLoading(false);
     }
-  }
+  }, [showToast]);
 
-  useEffect(() => { load(0, filterActor, filterAction); }, []);
+  useEffect(() => { load(0, filterActor, filterAction); }, [load]);
 
   function handleSearch(e) {
     e.preventDefault();

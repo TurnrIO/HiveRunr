@@ -38,7 +38,7 @@ export function ExtractSubflowModal({ isOpen, nodeCount, onConfirm, onClose }) {
   return (
     <div
       className="modal-overlay"
-      onClick={e => e.target === e.currentTarget && onClose()}
+      onClick={e => e.target === e.currentTarget && !busy && onClose()}
       aria-hidden="true"
     >
       <div
@@ -52,7 +52,7 @@ export function ExtractSubflowModal({ isOpen, nodeCount, onConfirm, onClose }) {
       >
         <div className="modal-header">
           <span style={{ fontSize: 16, fontWeight: 600 }}>⛓ Extract to Subflow</span>
-          <button className="modal-close" onClick={onClose}>✕</button>
+          <button className="modal-close" onClick={onClose} disabled={busy}>✕</button>
         </div>
 
         <div style={{ padding: "16px 20px" }}>

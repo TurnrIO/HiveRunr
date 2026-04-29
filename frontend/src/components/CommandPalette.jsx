@@ -50,6 +50,14 @@ function highlight(text, q) {
   );
 }
 
+function resultKey(item) {
+  if (item.type === "page") return `page:${item.path}`;
+  if (item.type === "flow") return `flow:${item.hash || item.label}`;
+  if (item.type === "run") return `run:${item.label}`;
+  if (item.type === "credential") return `credential:${item.label}`;
+  return `${item.type}:${item.label}`;
+}
+
 export function CommandPalette({ open, onClose, navigate }) {
   const [query, setQuery]       = useState("");
   const [results, setResults]   = useState([]);
@@ -244,7 +252,7 @@ export function CommandPalette({ open, onClose, navigate }) {
           )}
           {results.map((item, i) => (
             <div
-              key={i}
+              key={resultKey(item)}
               onClick={() => go(item)}
               style={{
                 display: "flex", alignItems: "center", gap: 10,

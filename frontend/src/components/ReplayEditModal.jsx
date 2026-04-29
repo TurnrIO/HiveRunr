@@ -12,8 +12,19 @@ import { useFocusTrap } from "./useFocusTrap.js";
  */
 export function ReplayEditModal({ runId, payload: initPayload, onClose, onSubmit }) {
   const [payload, setPayload] = useState(initPayload || "{}");
+  const [submitting, setSubmitting] = useState(false);
   const ref = useRef(null);
   useFocusTrap(ref, onClose);
+
+  async function handleSubmit() {
+    if (submitting) return;
+    setSubmitting(true);
+    try {
+      await onSubmit(runId, payload);
+    } finally {
+      setSubmitting(false);
+    }
+  }
 
   return (
     <div
@@ -83,14 +94,15 @@ export function ReplayEditModal({ runId, payload: initPayload, onClose, onSubmit
             justifyContent: "flex-end",
           }}
         >
-          <button className="btn btn-ghost" onClick={onClose}>
+          <button className="btn btn-ghost" onClick={onClose} disabled={submitting}>
             Cancel
           </button>
           <button
             className="btn btn-success"
-            onClick={() => onSubmit(runId, payload)}
+            onClick={handleSubmit}
+            disabled={submitting}
           >
-            ▶ Run with this payload
+            {submitting ? "Running…" : "▶ Run with this payload"}
           </button>
         </div>
       </div>

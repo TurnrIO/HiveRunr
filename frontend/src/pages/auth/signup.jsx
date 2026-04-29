@@ -28,9 +28,12 @@ function Signup() {
         setTimeout(() => { window.location.href = "/"; }, 800);
       } else {
         setError(data.detail || "Something went wrong. Please try again.");
-        setBusy(false);
       }
-    } catch { setError("Network error — please try again"); setBusy(false); }
+    } catch {
+      setError("Network error — please try again");
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (

@@ -10,7 +10,7 @@ function Login() {
 
   async function handleLogin(e) {
     e.preventDefault();
-    setError(""); setBusy(true);
+    setError(""); setSuccess(""); setBusy(true);
     const fd = new FormData(e.target);
     try {
       const res = await fetch("/api/auth/login", {
@@ -28,8 +28,11 @@ function Login() {
         const data = await res.json().catch(() => ({}));
         setError(data.detail || "Invalid username or password");
       }
-    } catch { setError("Network error — please try again"); }
-    setBusy(false);
+    } catch {
+      setError("Network error — please try again");
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function handleForgot(e) {
@@ -48,8 +51,11 @@ function Login() {
       } else {
         setError(data.detail || "Something went wrong. Please try again.");
       }
-    } catch { setError("Network error — please try again"); }
-    setBusy(false);
+    } catch {
+      setError("Network error — please try again");
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (

@@ -25,12 +25,15 @@ export const OAUTH_PROVIDER_META = {
 export function OAuthConnectModal({ provider, onClose }) {
   const meta = OAUTH_PROVIDER_META[provider] || {};
   const [name, setName] = useState(meta.defaultName || provider);
+  const [connecting, setConnecting] = useState(false);
   const ref = useRef(null);
   useFocusTrap(ref, onClose);
 
   function connect() {
-    if (!name.trim()) return;
-    window.location.href = `/api/oauth/${provider}/start?cred_name=${encodeURIComponent(name.trim())}`;
+    const trimmed = name.trim();
+    if (!trimmed || connecting) return;
+    setConnecting(true);
+    window.location.href = `/api/oauth/${provider}/start?cred_name=${encodeURIComponent(trimmed)}`;
   }
 
   return (
@@ -48,16 +51,19 @@ export function OAuthConnectModal({ provider, onClose }) {
             onChange={e => setName(e.target.value)}
             onKeyDown={e => { if (e.key === "Enter") connect(); }}
             placeholder={meta.defaultName}
+            disabled={connecting}
           />
           <div style={{ fontSize: 11, color: "#64748b", marginTop: 4 }}>Letters, numbers, hyphens, underscores only.</div>
         </div>
         <div style={{ fontSize: 11, color: "#475569", background: "#0f1117", border: "1px solid #1e2130", borderRadius: 6, padding: "8px 12px", marginBottom: 16 }}>
           You'll be redirected to {meta.label} to authorise HiveRunr. After approving, the token is saved as credential{" "}
-          <strong style={{ color: "#a78bfa" }}>"{name}"</strong> in your workspace.
+          <strong style={{ color: "#a78bfa" }}>"{name.trim() || meta.defaultName || provider}"</strong> in your workspace.
         </div>
         <div className="modal-btns">
-          <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
-          <button className="btn btn-primary" onClick={connect} disabled={!name.trim()}>Authorise →</button>
+          <button className="btn btn-ghost" onClick={onClose} disabled={connecting}>Cancel</button>
+          <button className="btn btn-primary" onClick={connect} disabled={!name.trim() || connecting}>
+            {connecting ? "Redirecting…" : "Authorise →"}
+          </button>
         </div>
       </div>
     </div>

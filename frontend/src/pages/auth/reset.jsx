@@ -11,7 +11,7 @@ function Reset() {
 
   async function handleSubmit(e) {
     e.preventDefault();
-    setError(""); setBusy(true);
+    setError(""); setSuccess(""); setBusy(true);
     const fd = new FormData(e.target);
     const pw1 = fd.get("pw1");
     const pw2 = fd.get("pw2");
@@ -31,8 +31,11 @@ function Reset() {
       } else {
         setError(data.detail || "Invalid or expired reset link.");
       }
-    } catch { setError("Network error — please try again"); }
-    setBusy(false);
+    } catch {
+      setError("Network error — please try again");
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (

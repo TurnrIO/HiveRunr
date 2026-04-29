@@ -13,14 +13,33 @@ function Invite() {
   const [busy, setBusy]         = useState(false);
 
   useEffect(() => {
-    if (!token) { setError("No invite token found in URL."); setView("error"); return; }
+    let cancelled = false;
+    if (!token) {
+      setInviteData(null);
+      setAccepted({ role: "" });
+      setError("No invite token found in URL.");
+      setView("error");
+      return;
+    }
+    setError("");
+    setView("loading");
+    setTitle("You've been invited");
+    setSubtitle("Loading invitation…");
     fetch(`/api/invite/accept?token=${encodeURIComponent(token)}`)
       .then(r => r.json().then(d => ({ ok: r.ok, d })))
       .then(({ ok, d }) => {
-        if (!ok) { setError(d.detail || "Invalid or expired invite link."); setView("error"); return; }
+        if (cancelled) return;
+        if (!ok) {
+          setInviteData(null);
+          setAccepted({ role: "" });
+          setError(d.detail || "Invalid or expired invite link.");
+          setView("error");
+          return;
+        }
         if (d.logged_in) {
           setTitle("Invitation accepted!");
           setSubtitle(`You now have ${d.role} access to "${d.graph_name}".`);
+          setInviteData(null);
           setAccepted({ role: d.role });
           setView("accepted");
           setTimeout(() => { window.location.href = "/canvas"; }, 2000);
@@ -29,11 +48,19 @@ function Invite() {
         if (d.needs_signup) {
           setTitle("Create your account");
           setSubtitle(null);
+          setAccepted({ role: "" });
           setInviteData({ email: d.email, token: d.token, role: d.role, graph_name: d.graph_name });
           setView("signup");
         }
       })
-      .catch(e => { setError("Failed to validate invite: " + e.message); setView("error"); });
+      .catch(e => {
+        if (cancelled) return;
+        setInviteData(null);
+        setAccepted({ role: "" });
+        setError("Failed to validate invite: " + e.message);
+        setView("error");
+      });
+    return () => { cancelled = true; };
   }, [token]);
 
   async function handleSignup(e) {
@@ -51,13 +78,20 @@ function Invite() {
         }),
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) { setError(data.detail || "Signup failed."); setBusy(false); return; }
+      if (!res.ok) {
+        setError(data.detail || "Signup failed.");
+        return;
+      }
       setTitle("Welcome aboard!");
       setSubtitle(`Account created. You now have ${data.role} access.`);
       setAccepted({ role: data.role });
       setView("accepted");
       setTimeout(() => { window.location.href = "/canvas"; }, 1500);
-    } catch (err) { setError(err.message); setBusy(false); }
+    } catch (err) {
+      setError(err.message || "Signup failed.");
+    } finally {
+      setBusy(false);
+    }
   }
 
   const subtitleNode = view === "signup" && inviteData ? (
