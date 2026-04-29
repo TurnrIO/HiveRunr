@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { api } from "../../api/client.js";
 
 const STATUS_ICON   = { ok: "✓", warning: "⚠", error: "✕" };
@@ -105,19 +105,24 @@ export function System({ showToast }) {
   const [data,      setData]      = useState(null);
   const [loading,   setLoading]   = useState(true);
   const [lastFetch, setLastFetch] = useState(null);
+  const [loadError, setLoadError] = useState("");
+  const hasDataRef = useRef(false);
 
   const load = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
+    if (!silent) setLoadError("");
     try {
       const d = await api("GET", "/api/system/status");
       setData(d);
+      hasDataRef.current = true;
       setLastFetch(new Date());
     } catch (e) {
       if (!silent) {
+        if (!hasDataRef.current) setLoadError(e.message || "Failed to load diagnostics");
         showToast("Failed to load diagnostics: " + e.message, "error");
       }
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, [showToast]);
 
@@ -156,6 +161,8 @@ export function System({ showToast }) {
 
       {loading && !data ? (
         <div className="empty-state">Running diagnostics…</div>
+      ) : !data && loadError ? (
+        <div className="empty-state">{loadError}</div>
       ) : (
         <div style={{ display: "grid", gap: 10 }}>
           {CHECKS.map(c => <Check key={c.id} id={c.id} title={c.title} check={data?.[c.id]} />)}

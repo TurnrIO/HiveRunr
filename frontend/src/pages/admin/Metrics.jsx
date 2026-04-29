@@ -199,11 +199,13 @@ export function Metrics({ showToast }) {
   const [daily,    setDaily]    = useState([]);
   const [flows,    setFlows]    = useState([]);
   const [loading,  setLoading]  = useState(true);
+  const [loadError, setLoadError] = useState("");
   const [days,     setDays]     = useState(30);
   const [tab,      setTab]      = useState("overview"); // "overview" | "flows"
 
   const load = useCallback(async (d) => {
     setLoading(true);
+    setLoadError("");
     try {
       const [m, dailyData, flowData] = await Promise.all([
         api("GET", "/api/metrics"),
@@ -214,6 +216,10 @@ export function Metrics({ showToast }) {
       setDaily(dailyData);
       setFlows(flowData);
     } catch (e) {
+      setSummary(null);
+      setDaily([]);
+      setFlows([]);
+      setLoadError(e.message || "Failed to load metrics");
       showToast(e.message, "error");
     } finally {
       setLoading(false);
@@ -270,8 +276,9 @@ export function Metrics({ showToast }) {
       </div>
 
       {loading && <div className="empty-state">Loading…</div>}
+      {!loading && loadError && <div className="empty-state">{loadError}</div>}
 
-      {!loading && summary && tab === "overview" && (
+      {!loading && !loadError && summary && tab === "overview" && (
         <>
           {/* ── Stat cards ── */}
           <div className="stat-cards">
@@ -389,7 +396,7 @@ export function Metrics({ showToast }) {
         </>
       )}
 
-      {!loading && tab === "flows" && (
+      {!loading && !loadError && tab === "flows" && (
         <>
           {flows.length === 0 ? (
             <div className="empty-state">No completed runs in the last {days} days.</div>
