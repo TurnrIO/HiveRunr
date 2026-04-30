@@ -172,8 +172,8 @@ export function Workspaces({ showToast }) {
       <h1 className="page-title">🏢 Workspaces</h1>
 
       {!ws && (
-        <div className="card" style={{ borderColor: "#f59e0b44", background: "#f59e0b08" }}>
-          <div style={{ color: "#f59e0b", fontSize: 13 }}>
+        <div className="card theme-panel-warn">
+          <div style={{ color: "var(--warn)", fontSize: 13 }}>
             ⚠ No active workspace found. Switch to one using the table below, or create a new one.
           </div>
         </div>
@@ -185,9 +185,9 @@ export function Workspaces({ showToast }) {
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
             <div>
               <div className="card-title" style={{ marginBottom: 2 }}>Current: {ws.name}</div>
-              <div style={{ fontSize: 12, color: "#475569" }}>
-                Slug: <code style={{ color: "#a78bfa" }}>{ws.slug}</code>
-                &nbsp;·&nbsp; Plan: <span style={{ color: "#94a3b8", textTransform: "capitalize" }}>{ws.plan || "free"}</span>
+              <div style={{ fontSize: 12, color: "var(--text-muted-2)" }}>
+                Slug: <code className="theme-inline-code">{ws.slug}</code>
+                &nbsp;·&nbsp; Plan: <span style={{ color: "var(--text-muted)", textTransform: "capitalize" }}>{ws.plan || "free"}</span>
               </div>
             </div>
             {isAdmin && !editingName && (
@@ -235,14 +235,14 @@ export function Workspaces({ showToast }) {
                           {(m.username || "?")[0].toUpperCase()}
                         </div>
                         <span style={{ fontWeight: 500 }}>{m.username}
-                          {isMe && <span style={{ fontSize: 10, color: "#475569", marginLeft: 5 }}>(you)</span>}
+                          {isMe && <span style={{ fontSize: 10, color: "var(--text-muted-2)", marginLeft: 5 }}>(you)</span>}
                         </span>
                       </div>
                     </td>
                     <td>
                       {isAdmin && !isWsOwner ? (
                         <select value={m.role} onChange={e => changeRole(m.user_id, e.target.value)}
-                          style={{ background: "#1e2130", border: "1px solid #2d3148", borderRadius: 6, color: "#e2e8f0", fontSize: 12, padding: "3px 6px" }}>
+                          style={{ fontSize: 12, padding: "3px 6px" }}>
                           <option value="viewer">viewer</option>
                           <option value="admin">admin</option>
                           <option value="owner">owner</option>
@@ -254,7 +254,7 @@ export function Workspaces({ showToast }) {
                     {isAdmin && (
                       <td style={{ textAlign: "right" }}>
                         {!isWsOwner && !isMe && (
-                          <button className="btn btn-ghost" style={{ fontSize: 11, padding: "2px 8px", color: "#f87171" }}
+                          <button className="btn btn-ghost" style={{ fontSize: 11, padding: "2px 8px", color: "var(--danger)" }}
                             onClick={() => removeMember(m.user_id, m.username)}>Remove</button>
                         )}
                       </td>
@@ -265,11 +265,11 @@ export function Workspaces({ showToast }) {
             </tbody>
           </table>
           {isAdmin && nonMemberUsers.length > 0 && (
-            <form onSubmit={addMember} style={{ display: "flex", gap: 10, alignItems: "flex-end", marginTop: 16, borderTop: "1px solid #2a2d3e", paddingTop: 14 }}>
+            <form onSubmit={addMember} style={{ display: "flex", gap: 10, alignItems: "flex-end", marginTop: 16, borderTop: "1px solid var(--border)", paddingTop: 14 }}>
               <div className="form-group" style={{ flex: 1, marginBottom: 0 }}>
                 <label>Add Member</label>
                 <select value={addUserId} onChange={e => setAddUserId(e.target.value)} required
-                  style={{ width: "100%", background: "#1e2130", border: "1px solid #2d3148", borderRadius: 6, color: "#e2e8f0", fontSize: 13, padding: "6px 8px" }}>
+                  style={{ width: "100%", fontSize: 13, padding: "6px 8px" }}>
                   <option value="">— select user —</option>
                   {nonMemberUsers.map(u => (
                     <option key={u.id} value={u.id}>{u.username} ({u.email})</option>
@@ -279,7 +279,7 @@ export function Workspaces({ showToast }) {
               <div className="form-group" style={{ width: 130, marginBottom: 0 }}>
                 <label>Role</label>
                 <select value={addRole} onChange={e => setAddRole(e.target.value)}
-                  style={{ width: "100%", background: "#1e2130", border: "1px solid #2d3148", borderRadius: 6, color: "#e2e8f0", fontSize: 13, padding: "6px 8px" }}>
+                  style={{ width: "100%", fontSize: 13, padding: "6px 8px" }}>
                   <option value="viewer">viewer</option>
                   <option value="admin">admin</option>
                   <option value="owner">owner</option>
@@ -324,21 +324,21 @@ export function Workspaces({ showToast }) {
                 {allWs.map(w => {
                   const isCurrent = ws && w.id === ws.id;
                   return (
-                    <tr key={w.id} style={isCurrent ? { background: "#1a1d2e" } : {}}>
+                    <tr key={w.id} style={isCurrent ? { background: "var(--bg-soft)" } : {}}>
                       <td>
                         <span style={{ fontWeight: 600 }}>{w.name}</span>
-                        {isCurrent && <span style={{ fontSize: 10, color: "#a78bfa", marginLeft: 6, background: "#7c3aed22", padding: "1px 6px", borderRadius: 4 }}>current</span>}
+                        {isCurrent && <span className="theme-chip theme-chip-accent" style={{ fontSize: 10, marginLeft: 6 }}>current</span>}
                       </td>
-                      <td><code style={{ fontSize: 11, color: "#64748b" }}>{w.slug}</code></td>
-                      <td style={{ fontSize: 12, color: "#94a3b8", textTransform: "capitalize" }}>{w.plan || "free"}</td>
-                      <td style={{ fontSize: 12, color: "#94a3b8" }}>{w.member_count ?? "—"}</td>
+                      <td><code style={{ fontSize: 11, color: "var(--text-muted-2)" }}>{w.slug}</code></td>
+                      <td style={{ fontSize: 12, color: "var(--text-muted)", textTransform: "capitalize" }}>{w.plan || "free"}</td>
+                      <td style={{ fontSize: 12, color: "var(--text-muted)" }}>{w.member_count ?? "—"}</td>
                       <td style={{ textAlign: "right" }}>
                         {!isCurrent && (
                           <button className="btn btn-ghost" style={{ fontSize: 11, padding: "2px 8px", marginRight: 4 }}
                             onClick={() => switchTo(w)}>Switch</button>
                         )}
                         {w.slug !== "default" && (
-                          <button className="btn btn-ghost" style={{ fontSize: 11, padding: "2px 8px", color: "#f87171" }}
+                          <button className="btn btn-ghost" style={{ fontSize: 11, padding: "2px 8px", color: "var(--danger)" }}
                             onClick={() => deleteWorkspace(w)}>Delete</button>
                         )}
                       </td>

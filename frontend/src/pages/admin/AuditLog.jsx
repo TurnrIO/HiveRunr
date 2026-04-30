@@ -48,12 +48,12 @@ function DetailBadge({ detail }) {
   const items = normalizeDetail(detail);
   if (!items) return null;
   if (typeof items !== "object" || Array.isArray(items)) {
-    return <span style={{ color: "#64748b", fontSize: 11 }}>{String(items)}</span>;
+    return <span style={{ color: "var(--text-muted-2)", fontSize: 11 }}>{String(items)}</span>;
   }
   const parts = Object.entries(items)
     .filter(([, v]) => v !== null && v !== undefined)
     .map(([k, v]) => `${k}: ${typeof v === "object" ? JSON.stringify(v) : v}`);
-  return <span style={{ color: "#64748b", fontSize: 11 }}>{parts.join("  •  ")}</span>;
+  return <span style={{ color: "var(--text-muted-2)", fontSize: 11 }}>{parts.join("  •  ")}</span>;
 }
 
 export function AuditLog({ showToast }) {
@@ -108,7 +108,7 @@ export function AuditLog({ showToast }) {
           style={{ width: 180, fontSize: 13 }}
         />
         <select value={filterAction} onChange={e => setFilterAction(e.target.value)}
-          style={{ width: 180, fontSize: 13, background: "#0f1117", color: "#e2e8f0", border: "1px solid #2a2d3e", borderRadius: 6, padding: "6px 10px" }}>
+          style={{ width: 180, fontSize: 13 }}>
           <option value="">All actions</option>
           {ACTION_GROUPS.map(([prefix, label]) => (
             <optgroup key={prefix} label={label}>
@@ -132,46 +132,46 @@ export function AuditLog({ showToast }) {
       <div className="card" style={{ padding: 0, overflow: "hidden" }}>
         <table className="mobile-cards" style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
           <thead>
-            <tr style={{ background: "#0f1117", borderBottom: "1px solid #1e2130" }}>
-              <th style={{ padding: "10px 14px", textAlign: "left", color: "#64748b", fontWeight: 500, width: 160 }}>Time</th>
-              <th style={{ padding: "10px 14px", textAlign: "left", color: "#64748b", fontWeight: 500, width: 120 }}>Actor</th>
-              <th style={{ padding: "10px 14px", textAlign: "left", color: "#64748b", fontWeight: 500, width: 180 }}>Action</th>
-              <th style={{ padding: "10px 14px", textAlign: "left", color: "#64748b", fontWeight: 500, width: 80 }}>Target</th>
-              <th style={{ padding: "10px 14px", textAlign: "left", color: "#64748b", fontWeight: 500 }}>Detail</th>
-              <th style={{ padding: "10px 14px", textAlign: "left", color: "#64748b", fontWeight: 500, width: 110 }}>IP</th>
+            <tr style={{ background: "var(--bg-soft)", borderBottom: "1px solid var(--border)" }}>
+              <th style={{ padding: "10px 14px", textAlign: "left", color: "var(--text-muted-2)", fontWeight: 500, width: 160 }}>Time</th>
+              <th style={{ padding: "10px 14px", textAlign: "left", color: "var(--text-muted-2)", fontWeight: 500, width: 120 }}>Actor</th>
+              <th style={{ padding: "10px 14px", textAlign: "left", color: "var(--text-muted-2)", fontWeight: 500, width: 180 }}>Action</th>
+              <th style={{ padding: "10px 14px", textAlign: "left", color: "var(--text-muted-2)", fontWeight: 500, width: 80 }}>Target</th>
+              <th style={{ padding: "10px 14px", textAlign: "left", color: "var(--text-muted-2)", fontWeight: 500 }}>Detail</th>
+              <th style={{ padding: "10px 14px", textAlign: "left", color: "var(--text-muted-2)", fontWeight: 500, width: 110 }}>IP</th>
             </tr>
           </thead>
           <tbody>
             {rows.length === 0 && (
               <tr>
-                <td colSpan={6} style={{ padding: 24, textAlign: "center", color: "#475569" }}>
+                <td colSpan={6} style={{ padding: 24, textAlign: "center", color: "var(--text-muted-2)" }}>
                   {loading ? "Loading…" : "No audit log entries found."}
                 </td>
               </tr>
             )}
-            {rows.map(r => (
-              <tr key={r.id} style={{ borderBottom: "1px solid #1e2130" }}
-                onMouseEnter={e => e.currentTarget.style.background = "#0f1117"}
+            {rows.map((r) => (
+              <tr key={r.id} style={{ borderBottom: "1px solid var(--border)" }}
+                onMouseEnter={e => e.currentTarget.style.background = "var(--bg-soft)"}
                 onMouseLeave={e => e.currentTarget.style.background = ""}>
-                <td data-label="Time"   style={{ padding: "8px 14px", color: "#94a3b8", whiteSpace: "nowrap" }}>{fmtTime(r.created_at)}</td>
-                <td data-label="Actor"  style={{ padding: "8px 14px", color: "#e2e8f0", fontFamily: "monospace" }}>{r.actor}</td>
+                <td data-label="Time"   style={{ padding: "8px 14px", color: "var(--text-muted)", whiteSpace: "nowrap" }}>{fmtTime(r.created_at)}</td>
+                <td data-label="Actor"  style={{ padding: "8px 14px", color: "var(--text)", fontFamily: "monospace" }}>{r.actor}</td>
                 <td data-label="Action" style={{ padding: "8px 14px" }}>
                   <span style={{
                     display: "inline-block", padding: "2px 8px", borderRadius: 4, fontSize: 11,
                     fontFamily: "monospace", fontWeight: 600, letterSpacing: "0.3px",
-                    background: (ACTION_COLORS[r.action] || "#475569") + "22",
+                    background: `color-mix(in srgb, ${ACTION_COLORS[r.action] || "var(--bg-soft)"} 12%, transparent)`,
                     color: ACTION_COLORS[r.action] || "#94a3b8",
-                    border: "1px solid " + (ACTION_COLORS[r.action] || "#475569") + "44",
+                    border: `1px solid color-mix(in srgb, ${ACTION_COLORS[r.action] || "var(--border)"} 26%, transparent)`,
                   }}>{r.action}</span>
                 </td>
-                <td data-label="Target" style={{ padding: "8px 14px", color: "#64748b", fontSize: 12 }}>
+                <td data-label="Target" style={{ padding: "8px 14px", color: "var(--text-muted-2)", fontSize: 12 }}>
                   {r.target_type && <span>{r.target_type}</span>}
-                  {r.target_id && <span style={{ color: "#475569" }}> #{r.target_id}</span>}
+                  {r.target_id && <span style={{ color: "var(--text-muted-3)" }}> #{r.target_id}</span>}
                 </td>
                 <td data-label="Detail" style={{ padding: "8px 14px", maxWidth: 320, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                   <DetailBadge detail={r.detail} />
                 </td>
-                <td data-label="IP" style={{ padding: "8px 14px", color: "#475569", fontFamily: "monospace", fontSize: 11 }}>{r.ip || "—"}</td>
+                <td data-label="IP" style={{ padding: "8px 14px", color: "var(--text-muted-3)", fontFamily: "monospace", fontSize: 11 }}>{r.ip || "—"}</td>
               </tr>
             ))}
           </tbody>
@@ -182,7 +182,7 @@ export function AuditLog({ showToast }) {
       <div style={{ display: "flex", gap: 8, marginTop: 12, alignItems: "center" }}>
         <button className="btn btn-ghost btn-sm" disabled={offset === 0 || loading}
           onClick={() => load(Math.max(0, offset - PAGE), filterActor, filterAction)}>← Prev</button>
-        <span style={{ fontSize: 12, color: "#64748b" }}>
+        <span style={{ fontSize: 12, color: "var(--text-muted-2)" }}>
           Showing {offset + 1}–{offset + rows.length}
         </span>
         <button className="btn btn-ghost btn-sm" disabled={rows.length < PAGE || loading}

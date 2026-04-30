@@ -43,18 +43,18 @@ export function TimezoneSelect({ value, onChange }) {
       {open && (
         <div style={{
           position: "absolute", top: "calc(100% + 4px)", left: 0, right: 0,
-          background: "#1a1d2e", border: "1px solid #7c3aed", borderRadius: 8,
+          background: "var(--bg-elev)", border: "1px solid var(--accent)", borderRadius: 8,
           zIndex: 999, maxHeight: 220, overflowY: "auto", boxShadow: "0 8px 24px rgba(0,0,0,.5)",
         }}>
           {filtered.length === 0 && (
-            <div style={{ padding: "10px 12px", fontSize: 12, color: "#475569" }}>No matches</div>
+            <div style={{ padding: "10px 12px", fontSize: 12, color: "var(--text-muted-2)" }}>No matches</div>
           )}
           {filtered.map(tz => (
             <div key={tz}
               onMouseDown={() => { onChange(tz); setSearch(""); setOpen(false); }}
-              style={{ padding: "7px 12px", cursor: "pointer", fontSize: 12, background: tz === value ? "#2a2d3e" : "", color: tz === value ? "#e2e8f0" : "#94a3b8" }}
-              onMouseEnter={e => e.currentTarget.style.background = "#252840"}
-              onMouseLeave={e => e.currentTarget.style.background = tz === value ? "#2a2d3e" : ""}>
+              style={{ padding: "7px 12px", cursor: "pointer", fontSize: 12, background: tz === value ? "var(--bg-hover)" : "", color: tz === value ? "var(--text)" : "var(--text-muted)" }}
+              onMouseEnter={e => e.currentTarget.style.background = "var(--bg-hover)"}
+              onMouseLeave={e => e.currentTarget.style.background = tz === value ? "var(--bg-hover)" : ""}>
               {tz}
             </div>
           ))}

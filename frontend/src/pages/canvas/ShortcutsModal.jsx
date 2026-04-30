@@ -32,9 +32,9 @@ const CANVAS_SHORTCUTS = [
 function KBD({ children }) {
   return (
     <kbd style={{
-      background: "#0f1117", border: "1px solid #374151", borderRadius: 5,
-      padding: "2px 7px", fontSize: 10, color: "#a78bfa", fontFamily: "monospace",
-      whiteSpace: "nowrap", boxShadow: "0 1px 0 #374151", display: "inline-block",
+      background: "var(--kbd-bg)", border: "1px solid var(--kbd-border)", borderRadius: 5,
+      padding: "2px 7px", fontSize: 10, color: "var(--kbd-text)", fontFamily: "monospace",
+      whiteSpace: "nowrap", boxShadow: "0 1px 0 var(--kbd-border)", display: "inline-block",
     }}>
       {children}
     </kbd>
@@ -65,7 +65,7 @@ export function ShortcutsModal({ onClose }) {
         aria-label="Keyboard shortcuts"
       >
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
-          <span style={{ fontWeight: 700, fontSize: 14, color: "#e2e8f0" }}>⌨️ Keyboard Shortcuts</span>
+          <span style={{ fontWeight: 700, fontSize: 14, color: "var(--text)" }}>⌨️ Keyboard Shortcuts</span>
           <button className="btn btn-ghost btn-sm" onClick={onClose} aria-label="Close">✕</button>
         </div>
 
@@ -73,9 +73,9 @@ export function ShortcutsModal({ onClose }) {
           row.section
             ? (
               <div key={i} style={{
-                fontSize: 10, color: "#6366f1", fontWeight: 700, textTransform: "uppercase",
+                fontSize: 10, color: "var(--accent-2)", fontWeight: 700, textTransform: "uppercase",
                 letterSpacing: ".06em", margin: i === 0 ? "0 0 8px" : "14px 0 8px",
-                paddingBottom: 5, borderBottom: "1px solid #1e2235",
+                paddingBottom: 5, borderBottom: "1px solid var(--border)",
               }}>
                 {row.section}
               </div>
@@ -83,16 +83,16 @@ export function ShortcutsModal({ onClose }) {
             : (
               <div key={i} style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 7 }}>
                 <KBD>{row.key}</KBD>
-                <span style={{ color: "#94a3b8", fontSize: 12, flex: 1 }}>{row.desc}</span>
+                <span style={{ color: "var(--text-muted)", fontSize: 12, flex: 1 }}>{row.desc}</span>
               </div>
             )
         )}
 
         <div style={{
-          marginTop: 16, paddingTop: 12, borderTop: "1px solid #2a2d3e",
-          fontSize: 11, color: "#475569", textAlign: "center",
+          marginTop: 16, paddingTop: 12, borderTop: "1px solid var(--border)",
+          fontSize: 11, color: "var(--text-muted-3)", textAlign: "center",
         }}>
-          Press <KBD>?</KBD> or use <strong style={{ color: "#64748b" }}>⋯ → Keyboard shortcuts</strong> to reopen
+          Press <KBD>?</KBD> or use <strong style={{ color: "var(--text-muted-2)" }}>⋯ → Keyboard shortcuts</strong> to reopen
         </div>
       </div>
     </div>

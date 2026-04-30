@@ -11,8 +11,8 @@ function WebhookUrlPanel({ graph, nodeConfig }) {
   if (!graph) {
     return (
       <div style={{
-        background: "#0f1117", border: "1px solid #2a2d3e", borderRadius: 6,
-        padding: "10px 12px", fontSize: 11, color: "#64748b", marginTop: 8,
+        background: "var(--bg-soft)", border: "1px solid var(--border)", borderRadius: 6,
+        padding: "10px 12px", fontSize: 11, color: "var(--text-muted-2)", marginTop: 8,
       }}>
         🔗 Save this flow first to get its webhook URL.
       </div>
@@ -34,14 +34,14 @@ function WebhookUrlPanel({ graph, nodeConfig }) {
 
   return (
     <div style={{
-      background: "#0f1117", border: "1px solid #2a2d3e", borderRadius: 6,
-      padding: "10px 12px", fontSize: 11, color: "#94a3b8", marginTop: 8,
+      background: "var(--bg-soft)", border: "1px solid var(--border)", borderRadius: 6,
+      padding: "10px 12px", fontSize: 11, color: "var(--text-muted)", marginTop: 8,
     }}>
-      <div style={{ fontWeight: 700, color: "#38bdf8", marginBottom: 6, fontSize: 11 }}>🔗 Webhook URL</div>
+      <div style={{ fontWeight: 700, color: "var(--info)", marginBottom: 6, fontSize: 11 }}>🔗 Webhook URL</div>
       <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
         <code style={{
-          flex: 1, background: "#12151f", border: "1px solid #374151", borderRadius: 4,
-          padding: "5px 8px", fontSize: 10, color: "#a78bfa", wordBreak: "break-all", lineHeight: 1.5,
+          flex: 1, background: "var(--bg-elev-2)", border: "1px solid var(--border-strong)", borderRadius: 4,
+          padding: "5px 8px", fontSize: 10, color: "var(--accent-2)", wordBreak: "break-all", lineHeight: 1.5,
         }}>
           {url}
         </code>
@@ -49,19 +49,19 @@ function WebhookUrlPanel({ graph, nodeConfig }) {
           onClick={copy}
           style={{
             flexShrink: 0,
-            background: copied ? "#14532d" : "#1e2235",
-            border: `1px solid ${copied ? "#22c55e" : "#374151"}`,
+            background: copied ? "var(--success-soft)" : "var(--bg-elev-2)",
+            border: `1px solid ${copied ? "var(--success-border)" : "var(--border-strong)"}`,
             borderRadius: 5, padding: "5px 10px",
-            color: copied ? "#4ade80" : "#94a3b8",
+            color: copied ? "var(--success)" : "var(--text-muted)",
             fontSize: 10, cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap",
           }}
         >
           {copied ? "✓ Copied" : "📋 Copy"}
         </button>
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: "3px 10px", color: "#64748b", fontSize: 10 }}>
-        <span>Method</span><code style={{ color: "#94a3b8" }}>POST</code>
-        <span>Body</span><code style={{ color: "#94a3b8" }}>application/json</code>
+      <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: "3px 10px", color: "var(--text-muted-2)", fontSize: 10 }}>
+        <span>Method</span><code style={{ color: "var(--text-muted)" }}>POST</code>
+        <span>Body</span><code style={{ color: "var(--text-muted)" }}>application/json</code>
         {hasSecret ? (
           <>
             <span>Auth</span>
@@ -70,13 +70,13 @@ function WebhookUrlPanel({ graph, nodeConfig }) {
         ) : (
           <>
             <span>Auth</span>
-            <span style={{ color: "#475569" }}>None (open — consider adding a secret)</span>
+            <span style={{ color: "var(--text-muted-3)" }}>None (open — consider adding a secret)</span>
           </>
         )}
       </div>
-      <div style={{ marginTop: 8, fontSize: 10, color: "#374151", lineHeight: 1.5 }}>
+      <div style={{ marginTop: 8, fontSize: 10, color: "var(--text-muted-3)", lineHeight: 1.5 }}>
         The payload body becomes the node's output. Use{" "}
-        <code style={{ color: "#a78bfa" }}>{"{{trigger.field}}"}</code> in downstream nodes.
+        <code style={{ color: "var(--accent-2)" }}>{"{{trigger.field}}"}</code> in downstream nodes.
       </div>
     </div>
   );
@@ -84,7 +84,7 @@ function WebhookUrlPanel({ graph, nodeConfig }) {
 
 // ── Node type hint panels ──────────────────────────────────────────────────────
 function NodeHints({ type, currentGraph, nodeConfig }) {
-  const hintBox = { background: "#0f1117", border: "1px solid #2a2d3e", borderRadius: 6, padding: "8px 10px", fontSize: 10, color: "#94a3b8", marginTop: 6 };
+  const hintBox = { background: "var(--bg-soft)", border: "1px solid var(--border)", borderRadius: 6, padding: "8px 10px", fontSize: 10, color: "var(--text-muted)", marginTop: 6 };
   const grid2   = { display: "grid", gridTemplateColumns: "auto 1fr", gap: "0 10px" };
 
   if (type === "action.condition") return (
@@ -460,11 +460,11 @@ export function NodeEditorModal({
             <span className={`run-output-status ${statusCls}`} style={{ fontSize: 10, flexShrink: 0 }}>{statusLabel}</span>
           )}
           {runDurationMs !== undefined && (
-            <span style={{ fontSize: 10, color: "#64748b", flexShrink: 0 }}>{runDurationMs}ms</span>
+            <span style={{ fontSize: 10, color: "var(--text-muted-2)", flexShrink: 0 }}>{runDurationMs}ms</span>
           )}
           {isPinned && (
             <span title="Output is pinned — downstream test nodes will use this as input"
-              style={{ fontSize: 11, color: "#fbbf24", flexShrink: 0, cursor: "default" }}>
+              style={{ fontSize: 11, color: "var(--warn)", flexShrink: 0, cursor: "default" }}>
               📌 Pinned
             </span>
           )}
@@ -500,7 +500,7 @@ export function NodeEditorModal({
             {/* Node ID badge */}
             <div className="node-id-badge" onClick={copyId} title="Click to copy" style={{ marginBottom: 12 }}>
               <div>
-                <div style={{ fontSize: 10, color: "#64748b", marginBottom: 2 }}>NODE ID (for templates)</div>
+                <div style={{ fontSize: 10, color: "var(--text-muted-2)", marginBottom: 2 }}>NODE ID (for templates)</div>
                 <code>{node.id}</code>
               </div>
               <span className="copy-hint">📋 copy</span>
@@ -591,7 +591,7 @@ export function NodeEditorModal({
                 <div className="section-divider">Retry Policy</div>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
                   <div className="field-group" style={{ marginBottom: 0 }}>
-                    <label style={{ fontSize: 11, color: "#94a3b8", fontWeight: 500, marginBottom: 4, display: "block" }}>
+                    <label style={{ fontSize: 11, color: "var(--text-muted)", fontWeight: 500, marginBottom: 4, display: "block" }}>
                       Max retries
                     </label>
                     <input
@@ -602,7 +602,7 @@ export function NodeEditorModal({
                     />
                   </div>
                   <div className="field-group" style={{ marginBottom: 0 }}>
-                    <label style={{ fontSize: 11, color: "#94a3b8", fontWeight: 500, marginBottom: 4, display: "block" }}>
+                    <label style={{ fontSize: 11, color: "var(--text-muted)", fontWeight: 500, marginBottom: 4, display: "block" }}>
                       Retry delay (sec)
                     </label>
                     <input
@@ -614,7 +614,7 @@ export function NodeEditorModal({
                   </div>
                 </div>
                 <div className="field-group" style={{ marginTop: 10 }}>
-                  <label style={{ fontSize: 11, color: "#94a3b8", fontWeight: 500, marginBottom: 4, display: "block" }}>
+                  <label style={{ fontSize: 11, color: "var(--text-muted)", fontWeight: 500, marginBottom: 4, display: "block" }}>
                     On failure
                   </label>
                   <select className="field-input" value={failMode} onChange={e => updateFailMode(e.target.value)}>
@@ -622,7 +622,7 @@ export function NodeEditorModal({
                     <option value="continue">continue — store error, keep going</option>
                   </select>
                   {failMode === "continue" && (
-                    <div style={{ fontSize: 10, color: "#f59e0b", marginTop: 4 }}>
+                    <div style={{ fontSize: 10, color: "var(--warn)", marginTop: 4 }}>
                       ⚠ Downstream nodes receive {"{ __error, __node, __type }"} as input.
                     </div>
                   )}
@@ -636,8 +636,8 @@ export function NodeEditorModal({
                 <button
                   className="btn btn-sm"
                   style={{
-                    width: "100%", background: "#1e3a5f", color: "#93c5fd",
-                    border: "1px solid #2563eb", borderRadius: 6, padding: "6px 0",
+                    width: "100%", background: "var(--info-soft)", color: "var(--info)",
+                    border: "1px solid var(--info-border)", borderRadius: 6, padding: "6px 0",
                     fontWeight: 600, cursor: "pointer",
                   }}
                   onClick={() => { setTestOpen(o => !o); setTestError(null); }}
@@ -648,9 +648,9 @@ export function NodeEditorModal({
                 {testOpen && (
                   <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 6 }}>
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                      <label style={{ fontSize: 11, color: "#94a3b8", fontWeight: 500 }}>Input JSON</label>
+                      <label style={{ fontSize: 11, color: "var(--text-muted)", fontWeight: 500 }}>Input JSON</label>
                       {upstreamPinned && (
-                        <span style={{ fontSize: 10, color: "#fbbf24" }}>
+                        <span style={{ fontSize: 10, color: "var(--warn)" }}>
                           📌 from {upstreamLabel}
                           <button
                             onClick={() => {
@@ -658,7 +658,7 @@ export function NodeEditorModal({
                               if (p) setTestInput(JSON.stringify(p, null, 2));
                             }}
                             style={{
-                              marginLeft: 4, fontSize: 10, color: "#fbbf24",
+                              marginLeft: 4, fontSize: 10, color: "var(--warn)",
                               background: "none", border: "none", cursor: "pointer",
                               padding: 0, textDecoration: "underline",
                             }}
@@ -672,8 +672,8 @@ export function NodeEditorModal({
                       rows={4}
                       spellCheck={false}
                       style={{
-                        width: "100%", background: "#0f1117", color: "#e2e8f0",
-                        border: "1px solid #334155", borderRadius: 4, padding: "6px 8px",
+                        width: "100%", background: "var(--bg-soft)", color: "var(--text)",
+                        border: "1px solid var(--border-strong)", borderRadius: 4, padding: "6px 8px",
                         fontFamily: "monospace", fontSize: 12, resize: "vertical", boxSizing: "border-box",
                       }}
                     />
@@ -683,8 +683,8 @@ export function NodeEditorModal({
                         className="btn btn-sm"
                         disabled={testLoading}
                         style={{
-                          flex: 1, background: "#064e3b", color: "#6ee7b7",
-                          border: "1px solid #059669", borderRadius: 6, padding: "5px 0",
+                          flex: 1, background: "var(--success-soft)", color: "var(--success)",
+                          border: "1px solid var(--success-border)", borderRadius: 6, padding: "5px 0",
                           fontWeight: 600, cursor: testLoading ? "not-allowed" : "pointer",
                           opacity: testLoading ? 0.7 : 1,
                         }}
@@ -705,9 +705,9 @@ export function NodeEditorModal({
                           className="btn btn-sm"
                           title={isPinned ? "Unpin output" : "Pin output — downstream nodes will use this as their test input"}
                           style={{
-                            background: isPinned ? "#78350f" : "#1c1917",
-                            color:      isPinned ? "#fbbf24" : "#a8a29e",
-                            border:     `1px solid ${isPinned ? "#d97706" : "#44403c"}`,
+                            background: isPinned ? "var(--warn-soft)" : "var(--bg-elev-2)",
+                            color:      isPinned ? "var(--warn)" : "var(--text-muted-2)",
+                            border:     `1px solid ${isPinned ? "var(--warn-border)" : "var(--border-strong)"}`,
                             borderRadius: 6, padding: "5px 10px", cursor: "pointer", fontSize: 14,
                           }}
                           onClick={() => onPinOutput(node.id, isPinned ? null : runOutput)}

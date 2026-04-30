@@ -79,12 +79,12 @@ function Btn({ title, children, onClick }) {
       onClick={onClick}
       style={{
         background: "none", border: "none", cursor: "pointer",
-        color: "#94a3b8", fontSize: 14, padding: "4px 7px", borderRadius: 5,
+        color: "var(--text-muted)", fontSize: 14, padding: "4px 7px", borderRadius: 5,
         lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center",
         transition: "background .12s, color .12s",
       }}
-      onMouseEnter={e => { e.currentTarget.style.background = "#2a2d3e"; e.currentTarget.style.color = "#e2e8f0"; }}
-      onMouseLeave={e => { e.currentTarget.style.background = "none";    e.currentTarget.style.color = "#94a3b8"; }}
+      onMouseEnter={e => { e.currentTarget.style.background = "var(--bg-hover)"; e.currentTarget.style.color = "var(--text)"; }}
+      onMouseLeave={e => { e.currentTarget.style.background = "none";    e.currentTarget.style.color = "var(--text-muted)"; }}
     >
       {children}
     </button>
@@ -92,7 +92,7 @@ function Btn({ title, children, onClick }) {
 }
 
 function Sep() {
-  return <div style={{ width: 1, height: 18, background: "#2a2d3e", margin: "0 2px", flexShrink: 0 }} />;
+  return <div style={{ width: 1, height: 18, background: "var(--border)", margin: "0 2px", flexShrink: 0 }} />;
 }
 
 /* ── SVG icons (inline, 16×16) ───────────────────────────────────────────── */
@@ -127,14 +127,14 @@ export function AlignmentToolbar({ nodes, edges, setNodes, onSaveSnap }) {
       style={{
         position: "absolute", bottom: 16, left: "50%", transform: "translateX(-50%)",
         zIndex: 20, display: "flex", alignItems: "center", gap: 2,
-        background: "#13152a", border: "1px solid #2a2d3e",
+        background: "var(--bg-elev)", border: "1px solid var(--border)",
         borderRadius: 10, padding: "5px 8px",
-        boxShadow: "0 4px 20px rgba(0,0,0,.5)",
+        boxShadow: "var(--shadow)",
         userSelect: "none",
         pointerEvents: "all",
       }}
     >
-      <span style={{ fontSize: 10, color: "#475569", marginRight: 4, whiteSpace: "nowrap" }}>
+      <span style={{ fontSize: 10, color: "var(--text-muted-3)", marginRight: 4, whiteSpace: "nowrap" }}>
         {selectedCount} selected
       </span>
       <Sep />

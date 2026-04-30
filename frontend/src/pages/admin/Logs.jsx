@@ -202,14 +202,14 @@ export function Logs({ showToast }) {
       {/* Saved filter chips */}
       {(savedFilters.length > 0 || hasActiveFilter) && (
         <div style={{ display: "flex", gap: 6, marginBottom: 8, alignItems: "center", flexWrap: "wrap" }}>
-          <span style={{ fontSize: 11, color: "#4b5563" }}>Saved:</span>
+          <span style={{ fontSize: 11, color: "var(--text-muted-3)" }}>Saved:</span>
           {savedFilters.map(f => (
             <span key={f.name} style={{ display: "inline-flex", alignItems: "center", gap: 3,
-              background: "#1e2235", border: "1px solid #2a2d3e", borderRadius: 12,
-              fontSize: 11, padding: "2px 4px 2px 8px", cursor: "pointer", color: "#94a3b8" }}>
+              background: "var(--bg-soft)", border: "1px solid var(--border)", borderRadius: 12,
+              fontSize: 11, padding: "2px 4px 2px 8px", cursor: "pointer", color: "var(--text-muted)" }}>
               <span onClick={() => applyFilter(f)} style={{ cursor: "pointer" }}>{f.name}</span>
               <button onClick={() => deleteFilter(f.name)}
-                style={{ background: "none", border: "none", cursor: "pointer", color: "#475569",
+                style={{ background: "none", border: "none", cursor: "pointer", color: "var(--text-muted-2)",
                          padding: "0 2px", fontSize: 11, lineHeight: 1 }} title="Remove">✕</button>
             </span>
           ))}
@@ -219,13 +219,13 @@ export function Logs({ showToast }) {
                 <input autoFocus value={filterName} onChange={e => setFilterName(e.target.value)}
                   onKeyDown={e => { if (e.key === "Enter") saveFilter(); if (e.key === "Escape") setShowSaveFilter(false); }}
                   placeholder="Filter name…"
-                  style={{ fontSize: 11, padding: "2px 7px", background: "#13152a", color: "#e2e8f0",
-                           border: "1px solid #4338ca", borderRadius: 6, width: 130 }} />
+                  style={{ fontSize: 11, padding: "2px 7px", background: "var(--bg-soft)", color: "var(--text)",
+                           border: "1px solid var(--accent)", borderRadius: 6, width: 130 }} />
                 <button className="btn btn-primary" style={{ fontSize: 11, padding: "2px 8px" }} onClick={saveFilter}>Save</button>
                 <button className="btn btn-ghost" style={{ fontSize: 11, padding: "2px 6px" }} onClick={() => setShowSaveFilter(false)}>✕</button>
               </span>
             ) : (
-              <button className="btn btn-ghost" style={{ fontSize: 11, padding: "2px 8px", color: "#64748b" }}
+              <button className="btn btn-ghost" style={{ fontSize: 11, padding: "2px 8px", color: "var(--text-muted-2)" }}
                 onClick={() => { setShowSaveFilter(true); setFilterName(""); }}>
                 + Save filter
               </button>
@@ -258,20 +258,20 @@ export function Logs({ showToast }) {
             {bulkDeleting ? "Deleting…" : `Delete selected (${checked.size})`}
           </button>
         )}
-        <span style={{ marginLeft: "auto", fontSize: 12, color: "#64748b" }}>{total} run{total !== 1 ? "s" : ""}</span>
+        <span style={{ marginLeft: "auto", fontSize: 12, color: "var(--text-muted-2)" }}>{total} run{total !== 1 ? "s" : ""}</span>
       </div>
 
       <div className="runs-split" style={{ display: "grid", gridTemplateColumns: "minmax(260px,340px) 1fr", gap: 16, alignItems: "start" }}>
         {/* Run list + pagination */}
         <div>
-          <div style={{ background: "#1a1d2e", border: "1px solid #2a2d3e", borderRadius: 10, overflow: "hidden" }}>
+          <div style={{ background: "var(--bg-elev)", border: "1px solid var(--border)", borderRadius: 10, overflow: "hidden" }}>
             {!loading && runs.length > 0 && (
-              <div style={{ padding: "6px 14px", borderBottom: "1px solid #2a2d3e", display: "flex", alignItems: "center", gap: 8, background: "#13161f" }}>
+              <div style={{ padding: "6px 14px", borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 8, background: "var(--bg-elev-2)" }}>
                 <input type="checkbox" checked={allChecked} onChange={toggleAll}
                   style={{ width: 14, height: 14, cursor: "pointer", accentColor: "#7c3aed" }}
                   title={allChecked ? "Deselect all" : "Select all on this page"} />
-                <span style={{ fontSize: 11, color: "#64748b" }}>{allChecked ? "Deselect all" : "Select all"}</span>
-                {checked.size > 0 && <span style={{ fontSize: 11, color: "#a78bfa", marginLeft: 4 }}>{checked.size} selected</span>}
+                <span style={{ fontSize: 11, color: "var(--text-muted-2)" }}>{allChecked ? "Deselect all" : "Select all"}</span>
+                {checked.size > 0 && <span style={{ fontSize: 11, color: "var(--accent-2)", marginLeft: 4 }}>{checked.size} selected</span>}
               </div>
             )}
             {loading && <div className="empty-state" style={{ padding: "30px 0" }}>Loading…</div>}
@@ -280,9 +280,9 @@ export function Logs({ showToast }) {
               {runs.map(r => (
                 <div key={r.id} onClick={() => setSelected(r.id === selected ? null : r.id)}
                 style={{
-                  padding: "10px 14px", borderBottom: "1px solid #1e2235", cursor: "pointer",
-                  background: checked.has(r.id) ? "#1e1a35" : selected === r.id ? "#252840" : "transparent",
-                  borderLeft: `3px solid ${checked.has(r.id) ? "#7c3aed" : selected === r.id ? "#7c3aed" : "transparent"}`,
+                  padding: "10px 14px", borderBottom: "1px solid var(--border)", cursor: "pointer",
+                  background: checked.has(r.id) ? "var(--accent-soft)" : selected === r.id ? "var(--bg-hover)" : "transparent",
+                  borderLeft: `3px solid ${checked.has(r.id) || selected === r.id ? "var(--accent)" : "transparent"}`,
                   transition: "background .12s", display: "flex", gap: 10, alignItems: "flex-start",
                 }}>
                 <input type="checkbox" checked={checked.has(r.id)}
@@ -290,7 +290,7 @@ export function Logs({ showToast }) {
                   style={{ marginTop: 3, flexShrink: 0, width: 14, height: 14, cursor: "pointer", accentColor: "#7c3aed" }} />
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 3 }}>
-                    <span style={{ fontWeight: 600, fontSize: 13, color: "#e2e8f0", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    <span style={{ fontWeight: 600, fontSize: 13, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                       {r.flow_name || `run #${r.id}`}
                     </span>
                     <div style={{ display: "flex", gap: 5, alignItems: "center" }}>
@@ -301,24 +301,24 @@ export function Logs({ showToast }) {
                         <span title={`Attempt ${(r.retry_count || 0) + 1}`} style={{ fontSize: 10, fontWeight: 700, color: "#fb923c", background: "#1c1000", border: "1px solid #ea580c44", borderRadius: 10, padding: "1px 6px" }}>RETRY {r.retry_count || 0}</span>
                       )}
                       {(r.retry_count > 0 && r.status !== "retrying" && r.status !== "dead") && (
-                        <span title={`Succeeded after ${r.retry_count} ${r.retry_count === 1 ? "retry" : "retries"}`} style={{ fontSize: 10, color: "#94a3b8", background: "#1e2235", borderRadius: 10, padding: "1px 6px" }}>{r.retry_count}↺</span>
+                        <span title={`Succeeded after ${r.retry_count} ${r.retry_count === 1 ? "retry" : "retries"}`} style={{ fontSize: 10, color: "var(--text-muted)", background: "var(--bg-soft)", borderRadius: 10, padding: "1px 6px", border: "1px solid var(--border)" }}>{r.retry_count}↺</span>
                       )}
-                      <span style={{ fontSize: 11, fontWeight: 600, color: STATUS_COLOR[r.status] || "#94a3b8" }}>{r.status}</span>
+                      <span style={{ fontSize: 11, fontWeight: 600, color: STATUS_COLOR[r.status] || "var(--text-muted)" }}>{r.status}</span>
                       <button
                         title={r.note ? "Edit note" : "Add note"}
                         onClick={e => openNoteEditor(r, e)}
-                        style={{ background: "none", border: "none", cursor: "pointer", padding: "0 2px", fontSize: 13, color: r.note ? "#a78bfa" : "#334155", lineHeight: 1 }}
+                        style={{ background: "none", border: "none", cursor: "pointer", padding: "0 2px", fontSize: 13, color: r.note ? "var(--accent-2)" : "var(--text-muted-3)", lineHeight: 1 }}
                       >📝</button>
                     </div>
                   </div>
-                  <div style={{ fontSize: 11, color: "#64748b" }}>
+                  <div style={{ fontSize: 11, color: "var(--text-muted-2)" }}>
                     #{r.id} · {fmtTs(r.created_at)}
                     {(r.traces || []).length > 0 && (
                       <span style={{ marginLeft: 6 }}>{r.traces.length} node{r.traces.length !== 1 ? "s" : ""}</span>
                     )}
                   </div>
                   {r.note && editingNoteId !== r.id && (
-                    <div style={{ fontSize: 11, color: "#94a3b8", fontStyle: "italic", marginTop: 3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    <div style={{ fontSize: 11, color: "var(--text-muted)", fontStyle: "italic", marginTop: 3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                       {r.note}
                     </div>
                   )}
@@ -333,12 +333,12 @@ export function Logs({ showToast }) {
                           if (e.key === "Escape") setEditingNoteId(null);
                         }}
                         placeholder="Add a note… (Enter to save, Esc to cancel)"
-                        style={{ width: "100%", fontSize: 11, background: "#13152a", color: "#e2e8f0", border: "1px solid #4338ca", borderRadius: 4, padding: "3px 7px" }}
+                        style={{ width: "100%", fontSize: 11, background: "var(--bg-soft)", color: "var(--text)", border: "1px solid var(--accent)", borderRadius: 4, padding: "3px 7px" }}
                       />
                       <div style={{ display: "flex", gap: 5, marginTop: 4 }}>
                         <button className="btn btn-primary" style={{ fontSize: 11, padding: "2px 8px" }} onClick={() => saveNote(r.id)}>Save</button>
                         <button className="btn btn-ghost" style={{ fontSize: 11, padding: "2px 8px" }} onClick={() => setEditingNoteId(null)}>Cancel</button>
-                        {r.note && <button className="btn btn-ghost" style={{ fontSize: 11, padding: "2px 8px", color: "#f87171" }} onClick={() => { setNoteText(""); saveNote(r.id); }}>Clear</button>}
+                        {r.note && <button className="btn btn-ghost" style={{ fontSize: 11, padding: "2px 8px", color: "var(--danger)" }} onClick={() => { setNoteText(""); saveNote(r.id); }}>Clear</button>}
                       </div>
                     </div>
                   )}
@@ -351,7 +351,7 @@ export function Logs({ showToast }) {
             <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, marginTop: 10 }}>
               <button className="btn btn-ghost" style={{ padding: "3px 10px", fontSize: 12 }}
                 disabled={page <= 1} onClick={() => goToPage(page - 1)}>‹ Prev</button>
-              <span style={{ fontSize: 12, color: "#94a3b8" }}>Page {page} of {pages}</span>
+              <span style={{ fontSize: 12, color: "var(--text-muted)" }}>Page {page} of {pages}</span>
               <button className="btn btn-ghost" style={{ padding: "3px 10px", fontSize: 12 }}
                 disabled={page >= pages} onClick={() => goToPage(page + 1)}>Next ›</button>
             </div>
@@ -361,7 +361,7 @@ export function Logs({ showToast }) {
         {/* Trace detail */}
         <div>
           {!selRun ? (
-            <div className="empty-state" style={{ paddingTop: 60, background: "#1a1d2e", border: "1px solid #2a2d3e", borderRadius: 10 }}>
+            <div className="empty-state theme-empty-panel" style={{ paddingTop: 60 }}>
               ← Select a run to view its node traces
             </div>
           ) : (
@@ -369,10 +369,10 @@ export function Logs({ showToast }) {
               <div className="card" style={{ marginBottom: 12 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
                   <div>
-                    <div style={{ fontSize: 15, fontWeight: 700, color: "#e2e8f0", marginBottom: 4 }}>
+                    <div style={{ fontSize: 15, fontWeight: 700, color: "var(--text)", marginBottom: 4 }}>
                       {selRun.flow_name || `Run #${selRun.id}`}
                     </div>
-                    <div style={{ fontSize: 12, color: "#64748b" }}>
+                    <div style={{ fontSize: 12, color: "var(--text-muted-2)" }}>
                       Started: {fmtTs(selRun.created_at)}
                       {selRun.updated_at && selRun.status !== "running" && selRun.status !== "queued" && (
                         <> · Finished: {fmtTs(selRun.updated_at)}</>
@@ -390,13 +390,14 @@ export function Logs({ showToast }) {
                     )}
                     <span style={{
                       fontSize: 12, fontWeight: 700, padding: "4px 10px", borderRadius: 20,
-                      background: selRun.status === "succeeded" ? "#14532d" : selRun.status === "dead" ? "#2d0a0a" : selRun.status === "failed" ? "#3f1111" : "#1e3a5f",
+                      background: selRun.status === "succeeded" ? "var(--success-soft)" : selRun.status === "dead" ? "var(--danger-soft)" : selRun.status === "failed" ? "var(--danger-soft)" : "var(--info-soft)",
                       color: STATUS_COLOR[selRun.status] || "#94a3b8",
+                      border: `1px solid ${selRun.status === "succeeded" ? "var(--success-border)" : selRun.status === "dead" || selRun.status === "failed" ? "var(--danger-border)" : "var(--info-border)"}`,
                     }}>{selRun.status}</span>
                   </div>
                 </div>
                 {selRun.retry_count > 0 && (
-                  <div style={{ marginTop: 8, fontSize: 12, color: "#94a3b8" }}>
+                  <div style={{ marginTop: 8, fontSize: 12, color: "var(--text-muted)" }}>
                     {selRun.status === "dead"
                       ? `⚠ Exhausted all ${selRun.retry_count} retry attempt${selRun.retry_count !== 1 ? "s" : ""}. Fix the error in the flow then re-run manually.`
                       : selRun.status === "retrying"
@@ -405,19 +406,19 @@ export function Logs({ showToast }) {
                   </div>
                 )}
                 {selRun.result?.error && (
-                  <div style={{ marginTop: 8, padding: "8px 10px", background: "#3f1111", borderRadius: 6, fontSize: 12, color: "#f87171", fontFamily: "monospace", wordBreak: "break-word" }}>
+                  <div style={{ marginTop: 8, padding: "8px 10px", background: "var(--danger-soft)", borderRadius: 6, fontSize: 12, color: "var(--danger)", fontFamily: "monospace", wordBreak: "break-word", border: "1px solid var(--danger-border)" }}>
                     {selRun.result.error}
                   </div>
                 )}
                 {selRun.note && (
-                  <div style={{ marginTop: 8, padding: "6px 10px", background: "#1a1d2e", border: "1px solid #2a2d3e", borderRadius: 6, fontSize: 12, color: "#94a3b8", fontStyle: "italic" }}>
+                  <div style={{ marginTop: 8, padding: "6px 10px", background: "var(--bg-soft)", border: "1px solid var(--border)", borderRadius: 6, fontSize: 12, color: "var(--text-muted)", fontStyle: "italic" }}>
                     📝 {selRun.note}
                   </div>
                 )}
               </div>
 
               {traces.length === 0 ? (
-                <div className="empty-state" style={{ padding: "30px 0", background: "#1a1d2e", border: "1px solid #2a2d3e", borderRadius: 10 }}>
+                <div className="empty-state theme-empty-panel" style={{ padding: "30px 0" }}>
                   No trace data for this run.
                 </div>
               ) : (

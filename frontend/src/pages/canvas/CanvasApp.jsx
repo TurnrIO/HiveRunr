@@ -27,6 +27,7 @@ import { AlignmentToolbar }     from "./AlignmentToolbar.jsx";
 import { ExtractSubflowModal }  from "./ExtractSubflowModal.jsx";
 import { EdgeLabelModal }   from "./EdgeLabelModal.jsx";
 import { validateFlow, computeAutoLayout, nodeIssues } from "./canvasHelpers.js";
+import { useTheme } from "../../contexts/ThemeContext.jsx";
 
 /** Per-node validation issues — Map<nodeId, {level,msg}[]> */
 export const ValidationContext = createContext(new Map());
@@ -110,19 +111,19 @@ function RunOverlayBar({ run, nodes, onClear }) {
     <div style={{
       position: "absolute", top: 10, left: "50%", transform: "translateX(-50%)",
       zIndex: 10, display: "flex", alignItems: "center", gap: 8,
-      background: "#13152aee", border: "1px solid #2a2d3e", borderRadius: 20,
-      padding: "5px 14px 5px 10px", boxShadow: "0 4px 16px #0006",
+      background: "var(--canvas-float)", border: "1px solid var(--border)", borderRadius: 20,
+      padding: "5px 14px 5px 10px", boxShadow: "var(--shadow)",
       fontSize: 12, pointerEvents: "auto",
     }}>
-      <span style={{ color: "#64748b", fontSize: 11 }}>Run</span>
-      <span style={{ fontWeight: 700, color: "#e2e8f0" }}>#{run.id}</span>
+      <span style={{ color: "var(--text-muted-2)", fontSize: 11 }}>Run</span>
+      <span style={{ fontWeight: 700, color: "var(--text)" }}>#{run.id}</span>
       <span style={{ fontWeight: 600, color: statusColor, fontSize: 11 }}>{run.status}</span>
       <span style={{ color: "#4ade80" }}>✓ {counts.ok}</span>
       {counts.err > 0    && <span style={{ color: "#f87171" }}>✗ {counts.err}</span>}
-      {counts.skip > 0   && <span style={{ color: "#94a3b8" }}>— {counts.skip}</span>}
-      {counts.unreached > 0 && <span style={{ color: "#374151" }}>? {counts.unreached}</span>}
+      {counts.skip > 0   && <span style={{ color: "var(--text-muted)" }}>— {counts.skip}</span>}
+      {counts.unreached > 0 && <span style={{ color: "var(--text-muted-3)" }}>? {counts.unreached}</span>}
       <button onClick={onClear} title="Clear overlay" style={{
-        background: "none", border: "none", cursor: "pointer", color: "#64748b",
+        background: "none", border: "none", cursor: "pointer", color: "var(--text-muted-2)",
         fontSize: 13, padding: "0 0 0 4px", lineHeight: 1,
       }}>✕</button>
     </div>
@@ -152,6 +153,7 @@ function MoreMenu({
   onExport, onImport, onLayout, onValidate, onHistory, onPermissions,
   onTest, onAdmin, onUndo, onRedo, undoDisabled, redoDisabled,
   onShortcuts, onToggleMap, showMap, onSearch, onSaveWithNote, isAdmin, disabled,
+  onToggleTheme, themeLabel,
 }) {
   const [open, setOpen] = useState(false);
   const wrapRef = useRef(null);
@@ -182,6 +184,7 @@ function MoreMenu({
           <div className="tb-more-sep"/>
           <button className="tb-more-item" onClick={() => act(onSearch)}>🔍 Search nodes (Ctrl+F)</button>
           <button className="tb-more-item" onClick={() => act(onToggleMap)}>{showMap ? "🗺 Hide minimap" : "🗺 Show minimap"}</button>
+          <button className="tb-more-item" onClick={() => act(onToggleTheme)}>{themeLabel}</button>
           <button className="tb-more-item" onClick={() => act(onShortcuts)}>⌨️ Keyboard shortcuts</button>
           {/* Mobile-only extras */}
           <div className="tb-more-sep tb-more-mobile-extra"/>
@@ -198,6 +201,11 @@ function MoreMenu({
 
 /* ── Main CanvasApp ────────────────────────────────────────────────────── */
 function CanvasApp() {
+  const { theme, toggleTheme } = useTheme();
+  const isDark = theme === "dark";
+  const canvasBg = isDark ? "#0f1117" : "#f4f7fb";
+  const canvasDot = isDark ? "rgba(71,85,105,.55)" : "rgba(148,163,184,.62)";
+  const canvasMinimapMask = isDark ? "rgba(15,17,23,.54)" : "rgba(244,247,251,.64)";
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
   const [selectedNode,    setSelectedNode]    = useState(null);
@@ -1269,6 +1277,8 @@ function CanvasApp() {
           onShortcuts={() => setShowShortcuts(s => !s)}
           onSearch={() => setShowSearch(s => !s)}
           onToggleMap={() => setShowMap(m => !m)}
+          onToggleTheme={toggleTheme}
+          themeLabel={theme === "dark" ? "☀️ Switch to light theme" : "🌙 Switch to dark theme"}
           onSaveWithNote={saveGraphWithNote}
           showMap={showMap}
           onUndo={doUndo}
@@ -1287,6 +1297,14 @@ function CanvasApp() {
         />
         {/* Mobile: node palette toggle */}
         <button
+          className="topbar-mobile-only btn btn-ghost btn-sm canvas-theme-mobile-btn"
+          onClick={toggleTheme}
+          title={theme === "dark" ? "Switch to light theme" : "Switch to dark theme"}
+          aria-label={theme === "dark" ? "Switch to light theme" : "Switch to dark theme"}
+        >
+          {theme === "dark" ? "☀️ Theme" : "🌙 Theme"}
+        </button>
+        <button
           className="topbar-mobile-only btn btn-ghost btn-sm"
           onClick={() => setMobileSidebarOpen(o => !o)}
           title="Toggle node palette" aria-label="Toggle node palette"
@@ -1298,13 +1316,17 @@ function CanvasApp() {
         {/* Desktop secondary controls */}
         <div className="topbar-secondary">
           {currentGraph && (
-            <span style={{ fontSize: 10, color: "#475569", whiteSpace: "nowrap" }}>
+            <span className="topbar-meta">
               #{currentGraph.id}
             </span>
           )}
         </div>
         <div className="topbar-spacer"/>
         <div className="topbar-secondary">
+          <button className="btn btn-ghost btn-sm canvas-theme-btn" onClick={toggleTheme}
+            title={theme === "dark" ? "Switch to light theme" : "Switch to dark theme"}>
+            {theme === "dark" ? "☀️ Light" : "🌙 Dark"}
+          </button>
           <button className="btn btn-ghost btn-sm" onClick={doUndo}
             disabled={histState.idx <= 0} title="Undo (Ctrl+Z)">↩</button>
           <button className="btn btn-ghost btn-sm" onClick={doRedo}
@@ -1335,14 +1357,13 @@ function CanvasApp() {
           {inspectorRunId && (<>
             <button className="btn btn-ghost btn-sm" style={{ fontSize: 11 }} onClick={replayInspectorRun} title="Replay with original payload">▶</button>
             <button className="btn btn-ghost btn-sm" style={{ fontSize: 11 }} onClick={openReplayEditCanvas} title="Replay with custom payload">✏</button>
-            <button className="btn btn-ghost btn-sm" style={{ color: "#f87171" }} onClick={() => loadInspectorRun(null)} title="Clear run overlay">✕</button>
+            <button className="btn btn-ghost btn-sm" style={{ color: "var(--danger)" }} onClick={() => loadInspectorRun(null)} title="Clear run overlay">✕</button>
           </>)}
           <div className="tb-divider"/>
           {/* Workspace selector */}
           {workspaces.length > 1 && (
             <select
-              className="btn btn-ghost btn-sm"
-              style={{ cursor: "pointer", maxWidth: 160, padding: "2px 6px", color: "#a78bfa" }}
+              className="btn btn-ghost btn-sm workspace-select-topbar"
               title="Switch workspace"
               value={activeWorkspace?.id || ""}
               onChange={e => switchCanvasWorkspace(parseInt(e.target.value, 10))}
@@ -1353,7 +1374,7 @@ function CanvasApp() {
             </select>
           )}
           {workspaces.length === 1 && activeWorkspace && (
-            <span style={{ fontSize: 11, color: "#6366f1", whiteSpace: "nowrap", padding: "0 4px" }}
+            <span className="workspace-pill"
               title={`Workspace: ${activeWorkspace.name}`}>
               🏢 {activeWorkspace.name}
             </span>
@@ -1414,15 +1435,15 @@ function CanvasApp() {
             }}>
               <div style={{
                 textAlign: "center", maxWidth: 420, padding: "32px 28px",
-                background: "#13152aee", border: "1px solid #2a2d3e",
-                borderRadius: 16, boxShadow: "0 8px 32px #0008",
+                background: "var(--canvas-float)", border: "1px solid var(--border)",
+                borderRadius: 16, boxShadow: "var(--shadow)",
                 pointerEvents: "auto",
               }}>
                 <div style={{ fontSize: 36, marginBottom: 10 }}>⚡</div>
-                <div style={{ fontSize: 18, fontWeight: 700, color: "#e2e8f0", marginBottom: 6 }}>
+                <div style={{ fontSize: 18, fontWeight: 700, color: "var(--text)", marginBottom: 6 }}>
                   Welcome to HiveRunr Canvas
                 </div>
-                <div style={{ fontSize: 13, color: "#64748b", marginBottom: 24, lineHeight: 1.6 }}>
+                <div style={{ fontSize: 13, color: "var(--text-muted-2)", marginBottom: 24, lineHeight: 1.6 }}>
                   Build automation flows by connecting nodes. Drag from the left panel,
                   or start from a template below.
                 </div>
@@ -1441,7 +1462,7 @@ function CanvasApp() {
                 <div style={{ display: "flex", gap: 8, justifyContent: "center", flexWrap: "wrap" }}>
                   {QUICK_START_TEMPLATES.map(t => (
                     <button key={t.slug} className="btn btn-ghost"
-                      style={{ fontSize: 11, padding: "4px 10px", color: "#94a3b8" }}
+                      style={{ fontSize: 11, padding: "4px 10px", color: "var(--text-muted)" }}
                       onClick={() => startFromQuickTemplate(t.slug)}
                       disabled={quickTemplateBusy != null}
                       title={`Start from the ${t.label} template`}
@@ -1450,8 +1471,8 @@ function CanvasApp() {
                     </button>
                   ))}
                 </div>
-                <div style={{ marginTop: 16, fontSize: 10, color: "#334155" }}>
-                  Drag nodes from the left panel · Press <kbd style={{ background: "#1e2235", borderRadius: 3, padding: "1px 4px", fontSize: 9, border: "1px solid #2a2d3e" }}>?</kbd> for shortcuts
+                <div style={{ marginTop: 16, fontSize: 10, color: "var(--text-muted-3)" }}>
+                  Drag nodes from the left panel · Press <kbd style={{ background: "var(--kbd-bg)", color: "var(--kbd-text)", borderRadius: 3, padding: "1px 4px", fontSize: 9, border: "1px solid var(--kbd-border)" }}>?</kbd> for shortcuts
                 </div>
               </div>
             </div>
@@ -1481,20 +1502,20 @@ function CanvasApp() {
             panOnScroll
             panOnScrollMode="free"
             selectionMode={SelectionMode.Partial}
-            style={{ background: "#0f1117", cursor: spacePanning ? "grab" : "default" }}
+            style={{ background: canvasBg, cursor: spacePanning ? "grab" : "default" }}
           >
-            <Background variant={BackgroundVariant.Dots} color="#2a2d3e" gap={20} size={1}/>
+            <Background variant={BackgroundVariant.Dots} color={canvasDot} gap={20} size={1}/>
             <Controls/>
             {showMap && (
               <MiniMap
                 nodeColor={n => { const def = NODE_DEFS[n.data?.type]; return def ? def.color : "#475569"; }}
                 nodeStrokeWidth={0}
-                maskColor="#0f11178a"
+                maskColor={canvasMinimapMask}
                 pannable
                 zoomable
                 style={{
-                  background: "#1a1d2e", border: "1px solid #374151",
-                  borderRadius: 10, boxShadow: "0 4px 16px rgba(0,0,0,.5)",
+                  background: "var(--bg-elev)", border: "1px solid var(--border-strong)",
+                  borderRadius: 10, boxShadow: "var(--shadow)",
                   height: 120, width: 180,
                 }}
               />

@@ -9,14 +9,15 @@ const HOUR_LABELS = [
 const WEEKDAY_LABELS = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
 
 const pill = (active, onClick, children, extra = {}) => (
-  <span onClick={onClick} style={{
-    padding: "3px 10px", borderRadius: 20, fontSize: 12, cursor: "pointer", userSelect: "none",
-    fontWeight: 600, border: "1px solid",
-    background: active ? "#7c3aed" : "transparent",
-    borderColor: active ? "#7c3aed" : "#2a2d3e",
-    color: active ? "#fff" : "#64748b",
-    ...extra,
-  }}>{children}</span>
+  <button
+    type="button"
+    className="theme-pill-option"
+    data-active={active ? "true" : "false"}
+    onClick={onClick}
+    style={extra}
+  >
+    {children}
+  </button>
 );
 
 const sel = (val, opts, onChange_) => (
@@ -31,7 +32,7 @@ const num = (val, min, max, onChg) => (
 
 const row = (label, children) => (
   <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
-    <span style={{ width: 160, fontSize: 12, color: "#94a3b8", flexShrink: 0 }}>{label}</span>
+    <span style={{ width: 160, fontSize: 12, color: "var(--text-muted)", flexShrink: 0 }}>{label}</span>
     {children}
   </div>
 );
@@ -109,10 +110,10 @@ export function CronBuilder({ value, onChange, timezone }) {
   const minSel     = Array.from({ length: 60 }, (_, i) => [i, String(i).padStart(2, "0")]);
 
   return (
-    <div style={{ background: "#13151f", border: "1px solid #1e2130", borderRadius: 8, padding: "12px 14px" }}>
+    <div style={{ background: "var(--bg-elev-2)", border: "1px solid var(--border)", borderRadius: 8, padding: "12px 14px" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-        <span style={{ fontSize: 12, fontWeight: 600, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.06em" }}>Trigger Schedule</span>
-        <div style={{ display: "flex", gap: 4 }}>
+        <span style={{ fontSize: 12, fontWeight: 600, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.06em" }}>Trigger Schedule</span>
+        <div className="theme-pill-group" style={{ gap: 4 }}>
           {pill(mode === "fixed", () => switchMode("fixed"), "Fixed")}
           {pill(mode === "expr",  () => switchMode("expr"),  "Expression")}
         </div>
@@ -164,22 +165,22 @@ export function CronBuilder({ value, onChange, timezone }) {
         </>
       )}
 
-      <div style={{ marginTop: 10, padding: "7px 10px", background: "#0d0f1a", borderRadius: 6 }}>
+      <div style={{ marginTop: 10, padding: "7px 10px", background: "var(--bg-soft)", borderRadius: 6, border: "1px solid var(--border)" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: nextRun ? 4 : 0 }}>
-          <span style={{ fontSize: 10, color: "#475569", flexShrink: 0 }}>cron</span>
-          <code style={{ fontSize: 12, color: nextRun?.valid === false ? "#f87171" : "#a78bfa", fontFamily: "monospace" }}>{preview}</code>
-          {nextRun?.valid === false && <span style={{ fontSize: 10, color: "#f87171", marginLeft: 4 }}>⚠ invalid</span>}
+          <span style={{ fontSize: 10, color: "var(--text-muted-2)", flexShrink: 0 }}>cron</span>
+          <code style={{ fontSize: 12, color: nextRun?.valid === false ? "var(--danger)" : "var(--accent-2)", fontFamily: "monospace" }}>{preview}</code>
+          {nextRun?.valid === false && <span style={{ fontSize: 10, color: "var(--danger)", marginLeft: 4 }}>⚠ invalid</span>}
         </div>
         {nextRun?.valid === false && nextRun.error && (
-          <div style={{ fontSize: 11, color: "#f87171", marginTop: 2 }}>{nextRun.error}</div>
+          <div style={{ fontSize: 11, color: "var(--danger)", marginTop: 2 }}>{nextRun.error}</div>
         )}
         {nextRun?.valid && nextRun.next?.length > 0 && (
-          <div style={{ fontSize: 11, color: "#4ade80", marginTop: 2 }}>
+          <div style={{ fontSize: 11, color: "var(--success)", marginTop: 2 }}>
             Next: {new Date(nextRun.next[0]).toLocaleString()}
-            {nextRun.next[1] && <span style={{ color: "#475569" }}> · {new Date(nextRun.next[1]).toLocaleString()}</span>}
+            {nextRun.next[1] && <span style={{ color: "var(--text-muted-2)" }}> · {new Date(nextRun.next[1]).toLocaleString()}</span>}
           </div>
         )}
-        {fetchingNext && <div style={{ fontSize: 10, color: "#475569", marginTop: 2 }}>checking…</div>}
+        {fetchingNext && <div style={{ fontSize: 10, color: "var(--text-muted-2)", marginTop: 2 }}>checking…</div>}
       </div>
     </div>
   );

@@ -22,8 +22,8 @@ export function DateTimePicker({ value, onChange, required }) {
   ];
 
   const inputStyle = {
-    background: "#0f1117", border: "1px solid #2a2d3e", borderRadius: 6,
-    padding: "6px 10px", color: "#e2e8f0", fontSize: 13, colorScheme: "dark",
+    background: "var(--bg-soft)", border: "1px solid var(--border)", borderRadius: 6,
+    padding: "6px 10px", color: "var(--text)", fontSize: 13, colorScheme: "auto",
   };
 
   return (
@@ -40,9 +40,9 @@ export function DateTimePicker({ value, onChange, required }) {
       <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
         {picks.map(p => (
           <button key={p.label} type="button" onClick={() => onChange(localStr(p.fn()))}
-            style={{ padding: "3px 9px", fontSize: 11, borderRadius: 6, cursor: "pointer", border: "1px solid #2a2d3e", background: "#1a1d2e", color: "#94a3b8", fontWeight: 500 }}
-            onMouseEnter={e => e.currentTarget.style.borderColor = "#7c3aed"}
-            onMouseLeave={e => e.currentTarget.style.borderColor = "#2a2d3e"}>
+            style={{ padding: "3px 9px", fontSize: 11, borderRadius: 6, cursor: "pointer", border: "1px solid var(--border)", background: "var(--bg-elev)", color: "var(--text-muted)", fontWeight: 500 }}
+            onMouseEnter={e => e.currentTarget.style.borderColor = "var(--accent)"}
+            onMouseLeave={e => e.currentTarget.style.borderColor = "var(--border)"}>
             {p.label}
           </button>
         ))}

@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { api } from "../../api/client.js";
 import { useAuth } from "../../contexts/AuthContext.jsx";
+import { useTheme } from "../../contexts/ThemeContext.jsx";
 import { ConfirmModal } from "../../components/ConfirmModal.jsx";
 import { ViewerBanner } from "../../components/ViewerBanner.jsx";
 
@@ -19,12 +20,13 @@ function loadMonaco(cb) {
 }
 
 const RUN_STATUS_COLOR = {
-  succeeded: "#4ade80", failed: "#f87171", dead: "#ef4444",
+  succeeded: "var(--success)", failed: "var(--danger)", dead: "var(--danger)",
   running: "#34d399", queued: "#60a5fa", retrying: "#fb923c",
 };
 
 export function Scripts({ showToast }) {
   const { currentUser: user }                 = useAuth();
+  const { theme }                             = useTheme();
   const [scripts, setScripts]                 = useState([]);
   const [selectedScript, setSelectedScript]   = useState(null);
   const [loadingList, setLoadingList]         = useState(true);
@@ -122,7 +124,7 @@ export function Scripts({ showToast }) {
       monacoRef.current = window.monaco.editor.create(editorContainerRef.current, {
         value: selectedScript.content || "",
         language: "python",
-        theme: "vs-dark",
+        theme: theme === "dark" ? "vs-dark" : "vs",
         fontSize: 13,
         minimap: { enabled: false },
         scrollBeyondLastLine: false,
@@ -132,7 +134,7 @@ export function Scripts({ showToast }) {
 
     loadMonaco(initEditor);
     return () => { if (monacoRef.current) { monacoRef.current.dispose(); monacoRef.current = null; } };
-  }, [selectedScript?.name]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [selectedScript?.name, theme]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /* ── actions ─────────────────────────────────────────────────────────── */
   async function createScript(e) {
@@ -225,7 +227,7 @@ export function Scripts({ showToast }) {
         {/* ── Sidebar list ── */}
         <div className="script-list">
           {!ro && (
-            <div style={{ padding: "10px 14px", borderBottom: "1px solid #2a2d3e" }}>
+            <div style={{ padding: "10px 14px", borderBottom: "1px solid var(--border)" }}>
               <form onSubmit={createScript}>
                 <input
                   type="text"
@@ -249,17 +251,17 @@ export function Scripts({ showToast }) {
 
           <div style={{ flex: 1, overflowY: "auto" }}>
             {loadingList && (
-              <div style={{ padding: "16px 14px", color: "#64748b", fontSize: 12 }}>
+              <div style={{ padding: "16px 14px", color: "var(--text-muted-2)", fontSize: 12 }}>
                 Loading scripts…
               </div>
             )}
             {!loadingList && loadError && (
-              <div style={{ padding: "16px 14px", color: "#fca5a5", fontSize: 12 }}>
+              <div style={{ padding: "16px 14px", color: "var(--danger)", fontSize: 12 }}>
                 {loadError}
               </div>
             )}
             {!loadingList && !loadError && scripts.length === 0 && (
-              <div style={{ padding: "16px 14px", color: "#475569", fontSize: 12 }}>
+              <div style={{ padding: "16px 14px", color: "var(--text-muted-3)", fontSize: 12 }}>
                 No scripts yet. Create one above.
               </div>
             )}
@@ -279,7 +281,7 @@ export function Scripts({ showToast }) {
                     {displayStatus && (
                       <span style={{
                         fontSize: 9, fontWeight: 700, padding: "1px 5px", borderRadius: 8,
-                        color: RUN_STATUS_COLOR[displayStatus] || "#94a3b8",
+                        color: RUN_STATUS_COLOR[displayStatus] || "var(--text-muted)",
                         animation: isRunning ? "pulse 1.2s ease-in-out infinite" : "none",
                       }}>
                         {isRunning ? "⟳" : displayStatus === "succeeded" ? "✓" : displayStatus === "failed" ? "✗" : "●"}{" "}
@@ -305,7 +307,7 @@ export function Scripts({ showToast }) {
           ) : selectedScript ? (
             <>
               <div className="editor-toolbar">
-                <span style={{ color: "#64748b", fontSize: 12, marginRight: "auto", fontFamily: "monospace" }}>
+                <span style={{ color: "var(--text-muted-2)", fontSize: 12, marginRight: "auto", fontFamily: "monospace" }}>
                   {selectedScript.name}.py
                 </span>
                 {!ro && <button className="btn btn-primary btn-sm" onClick={saveScript}>💾 Save</button>}

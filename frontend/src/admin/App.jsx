@@ -6,6 +6,7 @@ import { AdminLayout } from "./AdminLayout.jsx";
 import { ErrorBoundary } from "../components/ErrorBoundary.jsx";
 import { useState, useCallback } from "react";
 import { useWorkspace } from "../contexts/WorkspaceContext.jsx";
+import { ThemeProvider } from "../contexts/ThemeContext.jsx";
 
 /** Wrap a page element in a per-route ErrorBoundary. */
 function page(label, element) {
@@ -39,14 +40,16 @@ export function App() {
   return (
     /* Top-level boundary — catches auth/provider crashes */
     <ErrorBoundary label="App" fullPage>
-      <AuthProvider>
-        <WorkspaceProvider>
-          <BrowserRouter>
-            <AdminRoutes showToast={showToast} />
-          </BrowserRouter>
-          {toast && <Toast key={toast.key} msg={toast.msg} type={toast.type} onDone={() => setToast(null)} />}
-        </WorkspaceProvider>
-      </AuthProvider>
+      <ThemeProvider>
+        <AuthProvider>
+          <WorkspaceProvider>
+            <BrowserRouter>
+              <AdminRoutes showToast={showToast} />
+            </BrowserRouter>
+            {toast && <Toast key={toast.key} msg={toast.msg} type={toast.type} onDone={() => setToast(null)} />}
+          </WorkspaceProvider>
+        </AuthProvider>
+      </ThemeProvider>
     </ErrorBoundary>
   );
 }

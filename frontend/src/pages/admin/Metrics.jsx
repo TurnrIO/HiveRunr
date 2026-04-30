@@ -33,8 +33,8 @@ const RANGE_OPTIONS = [
 
 /* ── Sort indicator ──────────────────────────────────────────────────────── */
 function SortIcon({ col, sortBy, dir }) {
-  if (sortBy !== col) return <span style={{ color: "#374151", marginLeft: 3 }}>⇅</span>;
-  return <span style={{ color: "#a78bfa", marginLeft: 3 }}>{dir === "asc" ? "↑" : "↓"}</span>;
+  if (sortBy !== col) return <span style={{ color: "var(--text-muted-3)", marginLeft: 3 }}>⇅</span>;
+  return <span style={{ color: "var(--accent-2)", marginLeft: 3 }}>{dir === "asc" ? "↑" : "↓"}</span>;
 }
 
 /* ── Dual-layer bar chart (volume + duration overlay) ────────────────────── */
@@ -101,7 +101,7 @@ function DailyChart({ daily }) {
                 <div style={{ width: "80%", height: failH, background: "#f8717155",
                               border: "1px solid #f8717188" }} />
               )}
-              <div style={{ fontSize: 9, color: "#475569", marginTop: 4, whiteSpace: "nowrap" }}>
+              <div style={{ fontSize: 9, color: "var(--text-muted-2)", marginTop: 4, whiteSpace: "nowrap" }}>
                 {shortDate(d.day)}
               </div>
             </div>
@@ -109,7 +109,7 @@ function DailyChart({ daily }) {
         })}
       </div>
       {/* Legend */}
-      <div style={{ display: "flex", gap: 16, fontSize: 10, color: "#64748b", marginTop: 4 }}>
+      <div style={{ display: "flex", gap: 16, fontSize: 10, color: "var(--text-muted-2)", marginTop: 4, flexWrap: "wrap" }}>
         <span><span style={{ color: "#4ade80" }}>■</span> Succeeded</span>
         <span><span style={{ color: "#f87171" }}>■</span> Failed</span>
         <span><span style={{ color: "#38bdf8" }}>— —</span> Avg duration</span>
@@ -170,9 +170,9 @@ function FlowTable({ flows, onOpen }) {
                 {f.flow_name}
               </td>
               <td>
-                <span style={{ color: "#a78bfa" }}>{f.total}</span>
+                <span style={{ color: "var(--accent-2)" }}>{f.total}</span>
                 {f.failed > 0 && (
-                  <span style={{ color: "#f87171", fontSize: 10, marginLeft: 4 }}>
+                  <span style={{ color: "var(--danger)", fontSize: 10, marginLeft: 4 }}>
                     ({f.failed} ✗)
                   </span>
                 )}
@@ -182,10 +182,10 @@ function FlowTable({ flows, onOpen }) {
                   {f.error_rate}%
                 </span>
               </td>
-              <td style={{ color: "#94a3b8" }}>{fmtDur(f.avg_ms)}</td>
-              <td style={{ color: "#94a3b8" }}>{fmtDur(f.p95_ms)}</td>
-              <td style={{ color: "#64748b"  }}>{fmtDur(f.p99_ms)}</td>
-              <td style={{ color: "#64748b", fontSize: 11 }}>{relativeTime(f.last_run)}</td>
+              <td style={{ color: "var(--text-muted)" }}>{fmtDur(f.avg_ms)}</td>
+              <td style={{ color: "var(--text-muted)" }}>{fmtDur(f.p95_ms)}</td>
+              <td style={{ color: "var(--text-muted-2)" }}>{fmtDur(f.p99_ms)}</td>
+              <td style={{ color: "var(--text-muted-2)", fontSize: 11 }}>{relativeTime(f.last_run)}</td>
             </tr>
           ))}
         </tbody>
@@ -217,13 +217,12 @@ export function Metrics({ showToast }) {
       setDaily(daily);
       setFlows(flows);
     },
-    onHardError: (e) => {
+    onHardError: () => {
       setSummary(null);
       setDaily([]);
       setFlows([]);
-      showToast(e.message, "error");
     },
-    getErrorMessage: (e) => e.message || "Failed to load metrics",
+    getErrorMessage: (e) => e?.message === "Failed to fetch" ? "Failed to load metrics." : (e.message || "Failed to load metrics"),
   });
 
   useEffect(() => { load(); }, [days, load]);
@@ -236,8 +235,8 @@ export function Metrics({ showToast }) {
   const tabStyle = (t) => ({
     padding: "6px 14px", borderRadius: 6, border: "none", cursor: "pointer",
     fontSize: 13, fontWeight: 500,
-    background: tab === t ? "#6d28d9" : "transparent",
-    color:      tab === t ? "#fff"    : "#64748b",
+    background: tab === t ? "var(--accent)" : "transparent",
+    color:      tab === t ? "#fff"          : "var(--text-muted-2)",
     transition: "all .15s",
   });
 
@@ -249,28 +248,26 @@ export function Metrics({ showToast }) {
         <h1 className="page-title" style={{ margin: 0 }}>Metrics</h1>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           {/* Tab switcher */}
-          <div style={{ background: "#13152a", border: "1px solid #1e2235",
-                        borderRadius: 8, padding: 3, display: "flex", gap: 2 }}>
+          <div className="theme-pill-group">
             <button style={tabStyle("overview")} onClick={() => setTab("overview")}>Overview</button>
             <button style={tabStyle("flows")}    onClick={() => setTab("flows")}>Per-flow</button>
           </div>
           {/* Range selector */}
-          <div style={{ background: "#13152a", border: "1px solid #1e2235",
-                        borderRadius: 8, padding: 3, display: "flex", gap: 2 }}>
+          <div className="theme-pill-group">
             {RANGE_OPTIONS.map(o => (
               <button key={o.days}
                 style={{
                   padding: "5px 10px", borderRadius: 5, border: "none", cursor: "pointer",
                   fontSize: 12, fontWeight: 500,
-                  background: days === o.days ? "#6d28d9" : "transparent",
-                  color:      days === o.days ? "#fff"    : "#64748b",
+                  background: days === o.days ? "var(--accent)" : "transparent",
+                  color:      days === o.days ? "#fff"          : "var(--text-muted-2)",
                 }}
                 onClick={() => setDays(o.days)}>
                 {o.label}
               </button>
             ))}
           </div>
-          <button className="btn btn-ghost btn-sm" onClick={() => load(days)} disabled={loading}
+          <button className="btn btn-ghost btn-sm" onClick={() => load()} disabled={loading}
             title="Refresh">↺</button>
         </div>
       </div>
@@ -284,7 +281,7 @@ export function Metrics({ showToast }) {
           <div className="stat-cards">
             <div className="stat-card">
               <div className="stat-value" style={{ color: "#a78bfa" }}>{summary.total || 0}</div>
-              <div className="stat-label">Total Runs (30d)</div>
+              <div className="stat-label">Total Runs ({days}d)</div>
             </div>
             <div className="stat-card">
               <div className="stat-value" style={{ color: "#4ade80" }}>{summary.succeeded || 0}</div>
@@ -308,7 +305,7 @@ export function Metrics({ showToast }) {
           <div className="card">
             <div className="card-title">
               Daily Volume + Avg Duration
-              <span style={{ fontSize: 10, color: "#475569", marginLeft: 8, fontWeight: 400 }}>
+              <span style={{ fontSize: 10, color: "var(--text-muted-2)", marginLeft: 8, fontWeight: 400 }}>
                 last {days} days
               </span>
             </div>
@@ -325,7 +322,7 @@ export function Metrics({ showToast }) {
             return (
               <div className="card">
                 <div className="card-title">⚡ Flaky Flows
-                  <span style={{ fontSize: 10, color: "#475569", fontWeight: 400, marginLeft: 8 }}>
+                  <span style={{ fontSize: 10, color: "var(--text-muted-2)", fontWeight: 400, marginLeft: 8 }}>
                     intermittently failing · {days}d
                   </span>
                 </div>
@@ -337,15 +334,15 @@ export function Metrics({ showToast }) {
                           style={{ cursor: f.graph_id ? "pointer" : "default" }}
                           onClick={() => f.graph_id && openFlow(f.graph_id)}>
                         <td style={{ fontWeight: 500 }}>{f.flow_name}</td>
-                        <td style={{ color: "#a78bfa" }}>{f.total}</td>
+                        <td style={{ color: "var(--accent-2)" }}>{f.total}</td>
                         <td>
                           <span style={{
                             fontWeight: 600,
                             color: f.error_rate >= 40 ? "#f87171" : "#fbbf24",
                           }}>{f.error_rate}%</span>
                         </td>
-                        <td style={{ color: "#94a3b8" }}>{fmtDur(f.avg_ms)}</td>
-                        <td style={{ color: "#64748b", fontSize: 11 }}>{relativeTime(f.last_run)}</td>
+                        <td style={{ color: "var(--text-muted)" }}>{fmtDur(f.avg_ms)}</td>
+                        <td style={{ color: "var(--text-muted-2)", fontSize: 11 }}>{relativeTime(f.last_run)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -386,7 +383,7 @@ export function Metrics({ showToast }) {
                       <td style={{ fontSize: 12 }}>{r.flow_name || "—"}</td>
                       <td><span className={`badge badge-${r.status}`}>{r.status}</span></td>
                       <td style={{ fontSize: 12 }}>{fmtDur(r.duration_ms)}</td>
-                      <td style={{ fontSize: 12, color: "#64748b" }}>{relativeTime(r.created_at)}</td>
+                      <td style={{ fontSize: 12, color: "var(--text-muted-2)" }}>{relativeTime(r.created_at)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -404,7 +401,7 @@ export function Metrics({ showToast }) {
             <div className="card">
               <div className="card-title">
                 Per-flow Performance
-                <span style={{ fontSize: 10, color: "#475569", marginLeft: 8, fontWeight: 400 }}>
+                <span style={{ fontSize: 10, color: "var(--text-muted-2)", marginLeft: 8, fontWeight: 400 }}>
                   {flows.length} flow{flows.length !== 1 ? "s" : ""} · last {days} days ·
                   click row to open in canvas
                 </span>
@@ -418,7 +415,7 @@ export function Metrics({ showToast }) {
             <div className="card">
               <div className="card-title">
                 Daily Volume
-                <span style={{ fontSize: 10, color: "#475569", marginLeft: 8, fontWeight: 400 }}>
+                <span style={{ fontSize: 10, color: "var(--text-muted-2)", marginLeft: 8, fontWeight: 400 }}>
                   all flows combined · last {days} days
                 </span>
               </div>

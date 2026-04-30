@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { api } from "../../api/client.js";
+import { useResilientLoad } from "../../components/useResilientLoad.js";
 
 const CATEGORY_COLORS = {
   "Monitoring":   "#0891b2",
@@ -12,24 +13,19 @@ const CATEGORY_COLORS = {
 
 export function Templates({ showToast }) {
   const [templates, setTemplates] = useState([]);
-  const [loading,   setLoading]   = useState(true);
   const [importing, setImporting] = useState(null);
-  const [loadError, setLoadError] = useState("");
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setLoadError("");
-    try {
-      const rows = await api("GET", "/api/templates");
+  const fetchTemplates = useCallback(async () => api("GET", "/api/templates"), []);
+
+  const { load, loading, loadError } = useResilientLoad(fetchTemplates, {
+    onSuccess: (rows) => {
       setTemplates(rows || []);
-    } catch (e) {
+    },
+    onHardError: () => {
       setTemplates([]);
-      setLoadError(e.message || "Failed to load templates");
-      showToast(e.message, "error");
-    } finally {
-      setLoading(false);
-    }
-  }, [showToast]);
+    },
+    getErrorMessage: (e) => e?.message === "Failed to fetch" ? "Failed to load templates." : (e.message || "Failed to load templates"),
+  });
 
   useEffect(() => {
     load();
@@ -59,21 +55,21 @@ export function Templates({ showToast }) {
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 24 }}>
         <div>
           <h1 className="page-title" style={{ marginBottom: 6 }}>📐 Workflow Templates</h1>
-          <div style={{ fontSize: 13, color: "#64748b" }}>
-            Start from a pre-built template — click <strong style={{ color: "#94a3b8" }}>Use template</strong> to create a flow, then edit it in Canvas Flows.
+          <div style={{ fontSize: 13, color: "var(--text-muted-2)" }}>
+            Start from a pre-built template — click <strong style={{ color: "var(--text-muted)" }}>Use template</strong> to create a flow, then edit it in Canvas Flows.
           </div>
         </div>
       </div>
 
-      {loading && <div style={{ color: "#64748b", padding: 24 }}>Loading templates…</div>}
+      {loading && <div style={{ color: "var(--text-muted-2)", padding: 24 }}>Loading templates…</div>}
       {!loading && loadError && (
-        <div style={{ color: "#fca5a5", padding: 24 }}>
+        <div style={{ color: "var(--danger)", padding: 24 }}>
           {loadError}
         </div>
       )}
       {!loading && !loadError && templates.length === 0 && (
-        <div style={{ color: "#64748b", padding: 24 }}>
-          No templates found. Add JSON files to <code>app/templates/</code>.
+        <div style={{ color: "var(--text-muted-2)", padding: 24 }}>
+          No templates found. Add JSON files to <code className="theme-inline-code">app/templates/</code>.
         </div>
       )}
 
@@ -82,34 +78,35 @@ export function Templates({ showToast }) {
           <div style={{
             fontSize: 11, fontWeight: 600, color: CATEGORY_COLORS[category] || "#94a3b8",
             textTransform: "uppercase", letterSpacing: ".08em", marginBottom: 12, paddingBottom: 6,
-            borderBottom: `1px solid ${(CATEGORY_COLORS[category] || "#2a2d3e")}44`,
+            borderBottom: `1px solid color-mix(in srgb, ${CATEGORY_COLORS[category] || "var(--border)"} 30%, transparent)`,
           }}>
             {category}
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(300px,1fr))", gap: 14 }}>
             {items.map(t => (
               <div key={t.id} style={{
-                background: "#181b2e", border: "1px solid #2a2d3e", borderRadius: 10,
+                background: "var(--bg-elev)", border: "1px solid var(--border)", borderRadius: 10,
                 padding: "16px 18px", display: "flex", flexDirection: "column", gap: 8,
                 transition: "border-color .15s", cursor: "default",
               }}
                 onMouseEnter={e => e.currentTarget.style.borderColor = CATEGORY_COLORS[t.category] || "#7c3aed"}
-                onMouseLeave={e => e.currentTarget.style.borderColor = "#2a2d3e"}>
+                onMouseLeave={e => e.currentTarget.style.borderColor = "var(--border)"}>
                 <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8 }}>
-                  <div style={{ fontWeight: 600, color: "#e2e8f0", fontSize: 14 }}>{t.name}</div>
+                  <div style={{ fontWeight: 600, color: "var(--text)", fontSize: 14 }}>{t.name}</div>
                   <span style={{
                     fontSize: 10, color: CATEGORY_COLORS[t.category] || "#475569",
-                    background: (CATEGORY_COLORS[t.category] || "#475569") + "22",
+                    background: `color-mix(in srgb, ${CATEGORY_COLORS[t.category] || "var(--bg-soft)"} 14%, transparent)`,
+                    border: `1px solid color-mix(in srgb, ${CATEGORY_COLORS[t.category] || "var(--border)"} 28%, transparent)`,
                     borderRadius: 4, padding: "2px 7px", whiteSpace: "nowrap",
                   }}>{t.category}</span>
                 </div>
-                <div style={{ fontSize: 12, color: "#94a3b8", lineHeight: 1.6 }}>{t.description}</div>
+                <div style={{ fontSize: 12, color: "var(--text-muted)", lineHeight: 1.6 }}>{t.description}</div>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 4 }}>
                   <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                     {(t.tags || []).map(tag => (
-                      <span key={tag} style={{ fontSize: 10, color: "#64748b", background: "#0f1117", borderRadius: 3, padding: "1px 6px", border: "1px solid #2a2d3e" }}>{tag}</span>
+                      <span key={tag} style={{ fontSize: 10, color: "var(--text-muted-2)", background: "var(--bg-soft)", borderRadius: 3, padding: "1px 6px", border: "1px solid var(--border)" }}>{tag}</span>
                     ))}
-                    <span style={{ fontSize: 10, color: "#4b5563" }}>
+                    <span style={{ fontSize: 10, color: "var(--text-muted-3)" }}>
                       {t.node_count} node{t.node_count !== 1 ? "s" : ""}
                     </span>
                   </div>

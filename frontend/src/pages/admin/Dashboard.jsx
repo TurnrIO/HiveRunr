@@ -136,8 +136,8 @@ export function Dashboard({ showToast }) {
         <h1 className="page-title" style={{ marginBottom: 0 }}>Dashboard</h1>
         {activeWorkspace && (
           <span style={{
-            fontSize: 11, color: "#6366f1", background: "#1e1b4b",
-            border: "1px solid #3730a3", borderRadius: 12,
+            fontSize: 11, color: "var(--accent-2)", background: "var(--accent-soft)",
+            border: "1px solid var(--accent-border)", borderRadius: 12,
             padding: "3px 10px", display: "flex", alignItems: "center", gap: 5,
           }}>
             🏢 {activeWorkspace.name}

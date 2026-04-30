@@ -30,7 +30,7 @@ export function ConfirmModal({
         aria-label={message}
         ref={ref}
       >
-        <p style={{ margin: "0 0 20px", color: "#e2e8f0", fontSize: 14, lineHeight: 1.6 }}>
+        <p style={{ margin: "0 0 20px", color: "var(--text)", fontSize: 14, lineHeight: 1.6 }}>
           {message}
         </p>
         <div className="modal-btns">

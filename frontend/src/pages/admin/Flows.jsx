@@ -150,7 +150,15 @@ export function Flows({ showToast }) {
 
       <div style={{ marginBottom: allTags.length > 0 ? 8 : 16 }}>
         <input
-          style={{ width: "100%", background: "#1a1d2e", color: "#e2e8f0", border: "1px solid #2a2d3e", borderRadius: 8, padding: "8px 12px", fontSize: 13 }}
+          style={{
+            width: "100%",
+            background: "var(--bg-soft)",
+            color: "var(--text)",
+            border: "1px solid var(--border)",
+            borderRadius: 8,
+            padding: "8px 12px",
+            fontSize: 13,
+          }}
           placeholder="🔍  Search flows…"
           value={search}
           onChange={e => setSearch(e.target.value)}
@@ -159,13 +167,13 @@ export function Flows({ showToast }) {
 
       {allTags.length > 0 && (
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 16, alignItems: "center" }}>
-          <span style={{ fontSize: 11, color: "#4b5563" }}>Filter:</span>
+          <span style={{ fontSize: 11, color: "var(--text-muted-3)" }}>Filter:</span>
           <button
             onClick={() => setActiveTag(null)}
             style={{
-              background: !activeTag ? "#4338ca" : "#1e2235",
-              border: `1px solid ${!activeTag ? "#6366f1" : "#2a2d3e"}`,
-              color: !activeTag ? "#fff" : "#94a3b8",
+              background: !activeTag ? "var(--accent)" : "var(--bg-soft)",
+              border: `1px solid ${!activeTag ? "var(--accent-border)" : "var(--border)"}`,
+              color: !activeTag ? "#fff" : "var(--text-muted)",
               borderRadius: 5, padding: "2px 10px", fontSize: 11, cursor: "pointer",
             }}
           >All</button>
@@ -173,9 +181,9 @@ export function Flows({ showToast }) {
             <button key={tag}
               onClick={() => setActiveTag(activeTag === tag ? null : tag)}
               style={{
-                background: activeTag === tag ? "#1e1b4b" : "#13152a",
-                border: `1px solid ${activeTag === tag ? "#4338ca" : "#2a2d3e"}`,
-                color: activeTag === tag ? "#a5b4fc" : "#64748b",
+                background: activeTag === tag ? "var(--accent-soft)" : "var(--bg-elev-2)",
+                border: `1px solid ${activeTag === tag ? "var(--accent-border)" : "var(--border)"}`,
+                color: activeTag === tag ? "var(--accent-2)" : "var(--text-muted-2)",
                 borderRadius: 5, padding: "2px 10px", fontSize: 11, cursor: "pointer",
                 transition: "all .12s",
               }}

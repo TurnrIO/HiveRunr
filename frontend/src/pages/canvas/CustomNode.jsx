@@ -51,12 +51,12 @@ export function CustomNode({ id, data, selected }) {
         <div className="node-body" style={{ padding: "5px 10px 6px" }}>
           <div style={{
             fontFamily: "'JetBrains Mono','Fira Code',monospace",
-            fontSize: 11, color: "#a78bfa", letterSpacing: ".03em",
+            fontSize: 11, color: "var(--accent-2)", letterSpacing: ".03em",
           }}>
             {cronExpr}
           </div>
           {cronDesc && (
-            <div style={{ fontSize: 10, color: "#64748b", marginTop: 2 }}>{cronDesc}</div>
+            <div style={{ fontSize: 10, color: "var(--text-muted-2)", marginTop: 2 }}>{cronDesc}</div>
           )}
         </div>
       ) : summary ? (

@@ -10,13 +10,14 @@ import { FlowPicker } from "./FlowPicker.jsx";
 import { useAuth } from "../../contexts/AuthContext.jsx";
 
 const pill = (active, onClick, label) => (
-  <span onClick={onClick} style={{
-    padding: "3px 12px", borderRadius: 20, fontSize: 12, cursor: "pointer",
-    fontWeight: 600, border: "1px solid",
-    background: active ? "#7c3aed" : "transparent",
-    borderColor: active ? "#7c3aed" : "#2a2d3e",
-    color: active ? "#fff" : "#64748b",
-  }}>{label}</span>
+  <button
+    type="button"
+    className="theme-pill-option"
+    data-active={active ? "true" : "false"}
+    onClick={onClick}
+  >
+    {label}
+  </button>
 );
 
 function parseSchedulePayload(raw) {
@@ -179,7 +180,7 @@ export function Schedules({ showToast }) {
 
             <div className="form-group">
               <label>Schedule Type</label>
-              <div style={{ display: "flex", gap: 6, marginTop: 2 }}>
+              <div className="theme-pill-group" style={{ marginTop: 2 }}>
                 {pill(schedMode === "recurring", () => setSchedMode("recurring"), "🔁 Recurring")}
                 {pill(schedMode === "once",      () => setSchedMode("once"),      "⚡ Run Once")}
               </div>
@@ -238,10 +239,10 @@ export function Schedules({ showToast }) {
                 const lastRunBadge = s.last_run_status ? (
                   <span style={{ display: "flex", flexDirection: "column", gap: 2 }}>
                     <span className={`badge badge-${s.last_run_status}`} style={{ fontSize: 10 }}>{s.last_run_status}</span>
-                    <span style={{ fontSize: 10, color: "#475569" }}>{new Date(s.last_run_at).toLocaleString()}</span>
-                    {s.last_run_duration_ms && <span style={{ fontSize: 10, color: "#475569" }}>{(s.last_run_duration_ms / 1000).toFixed(1)}s</span>}
+                    <span style={{ fontSize: 10, color: "var(--text-muted-2)" }}>{new Date(s.last_run_at).toLocaleString()}</span>
+                    {s.last_run_duration_ms && <span style={{ fontSize: 10, color: "var(--text-muted-2)" }}>{(s.last_run_duration_ms / 1000).toFixed(1)}s</span>}
                   </span>
-                ) : <span style={{ fontSize: 11, color: "#475569" }}>never</span>;
+                ) : <span style={{ fontSize: 11, color: "var(--text-muted-2)" }}>never</span>;
 
                 return (
                   <Fragment key={s.id}>
@@ -249,12 +250,12 @@ export function Schedules({ showToast }) {
                       <td data-label="Name" style={{ fontWeight: 500 }}>{s.name}</td>
                       <td data-label="Flow" style={{ fontSize: 12 }}>
                         {s.graph_name
-                          ? <span style={{ color: "#a78bfa" }}>{s.graph_name}</span>
-                          : <span style={{ color: "#475569", fontFamily: "monospace" }}>{s.workflow || "—"}</span>}
+                          ? <span style={{ color: "var(--accent-2)" }}>{s.graph_name}</span>
+                          : <span style={{ color: "var(--text-muted-2)", fontFamily: "monospace" }}>{s.workflow || "—"}</span>}
                       </td>
                       <td data-label="Schedule" style={{ fontFamily: "monospace", fontSize: 12 }}>
                         {s.run_at
-                          ? <span><span style={{ fontSize: 10, background: "#1e3a5f", color: "#60a5fa", borderRadius: 4, padding: "1px 6px", fontWeight: 600, marginRight: 6 }}>ONCE</span>{new Date(s.run_at).toLocaleString()}</span>
+                          ? <span><span className="theme-chip theme-chip-info" style={{ fontSize: 10, marginRight: 6 }}>ONCE</span>{new Date(s.run_at).toLocaleString()}</span>
                           : s.cron}
                       </td>
                       <td data-label="Next run">
@@ -283,49 +284,49 @@ export function Schedules({ showToast }) {
                       )}
                     </tr>
                     {editingId === s.id && (
-                      <tr style={{ background: "#0f1117" }}>
+                      <tr style={{ background: "var(--bg-soft)" }}>
                         <td colSpan="7" style={{ padding: "16px" }}>
                           <form onSubmit={saveEdit}>
                             <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "flex-end" }}>
                               <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: 1, minWidth: 160 }}>
-                                <label style={{ fontSize: 11, color: "#94a3b8" }}>Name</label>
+                                <label style={{ fontSize: 11, color: "var(--text-muted)" }}>Name</label>
                                 <input required value={editForm.name} onChange={e => setEditForm(p => ({ ...p, name: e.target.value }))} />
                               </div>
                               <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: 1, minWidth: 180 }}>
-                                <label style={{ fontSize: 11, color: "#94a3b8" }}>Flow / Script</label>
+                                <label style={{ fontSize: 11, color: "var(--text-muted)" }}>Flow / Script</label>
                                 <FlowPicker value={editForm.workflow} graphs={graphs} scripts={scripts}
                                   onChange={({ workflow, graph_id }) => setEditForm(p => ({ ...p, workflow, graph_id }))} />
                               </div>
                             </div>
-                            <div style={{ marginTop: 10, display: "flex", gap: 6, marginBottom: 10 }}>
+                            <div className="theme-pill-group" style={{ marginTop: 10, marginBottom: 10 }}>
                               {pill(editForm.mode === "recurring", () => setEditForm(p => ({ ...p, mode: "recurring" })), "🔁 Recurring")}
                               {pill(editForm.mode === "once",      () => setEditForm(p => ({ ...p, mode: "once" })),      "⚡ Run Once")}
                             </div>
                             {editForm.mode === "recurring" ? (
                               <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 12, marginBottom: 10 }}>
                                 <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                                  <label style={{ fontSize: 11, color: "#94a3b8" }}>Cron</label>
+                                  <label style={{ fontSize: 11, color: "var(--text-muted)" }}>Cron</label>
                                   <input value={editForm.cron} onChange={e => setEditForm(p => ({ ...p, cron: e.target.value }))} style={{ fontFamily: "monospace" }} />
                                 </div>
                                 <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                                  <label style={{ fontSize: 11, color: "#94a3b8" }}>Timezone</label>
+                                  <label style={{ fontSize: 11, color: "var(--text-muted)" }}>Timezone</label>
                                   <TimezoneSelect value={editForm.timezone} onChange={v => setEditForm(p => ({ ...p, timezone: v }))} />
                                 </div>
                               </div>
                             ) : (
                               <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 12, marginBottom: 10 }}>
                                 <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                                  <label style={{ fontSize: 11, color: "#94a3b8" }}>Run at</label>
+                                  <label style={{ fontSize: 11, color: "var(--text-muted)" }}>Run at</label>
                                   <DateTimePicker value={editForm.run_at} onChange={v => setEditForm(p => ({ ...p, run_at: v }))} />
                                 </div>
                                 <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                                  <label style={{ fontSize: 11, color: "#94a3b8" }}>Timezone</label>
+                                  <label style={{ fontSize: 11, color: "var(--text-muted)" }}>Timezone</label>
                                   <TimezoneSelect value={editForm.timezone} onChange={v => setEditForm(p => ({ ...p, timezone: v }))} />
                                 </div>
                               </div>
                             )}
                             <div style={{ display: "flex", flexDirection: "column", gap: 4, marginBottom: 10 }}>
-                              <label style={{ fontSize: 11, color: "#94a3b8" }}>Payload (JSON)</label>
+                              <label style={{ fontSize: 11, color: "var(--text-muted)" }}>Payload (JSON)</label>
                               <input value={editForm.payload} onChange={e => setEditForm(p => ({ ...p, payload: e.target.value }))} />
                             </div>
                             <div style={{ display: "flex", gap: 6 }}>

@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback, Fragment } from "react";
 import { Outlet, NavLink, useNavigate } from "react-router-dom";
 import { useWorkspace } from "../contexts/WorkspaceContext.jsx";
 import { useAuth } from "../contexts/AuthContext.jsx";
+import { useTheme } from "../contexts/ThemeContext.jsx";
 import { useFocusTrap } from "../components/useFocusTrap.js";
 import { Toast } from "../components/Toast.jsx";
 import { CommandPalette } from "../components/CommandPalette.jsx";
@@ -40,25 +41,20 @@ function AdminShortcutsModal({ onClose }) {
         role="dialog" aria-modal="true" aria-label="Keyboard shortcuts"
         onClick={e => e.stopPropagation()}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
-          <span style={{ fontWeight: 700, fontSize: 14, color: "#e2e8f0" }}>⌨️ Keyboard Shortcuts</span>
+          <span style={{ fontWeight: 700, fontSize: 14, color: "var(--text)" }}>⌨️ Keyboard Shortcuts</span>
           <button className="btn btn-ghost btn-sm" onClick={onClose} aria-label="Close">✕</button>
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: "10px 18px", alignItems: "center" }}>
           {ADMIN_SHORTCUTS.map(({ key, desc }) => (
             <Fragment key={key}>
-              <kbd style={{ background: "#0f1117", border: "1px solid #374151", borderRadius: 5,
-                padding: "3px 8px", fontSize: 11, color: "#a78bfa", fontFamily: "monospace",
-                whiteSpace: "nowrap", boxShadow: "0 1px 0 #374151" }}>
-                {key}
-              </kbd>
-              <span style={{ color: "#94a3b8", fontSize: 13 }}>{desc}</span>
+              <kbd className="theme-kbd-inline">{key}</kbd>
+              <span style={{ color: "var(--text-muted)", fontSize: 13 }}>{desc}</span>
             </Fragment>
           ))}
         </div>
-        <div style={{ marginTop: 16, paddingTop: 12, borderTop: "1px solid #2a2d3e",
-          fontSize: 11, color: "#475569", textAlign: "center" }}>
-          Press <kbd style={{ background: "#0f1117", border: "1px solid #374151", borderRadius: 4,
-            padding: "1px 6px", fontSize: 10, color: "#a78bfa", fontFamily: "monospace" }}>?</kbd> anywhere to show this
+        <div style={{ marginTop: 16, paddingTop: 12, borderTop: "1px solid var(--border)",
+          fontSize: 11, color: "var(--text-muted-3)", textAlign: "center" }}>
+          Press <kbd className="theme-kbd-inline small">?</kbd> anywhere to show this
         </div>
       </div>
     </div>
@@ -68,6 +64,7 @@ function AdminShortcutsModal({ onClose }) {
 // ── AdminLayout — sidebar + main content area ─────────────────────────────
 export function AdminLayout({ showToast }) {
   const { currentUser, logout } = useAuth();
+  const { theme, toggleTheme } = useTheme();
   const { workspaces, activeWorkspace, switchWorkspace } = useWorkspace();
   const [sidebarOpen, setSidebarOpen]     = useState(false);
   const [showShortcuts, setShowShortcuts] = useState(false);
@@ -110,7 +107,7 @@ export function AdminLayout({ showToast }) {
           <span style={{ flex: 1 }}>
             HiveRunr <strong>v{versionInfo.latest}</strong> is available — you're on v{versionInfo.current}.{" "}
             <a href={versionInfo.release_url || "https://github.com/TurnrIO/HiveRunr/releases"}
-              target="_blank" rel="noopener" style={{ color: "#fbbf24", fontWeight: 600 }}>
+              target="_blank" rel="noopener">
               View release notes ↗
             </a>
           </span>
@@ -118,17 +115,18 @@ export function AdminLayout({ showToast }) {
             const v = versionInfo.latest;
             try { localStorage.setItem("hr_update_dismissed", v); } catch {}
             setUpdateDismissed(v);
-          }} aria-label="Dismiss update notification"
-            style={{ background: "none", border: "none", color: "#fbbf24", cursor: "pointer",
-              fontSize: 16, lineHeight: 1, padding: "0 4px", opacity: .7 }}
-            onMouseEnter={e => e.currentTarget.style.opacity = "1"}
-            onMouseLeave={e => e.currentTarget.style.opacity = ".7"}>✕</button>
+          }} aria-label="Dismiss update notification">✕</button>
         </div>
       )}
 
       {/* ── Hamburger (mobile) ──────────────────────────────────────────── */}
       <button className="hamburger" aria-label="Open navigation menu" aria-expanded={sidebarOpen}
         onClick={() => setSidebarOpen(o => !o)}>☰</button>
+      <button className="theme-fab" onClick={toggleTheme}
+        aria-label={theme === "dark" ? "Switch to light theme" : "Switch to dark theme"}
+        title={theme === "dark" ? "Switch to light theme" : "Switch to dark theme"}>
+        {theme === "dark" ? "☀️ Light" : "🌙 Dark"}
+      </button>
 
       {/* ── Sidebar overlay ─────────────────────────────────────────────── */}
       <div className={`sidebar-overlay${sidebarOpen ? " sidebar-open" : ""}`}
@@ -141,14 +139,12 @@ export function AdminLayout({ showToast }) {
 
         {/* Workspace selector */}
         {workspaces.length > 1 && (
-          <div style={{ padding: "0 12px 12px", borderBottom: "1px solid #2a2d3e", marginBottom: 4 }}>
+          <div className="sidebar-section">
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
-              <div style={{ fontSize: 10, color: "#4b5563", textTransform: "uppercase", letterSpacing: .06, fontWeight: 600 }}>Workspace</div>
+              <div className="sidebar-section-label">Workspace</div>
               {(currentUser?.role === "owner" || currentUser?.role === "admin") && (
-                <button onClick={() => navigate("/workspaces")} title="Workspace settings"
-                  style={{ background: "none", border: "none", color: "#4b5563", cursor: "pointer", fontSize: 12, padding: 0, lineHeight: 1 }}
-                  onMouseEnter={e => e.currentTarget.style.color = "#a78bfa"}
-                  onMouseLeave={e => e.currentTarget.style.color = "#4b5563"}>⚙</button>
+                <button className="sidebar-ghost-btn" onClick={() => navigate("/workspaces")}
+                  title="Workspace settings">⚙</button>
               )}
             </div>
             <select value={activeWorkspace?.id || ""} onChange={async e => {
@@ -162,25 +158,22 @@ export function AdminLayout({ showToast }) {
                 showToast?.(err.message || "Workspace switch failed", "error");
               }
             }}
-              style={{ width: "100%", background: "#1e2130", border: "1px solid #2d3148", borderRadius: 6,
-                color: "#a78bfa", fontSize: 12, padding: "5px 8px", cursor: "pointer" }}>
+              className="workspace-select">
               {workspaces.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
             </select>
           </div>
         )}
 
         {workspaces.length === 1 && activeWorkspace && (
-          <div style={{ padding: "0 12px 10px", borderBottom: "1px solid #2a2d3e", marginBottom: 4 }}>
+          <div className="sidebar-section compact">
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 2 }}>
-              <div style={{ fontSize: 10, color: "#4b5563", textTransform: "uppercase", letterSpacing: .06, fontWeight: 600 }}>Workspace</div>
+              <div className="sidebar-section-label">Workspace</div>
               {(currentUser?.role === "owner" || currentUser?.role === "admin") && (
-                <button onClick={() => navigate("/workspaces")} title="Workspace settings"
-                  style={{ background: "none", border: "none", color: "#4b5563", cursor: "pointer", fontSize: 12, padding: 0, lineHeight: 1 }}
-                  onMouseEnter={e => e.currentTarget.style.color = "#a78bfa"}
-                  onMouseLeave={e => e.currentTarget.style.color = "#4b5563"}>⚙</button>
+                <button className="sidebar-ghost-btn" onClick={() => navigate("/workspaces")}
+                  title="Workspace settings">⚙</button>
               )}
             </div>
-            <div style={{ fontSize: 12, color: "#a78bfa", fontWeight: 600 }}>🏢 {activeWorkspace.name}</div>
+            <div className="workspace-title">🏢 {activeWorkspace.name}</div>
           </div>
         )}
 
@@ -215,36 +208,30 @@ export function AdminLayout({ showToast }) {
           <button className="ext-link" onClick={() => setShowPalette(true)}
             style={{ background: "none", border: "none", width: "100%", textAlign: "left", cursor: "pointer" }}>
             <span className="el-icon">🔍</span>Search
-            <kbd style={{ marginLeft: "auto", background: "#1e2235", border: "1px solid #2a2d3e", borderRadius: 4,
-              padding: "1px 5px", fontSize: 9, color: "#6366f1", fontFamily: "monospace" }}>Ctrl+K</kbd>
+            <kbd className="theme-kbd">Ctrl+K</kbd>
           </button>
           <button className="ext-link" onClick={() => setShowShortcuts(true)}
             style={{ background: "none", border: "none", width: "100%", textAlign: "left", cursor: "pointer" }}>
             <span className="el-icon">⌨️</span>Keyboard shortcuts
-            <kbd style={{ marginLeft: "auto", background: "#1e2235", border: "1px solid #2a2d3e", borderRadius: 4,
-              padding: "1px 5px", fontSize: 9, color: "#6366f1", fontFamily: "monospace" }}>?</kbd>
+            <kbd className="theme-kbd">?</kbd>
+          </button>
+          <button className="ext-link" onClick={toggleTheme}
+            style={{ background: "none", border: "none", width: "100%", textAlign: "left", cursor: "pointer" }}>
+            <span className="el-icon">{theme === "dark" ? "🌙" : "☀️"}</span>
+            {theme === "dark" ? "Dark theme" : "Light theme"}
+            <span style={{ marginLeft: "auto", fontSize: 10, color: "var(--text-muted-2)" }}>toggle</span>
           </button>
 
           {currentUser && (
-            <div style={{ marginTop: 12, borderTop: "1px solid #2a2d3e", paddingTop: 10 }}>
+            <div style={{ marginTop: 12, borderTop: "1px solid var(--border)", paddingTop: 10 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 8px", marginBottom: 2 }}>
-                <div style={{ width: 26, height: 26, borderRadius: "50%", background: "#7c3aed22",
-                  border: "1px solid #7c3aed55", display: "flex", alignItems: "center", justifyContent: "center",
-                  fontSize: 11, fontWeight: 700, color: "#a78bfa", flexShrink: 0 }}>
-                  {currentUser.username[0].toUpperCase()}
-                </div>
+                <div className="profile-avatar">{currentUser.username[0].toUpperCase()}</div>
                 <div style={{ overflow: "hidden", flex: 1 }}>
-                  <div style={{ fontSize: 12, fontWeight: 600, color: "#e2e8f0", whiteSpace: "nowrap",
-                    overflow: "hidden", textOverflow: "ellipsis" }}>{currentUser.username}</div>
-                  <div style={{ fontSize: 10, color: "#475569", textTransform: "capitalize" }}>{currentUser.role}</div>
+                  <div className="profile-name">{currentUser.username}</div>
+                  <div className="profile-role">{currentUser.role}</div>
                 </div>
               </div>
-              <button onClick={logout}
-                style={{ width: "100%", textAlign: "left", background: "none", border: "none",
-                  color: "#64748b", fontSize: 12, cursor: "pointer", padding: "6px 8px", borderRadius: 6,
-                  display: "flex", alignItems: "center", gap: 6, transition: "color .15s" }}
-                onMouseEnter={e => e.currentTarget.style.color = "#f87171"}
-                onMouseLeave={e => e.currentTarget.style.color = "#64748b"}>
+              <button onClick={logout} className="signout-btn">
                 <span style={{ fontSize: 14 }}>⎋</span> Sign out
               </button>
             </div>

@@ -49,6 +49,16 @@ const typeColors = {
   notion_oauth: "notion_oauth",
 };
 
+const ACCENT_CODE_STYLE = { color: "var(--accent-2)" };
+const MUTED_HELP_STYLE = { color: "var(--text-muted-2)", fontWeight: 400 };
+const INSET_PANEL_STYLE = {
+  background: "var(--bg-soft)",
+  border: "1px solid var(--border)",
+  borderRadius: 8,
+  padding: "14px 16px",
+  marginBottom: 12,
+};
+
 function blankSubFields(type) {
   const schema = CRED_SCHEMAS[type] || CRED_SCHEMAS.generic;
   return Object.fromEntries(schema.fields.map(f => [f.k, ""]));
@@ -71,17 +81,17 @@ function credFieldSummary(type) {
 }
 
 const USAGE_HINTS = {
-  generic:    <>Use <code style={{ color: "#a78bfa" }}>{"{{creds.name}}"}</code> to inject the secret value anywhere in a node config.</>,
-  slack:      <>In the Slack node set <strong>Webhook URL</strong> to <code style={{ color: "#a78bfa" }}>{"{{creds.name.webhook_url}}"}</code>.</>,
-  webhook:    <>Use <code style={{ color: "#a78bfa" }}>{"{{creds.name.url}}"}</code> in any node field that accepts a URL.</>,
-  telegram:   <>Use <code style={{ color: "#a78bfa" }}>{"{{creds.name}}"}</code> for the token, <code style={{ color: "#a78bfa" }}>{"{{creds.name.chat_id}}"}</code> for the chat ID in Telegram nodes.</>,
-  api_key:    <>In HTTP Request headers use <code style={{ color: "#a78bfa" }}>{'{"Authorization":"Bearer {{creds.name.key}}"}'}</code>.</>,
-  basic_auth: <>Reference <code style={{ color: "#a78bfa" }}>{"{{creds.name.username}}"}</code> and <code style={{ color: "#a78bfa" }}>{"{{creds.name.password}}"}</code> directly.</>,
-  openai_api: <>Use <code style={{ color: "#a78bfa" }}>{"{{creds.name}}"}</code> as the API key in LLM Call nodes. Set <code style={{ color: "#a78bfa" }}>{"{{creds.name.base_url}}"}</code> for non-OpenAI providers.</>,
-  smtp:       <>In Send Email nodes set <strong>SMTP Credential</strong> to <code style={{ color: "#a78bfa" }}>name</code>. Fields are filled automatically.</>,
-  ssh:        <>In SSH nodes set <strong>SSH Credential</strong> to <code style={{ color: "#a78bfa" }}>name</code>. Fields are filled automatically.</>,
-  sftp:       <>In SFTP nodes set <strong>SFTP Credential</strong> to <code style={{ color: "#a78bfa" }}>name</code>. Fields are filled automatically.</>,
-  aws:        <>Reference fields: <code style={{ color: "#a78bfa" }}>{"{{creds.name.access_key_id}}"}</code>, <code style={{ color: "#a78bfa" }}>{"{{creds.name.secret_access_key}}"}</code>, <code style={{ color: "#a78bfa" }}>{"{{creds.name.region}}"}</code>.</>,
+  generic:    <>Use <code style={ACCENT_CODE_STYLE}>{"{{creds.name}}"}</code> to inject the secret value anywhere in a node config.</>,
+  slack:      <>In the Slack node set <strong>Webhook URL</strong> to <code style={ACCENT_CODE_STYLE}>{"{{creds.name.webhook_url}}"}</code>.</>,
+  webhook:    <>Use <code style={ACCENT_CODE_STYLE}>{"{{creds.name.url}}"}</code> in any node field that accepts a URL.</>,
+  telegram:   <>Use <code style={ACCENT_CODE_STYLE}>{"{{creds.name}}"}</code> for the token, <code style={ACCENT_CODE_STYLE}>{"{{creds.name.chat_id}}"}</code> for the chat ID in Telegram nodes.</>,
+  api_key:    <>In HTTP Request headers use <code style={ACCENT_CODE_STYLE}>{'{"Authorization":"Bearer {{creds.name.key}}"}'}</code>.</>,
+  basic_auth: <>Reference <code style={ACCENT_CODE_STYLE}>{"{{creds.name.username}}"}</code> and <code style={ACCENT_CODE_STYLE}>{"{{creds.name.password}}"}</code> directly.</>,
+  openai_api: <>Use <code style={ACCENT_CODE_STYLE}>{"{{creds.name}}"}</code> as the API key in LLM Call nodes. Set <code style={ACCENT_CODE_STYLE}>{"{{creds.name.base_url}}"}</code> for non-OpenAI providers.</>,
+  smtp:       <>In Send Email nodes set <strong>SMTP Credential</strong> to <code style={ACCENT_CODE_STYLE}>name</code>. Fields are filled automatically.</>,
+  ssh:        <>In SSH nodes set <strong>SSH Credential</strong> to <code style={ACCENT_CODE_STYLE}>name</code>. Fields are filled automatically.</>,
+  sftp:       <>In SFTP nodes set <strong>SFTP Credential</strong> to <code style={ACCENT_CODE_STYLE}>name</code>. Fields are filled automatically.</>,
+  aws:        <>Reference fields: <code style={ACCENT_CODE_STYLE}>{"{{creds.name.access_key_id}}"}</code>, <code style={ACCENT_CODE_STYLE}>{"{{creds.name.secret_access_key}}"}</code>, <code style={ACCENT_CODE_STYLE}>{"{{creds.name.region}}"}</code>.</>,
 };
 
 export function Credentials({ showToast }) {
@@ -179,20 +189,20 @@ export function Credentials({ showToast }) {
   return (
     <div>
       {encryptionOk === false && (
-        <div style={{ background: "#1c1400", border: "1px solid #ca8a04", borderRadius: 8, padding: "10px 14px", marginBottom: 16, display: "flex", alignItems: "flex-start", gap: 10 }}>
+        <div style={{ background: "var(--warn-soft)", border: "1px solid var(--warn-border)", borderRadius: 8, padding: "10px 14px", marginBottom: 16, display: "flex", alignItems: "flex-start", gap: 10 }}>
           <span style={{ fontSize: 16, flexShrink: 0 }}>⚠️</span>
           <div>
-            <div style={{ fontSize: 13, fontWeight: 600, color: "#fde047" }}>Credential encryption is not configured</div>
-            <div style={{ fontSize: 12, color: "#fbbf24", marginTop: 3 }}>
-              Secrets are protected by a weak fallback key. Set <code style={{ background: "#2a2000", padding: "1px 5px", borderRadius: 3 }}>SECRET_KEY</code> in your <code style={{ background: "#2a2000", padding: "1px 5px", borderRadius: 3 }}>.env</code> file and restart the stack.
+            <div style={{ fontSize: 13, fontWeight: 600, color: "var(--warn)" }}>Credential encryption is not configured</div>
+            <div style={{ fontSize: 12, color: "var(--warn)", marginTop: 3 }}>
+              Secrets are protected by a weak fallback key. Set <code style={{ background: "var(--bg-elev)", padding: "1px 5px", borderRadius: 3, color: "var(--accent-2)" }}>SECRET_KEY</code> in your <code style={{ background: "var(--bg-elev)", padding: "1px 5px", borderRadius: 3, color: "var(--accent-2)" }}>.env</code> file and restart the stack.
             </div>
           </div>
         </div>
       )}
       {encryptionOk === true && (
-        <div style={{ background: "#0a1f14", border: "1px solid #16a34a", borderRadius: 8, padding: "8px 14px", marginBottom: 16, display: "flex", alignItems: "center", gap: 8 }}>
+        <div style={{ background: "color-mix(in srgb, var(--success) 12%, transparent)", border: "1px solid color-mix(in srgb, var(--success) 35%, transparent)", borderRadius: 8, padding: "8px 14px", marginBottom: 16, display: "flex", alignItems: "center", gap: 8 }}>
           <span style={{ fontSize: 14 }}>🔒</span>
-          <span style={{ fontSize: 12, color: "#4ade80" }}>Credentials are encrypted at rest (AES-128-CBC via Fernet)</span>
+          <span style={{ fontSize: 12, color: "var(--success)" }}>Credentials are encrypted at rest (AES-128-CBC via Fernet)</span>
         </div>
       )}
 
@@ -210,7 +220,7 @@ export function Credentials({ showToast }) {
           <form onSubmit={create}>
             <div className="form-row">
               <div className="form-group">
-                <label>Name <span style={{ color: "#64748b", fontWeight: 400 }}>(unique · letters, numbers, hyphens, underscores)</span></label>
+                <label>Name <span style={MUTED_HELP_STYLE}>(unique · letters, numbers, hyphens, underscores)</span></label>
                 <input required value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="my-smtp-server" />
               </div>
               <div className="form-group">
@@ -241,8 +251,8 @@ export function Credentials({ showToast }) {
               </div>
             </div>
 
-            <div style={{ background: "#0f1117", border: "1px solid #1e2130", borderRadius: 8, padding: "14px 16px", marginBottom: 12 }}>
-              <div style={{ fontSize: 11, color: "#64748b", marginBottom: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>{schema.label}</div>
+            <div style={INSET_PANEL_STYLE}>
+              <div style={{ fontSize: 11, color: "var(--text-muted-2)", marginBottom: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>{schema.label}</div>
               <div className="form-row" style={{ flexWrap: "wrap" }}>
                 {schema.fields.map(f => (
                   <div key={f.k} className="form-group" style={{ minWidth: f.textarea || f.k === "key" ? "100%" : "180px", flex: f.textarea || f.k === "key" ? "1 1 100%" : "1 1 180px" }}>
@@ -262,7 +272,7 @@ export function Credentials({ showToast }) {
             </div>
 
             <div className="form-group">
-              <label>Note <span style={{ color: "#64748b", fontWeight: 400 }}>(optional)</span></label>
+              <label>Note <span style={MUTED_HELP_STYLE}>(optional)</span></label>
               <input value={form.note} onChange={e => setForm({ ...form, note: e.target.value })} placeholder="e.g. Production server · rotates monthly" />
             </div>
             <button type="submit" className="btn btn-primary">+ Create</button>
@@ -273,7 +283,7 @@ export function Credentials({ showToast }) {
       {!ro && Object.values(oauthProviders).some(Boolean) && (
         <div className="card">
           <div className="card-title">Connect via OAuth</div>
-          <div style={{ fontSize: 12, color: "#64748b", marginBottom: 14 }}>
+          <div style={{ fontSize: 12, color: "var(--text-muted-2)", marginBottom: 14 }}>
             Authorise HiveRunr directly with these providers — no API key copy/paste needed. Tokens are saved automatically as a workspace credential.
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(220px,1fr))", gap: 10 }}>
@@ -308,16 +318,16 @@ export function Credentials({ showToast }) {
                 <Fragment key={c.id}>
                   <tr key={c.id}>
                     <td data-label="Name">
-                      <code className="badge-credential" style={{ background: "#0f1117", color: "#a78bfa" }}>{c.name}</code>
+                      <code className="badge-credential" style={{ color: "var(--accent-2)" }}>{c.name}</code>
                     </td>
                     <td data-label="Type">
                       <span className={`badge-credential ${typeColors[c.type] || "generic"}`}>{c.type}</span>
                     </td>
-                    <td data-label="Fields" style={{ color: "#475569", fontSize: 11 }}>
-                      {credFieldSummary(c.type) || <span style={{ color: "#334155" }}>••••••••</span>}
+                    <td data-label="Fields" style={{ color: "var(--text-muted-3)", fontSize: 11 }}>
+                      {credFieldSummary(c.type) || <span style={{ color: "var(--text-muted-3)" }}>••••••••</span>}
                     </td>
-                    <td data-label="Note" style={{ color: "#64748b", fontSize: 12 }}>{c.note || "—"}</td>
-                    <td data-label="Created" style={{ color: "#64748b", fontSize: 12 }}>{new Date(c.created_at).toLocaleString()}</td>
+                    <td data-label="Note" style={{ color: "var(--text-muted-2)", fontSize: 12 }}>{c.note || "—"}</td>
+                    <td data-label="Created" style={{ color: "var(--text-muted-2)", fontSize: 12 }}>{new Date(c.created_at).toLocaleString()}</td>
                     {!ro && (
                       <td data-label="">
                         <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
@@ -327,12 +337,16 @@ export function Credentials({ showToast }) {
                           {testResults[c.id] && (
                             <span style={{
                               fontSize: 11, padding: "2px 8px", borderRadius: 12, fontWeight: 600,
-                              background: testResults[c.id].ok ? "#0a1f14" : "#1f0a0a",
-                              color: testResults[c.id].ok ? "#4ade80" : "#f87171",
-                              border: `1px solid ${testResults[c.id].ok ? "#16a34a44" : "#dc262644"}`,
+                              background: testResults[c.id].ok
+                                ? "color-mix(in srgb, var(--success) 12%, transparent)"
+                                : "color-mix(in srgb, var(--danger) 12%, transparent)",
+                              color: testResults[c.id].ok ? "var(--success)" : "var(--danger)",
+                              border: `1px solid ${testResults[c.id].ok
+                                ? "color-mix(in srgb, var(--success) 35%, transparent)"
+                                : "color-mix(in srgb, var(--danger) 35%, transparent)"}`,
                             }}>
                               {testResults[c.id].ok ? "✓" : "✗"} {testResults[c.id].message}
-                              {testResults[c.id].latency_ms != null && <span style={{ color: "#64748b", marginLeft: 4 }}>{testResults[c.id].latency_ms}ms</span>}
+                              {testResults[c.id].latency_ms != null && <span style={{ color: "var(--text-muted-2)", marginLeft: 4 }}>{testResults[c.id].latency_ms}ms</span>}
                             </span>
                           )}
                           <button className="btn btn-ghost" onClick={() => startEdit(c)}>✏️ Edit</button>
@@ -342,11 +356,11 @@ export function Credentials({ showToast }) {
                     )}
                   </tr>
                   {editingId === c.id && (
-                    <tr key={`${c.id}-edit`} style={{ background: "#0f1117" }}>
+                    <tr key={`${c.id}-edit`} style={{ background: "var(--bg-soft)" }}>
                       <td colSpan="99" style={{ padding: "12px 16px" }}>
                         <form onSubmit={saveEdit} style={{ display: "flex", gap: 8, alignItems: "flex-end", flexWrap: "wrap" }}>
                           <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                            <label style={{ fontSize: 11, color: "#94a3b8" }}>Type</label>
+                            <label style={{ fontSize: 11, color: "var(--text-muted)" }}>Type</label>
                             <select value={editForm.type} onChange={e => setEditForm(p => ({ ...p, type: e.target.value }))} style={{ width: 130 }}>
                               <option value="generic">Generic</option>
                               <option value="api_key">API Key</option>
@@ -361,11 +375,11 @@ export function Credentials({ showToast }) {
                             </select>
                           </div>
                           <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: 1, minWidth: 180 }}>
-                            <label style={{ fontSize: 11, color: "#94a3b8" }}>New Secret (leave blank to keep existing)</label>
+                            <label style={{ fontSize: 11, color: "var(--text-muted)" }}>New Secret (leave blank to keep existing)</label>
                             <input type="password" value={editForm.secret} onChange={e => setEditForm(p => ({ ...p, secret: e.target.value }))} placeholder="leave blank to keep existing" />
                           </div>
                           <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: 1, minWidth: 180 }}>
-                            <label style={{ fontSize: 11, color: "#94a3b8" }}>Note</label>
+                            <label style={{ fontSize: 11, color: "var(--text-muted)" }}>Note</label>
                             <input value={editForm.note} onChange={e => setEditForm(p => ({ ...p, note: e.target.value }))} />
                           </div>
                           <div style={{ display: "flex", gap: 6 }}>

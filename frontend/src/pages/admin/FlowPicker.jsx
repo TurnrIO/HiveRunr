@@ -25,11 +25,11 @@ export function FlowPicker({ value, onChange, graphs, scripts }) {
 
   const sectionLabel = {
     padding: "4px 12px 2px", fontSize: 10, fontWeight: 700, letterSpacing: "0.08em",
-    textTransform: "uppercase", color: "#475569", background: "#13151f",
+    textTransform: "uppercase", color: "var(--text-muted-2)", background: "var(--bg-elev-2)",
   };
   const itemStyle = {
     padding: "8px 12px", cursor: "pointer", display: "flex", alignItems: "center",
-    justifyContent: "space-between", borderBottom: "1px solid #1e2130", fontSize: 13,
+    justifyContent: "space-between", borderBottom: "1px solid var(--border)", fontSize: 13,
   };
 
   return (
@@ -39,7 +39,7 @@ export function FlowPicker({ value, onChange, graphs, scripts }) {
       {open && hasResults && (
         <div style={{
           position: "absolute", top: "calc(100% + 4px)", left: 0, right: 0,
-          background: "#1a1d2e", border: "1px solid #7c3aed", borderRadius: 8,
+          background: "var(--bg-elev)", border: "1px solid var(--accent)", borderRadius: 8,
           zIndex: 999, maxHeight: 260, overflowY: "auto", boxShadow: "0 8px 24px rgba(0,0,0,.5)",
         }}>
           {filteredGraphs.length > 0 && (
@@ -47,12 +47,12 @@ export function FlowPicker({ value, onChange, graphs, scripts }) {
               <div style={sectionLabel}>Flows</div>
               {filteredGraphs.map(g => (
                 <div key={"g" + g.id} onMouseDown={() => selectGraph(g)} style={itemStyle}
-                  onMouseEnter={e => e.currentTarget.style.background = "#252840"}
+                  onMouseEnter={e => e.currentTarget.style.background = "var(--bg-hover)"}
                   onMouseLeave={e => e.currentTarget.style.background = ""}>
-                  <span style={{ color: "#e2e8f0" }}>{g.name}</span>
+                  <span style={{ color: "var(--text)" }}>{g.name}</span>
                   <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                    <span style={{ fontSize: 10, background: "#312e81", color: "#a5b4fc", borderRadius: 4, padding: "1px 6px", fontWeight: 600 }}>Flow</span>
-                    <span style={{ fontSize: 10, color: "#475569", fontFamily: "monospace" }}>#{g.id}</span>
+                    <span className="theme-chip theme-chip-accent" style={{ fontSize: 10, borderRadius: 4, padding: "1px 6px", fontWeight: 600 }}>Flow</span>
+                    <span style={{ fontSize: 10, color: "var(--text-muted-2)", fontFamily: "monospace" }}>#{g.id}</span>
                   </span>
                 </div>
               ))}
@@ -63,10 +63,10 @@ export function FlowPicker({ value, onChange, graphs, scripts }) {
               <div style={sectionLabel}>Scripts</div>
               {filteredScripts.map(s => (
                 <div key={"s" + s.name} onMouseDown={() => selectScript(s)} style={itemStyle}
-                  onMouseEnter={e => e.currentTarget.style.background = "#252840"}
+                  onMouseEnter={e => e.currentTarget.style.background = "var(--bg-hover)"}
                   onMouseLeave={e => e.currentTarget.style.background = ""}>
-                  <span style={{ color: "#e2e8f0" }}>{s.name}</span>
-                  <span style={{ fontSize: 10, background: "#164e3d", color: "#6ee7b7", borderRadius: 4, padding: "1px 6px", fontWeight: 600 }}>Script</span>
+                  <span style={{ color: "var(--text)" }}>{s.name}</span>
+                  <span className="theme-chip theme-chip-success" style={{ fontSize: 10, borderRadius: 4, padding: "1px 6px", fontWeight: 600 }}>Script</span>
                 </div>
               ))}
             </>
@@ -76,8 +76,8 @@ export function FlowPicker({ value, onChange, graphs, scripts }) {
       {open && query && !hasResults && (
         <div style={{
           position: "absolute", top: "calc(100% + 4px)", left: 0, right: 0,
-          background: "#1a1d2e", border: "1px solid #2a2d3e", borderRadius: 8,
-          padding: "10px 12px", fontSize: 13, color: "#475569", zIndex: 999,
+          background: "var(--bg-elev)", border: "1px solid var(--border)", borderRadius: 8,
+          padding: "10px 12px", fontSize: 13, color: "var(--text-muted-2)", zIndex: 999,
         }}>
           No matching flows or scripts
         </div>

@@ -33,15 +33,15 @@ export function CronNextRun({ cron, timezone, enabled, runAt }) {
     return `in ${d}d ${h % 24}h`;
   }
 
-  if (!info)           return <span style={{ fontSize: 11, color: "#475569" }}>—</span>;
-  if (!info.valid)     return <span style={{ fontSize: 11, color: "#f87171" }}>⚠ invalid cron</span>;
-  if (!enabled)        return <span style={{ fontSize: 11, color: "#64748b" }}>paused</span>;
-  if (!info.next?.length) return <span style={{ fontSize: 11, color: "#475569" }}>—</span>;
+  if (!info)              return <span style={{ fontSize: 11, color: "var(--text-muted-2)" }}>—</span>;
+  if (!info.valid)        return <span style={{ fontSize: 11, color: "var(--danger)" }}>⚠ invalid cron</span>;
+  if (!enabled)           return <span style={{ fontSize: 11, color: "var(--text-muted-2)" }}>paused</span>;
+  if (!info.next?.length) return <span style={{ fontSize: 11, color: "var(--text-muted-2)" }}>—</span>;
 
   return (
     <span style={{ fontSize: 11 }}>
-      <span style={{ color: "#4ade80", fontWeight: 600 }}>{fmtRelative(info.next[0])}</span>
-      <span style={{ color: "#475569", marginLeft: 6 }}>{new Date(info.next[0]).toLocaleString()}</span>
+      <span style={{ color: "var(--success)", fontWeight: 600 }}>{fmtRelative(info.next[0])}</span>
+      <span style={{ color: "var(--text-muted-2)", marginLeft: 6 }}>{new Date(info.next[0]).toLocaleString()}</span>
     </span>
   );
 }
