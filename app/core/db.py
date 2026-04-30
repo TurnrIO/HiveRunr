@@ -74,6 +74,32 @@ def get_pool_stats() -> dict:
         }
 
 
+def decode_json_value(value, fallback):
+    """Coerce a JSON/JSONB-ish DB value into a Python object.
+
+    psycopg2 may return JSONB columns as already-decoded objects or as raw
+    strings depending on driver/config. This helper keeps callers consistent
+    and fail-safe.
+    """
+    if value is None:
+        return fallback
+    if isinstance(value, str):
+        try:
+            return json.loads(value)
+        except Exception:
+            return fallback
+    return value
+
+
+def decode_run_row(row):
+    """Normalise run JSON fields (`traces`, `result`, `initial_payload`)."""
+    d = dict(row)
+    d["traces"] = decode_json_value(d.get("traces"), [])
+    d["result"] = decode_json_value(d.get("result"), {})
+    d["initial_payload"] = decode_json_value(d.get("initial_payload"), {})
+    return d
+
+
 @contextmanager
 def get_conn():
     """Check out a connection from the pool; return it when the block exits.
@@ -361,14 +387,7 @@ def list_runs(page: int = 1, page_size: int = 50,
         )
         runs = []
         for r in cur.fetchall():
-            d = dict(r)
-            # psycopg2 may return JSONB columns as raw strings depending on version/config
-            for col in ("traces", "result", "initial_payload"):
-                v = d.get(col)
-                if isinstance(v, str):
-                    try:    d[col] = json.loads(v)
-                    except: d[col] = [] if col == "traces" else {}
-            runs.append(d)
+            runs.append(decode_run_row(r))
 
     pages = max(1, (total + page_size - 1) // page_size)
     return {"runs": runs, "total": total, "page": page, "pages": pages}
@@ -380,13 +399,7 @@ def get_run_by_task(task_id):
         row = cur.fetchone()
         if not row:
             return None
-        d = dict(row)
-        for col in ("traces", "result", "initial_payload"):
-            v = d.get(col)
-            if isinstance(v, str):
-                try:    d[col] = json.loads(v)
-                except: d[col] = [] if col == "traces" else {}
-        return d
+        return decode_run_row(row)
 
 def update_run(task_id, status, result=None, traces=None, retry_count: int | None = None):
     """Update a run's status, result, traces, and optionally its retry_count.

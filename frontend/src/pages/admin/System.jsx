@@ -1,5 +1,6 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { api } from "../../api/client.js";
+import { useResilientLoad } from "../../components/useResilientLoad.js";
 
 const STATUS_ICON   = { ok: "✓", warning: "⚠", error: "✕" };
 const STATUS_COLOR  = { ok: "#4ade80", warning: "#fbbf24", error: "#f87171" };
@@ -103,32 +104,25 @@ function Check({ id, title, check }) {
 
 export function System({ showToast }) {
   const [data,      setData]      = useState(null);
-  const [loading,   setLoading]   = useState(true);
   const [lastFetch, setLastFetch] = useState(null);
-  const [loadError, setLoadError] = useState("");
-  const hasDataRef = useRef(false);
 
-  const load = useCallback(async (silent = false) => {
-    if (!silent) setLoading(true);
-    if (!silent) setLoadError("");
-    try {
-      const d = await api("GET", "/api/system/status");
+  const fetchDiagnostics = useCallback(async () => api("GET", "/api/system/status"), []);
+
+  const { load, loading, loadError } = useResilientLoad(fetchDiagnostics, {
+    onSuccess: (d) => {
       setData(d);
-      hasDataRef.current = true;
       setLastFetch(new Date());
-    } catch (e) {
-      if (!silent) {
-        if (!hasDataRef.current) setLoadError(e.message || "Failed to load diagnostics");
-        showToast("Failed to load diagnostics: " + e.message, "error");
-      }
-    } finally {
-      if (!silent) setLoading(false);
-    }
-  }, [showToast]);
+    },
+    onHardError: (e) => {
+      setData(null);
+      showToast("Failed to load diagnostics: " + e.message, "error");
+    },
+    getErrorMessage: (e) => e.message || "Failed to load diagnostics",
+  });
 
   useEffect(() => {
     load();
-    const t = setInterval(() => load(true), 30000);
+    const t = setInterval(() => load({ silent: true, clearError: false }), 30000);
     return () => clearInterval(t);
   }, [load]);
 

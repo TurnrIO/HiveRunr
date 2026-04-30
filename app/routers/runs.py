@@ -15,6 +15,7 @@ from app.core.db import (
     get_retention_policy, set_retention_policy,
     get_ratelimit_policy, set_ratelimit_policy,
     set_run_note,
+    decode_json_value,
     log_audit,
 )
 
@@ -324,16 +325,14 @@ def api_get_run_payload(run_id: int, request: Request):
     """Return the initial_payload stored for a run (used to pre-fill replay modal)."""
     _require_run_scope(request)
     from app.core.db import get_conn
+    import psycopg2.extras
     with get_conn() as conn:
-        cur = conn.cursor()
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         cur.execute("SELECT initial_payload FROM runs WHERE id=%s", (run_id,))
         row = cur.fetchone()
     if not row:
         raise HTTPException(404, f"Run {run_id} not found")
-    try:
-        payload = json.loads(row["initial_payload"]) if row["initial_payload"] else {}
-    except Exception:
-        payload = {}
+    payload = decode_json_value(row["initial_payload"], {})
     return {"run_id": run_id, "payload": payload}
 
 
@@ -366,10 +365,7 @@ def api_replay_run(run_id: int, request: Request, body: _ReplayBody = None):
     if body and body.payload is not None:
         payload = body.payload
     else:
-        try:
-            payload = json.loads(initial_payload) if initial_payload else {}
-        except Exception:
-            payload = {}
+        payload = decode_json_value(initial_payload, {})
 
     from app.deps import _resolve_workspace
     workspace_id = _resolve_workspace(request, user)
@@ -415,11 +411,6 @@ def api_stream_run(task_id: str, request: Request):
         run = get_run_by_task(task_id)
         if run and run.get("status") in TERMINAL:
             traces = run.get("traces") or []
-            if isinstance(traces, str):
-                try:
-                    traces = json.loads(traces)
-                except Exception:
-                    traces = []
             for t in traces:
                 yield _sse({"type": "node_done", **t})
             yield _sse({"type": "run_done", "status": run["status"],
@@ -473,11 +464,6 @@ def api_stream_run(task_id: str, request: Request):
                     if run and run.get("status") in TERMINAL:
                         # Run finished but pub/sub event was missed — replay
                         traces = run.get("traces") or []
-                        if isinstance(traces, str):
-                            try:
-                                traces = json.loads(traces)
-                            except Exception:
-                                traces = []
                         for t in traces:
                             yield _sse({"type": "node_done", **t})
                         yield _sse({"type": "run_done", "status": run["status"],

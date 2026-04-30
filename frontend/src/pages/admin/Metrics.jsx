@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { api } from "../../api/client.js";
+import { useResilientLoad } from "../../components/useResilientLoad.js";
 
 /* ── Helpers ─────────────────────────────────────────────────────────────── */
 function fmtDur(ms) {
@@ -198,35 +199,34 @@ export function Metrics({ showToast }) {
   const [summary,  setSummary]  = useState(null);
   const [daily,    setDaily]    = useState([]);
   const [flows,    setFlows]    = useState([]);
-  const [loading,  setLoading]  = useState(true);
-  const [loadError, setLoadError] = useState("");
   const [days,     setDays]     = useState(30);
   const [tab,      setTab]      = useState("overview"); // "overview" | "flows"
 
-  const load = useCallback(async (d) => {
-    setLoading(true);
-    setLoadError("");
-    try {
-      const [m, dailyData, flowData] = await Promise.all([
-        api("GET", "/api/metrics"),
-        api("GET", `/api/analytics/daily?days=${d}`),
-        api("GET", `/api/analytics/flows?days=${d}`),
-      ]);
-      setSummary(m);
-      setDaily(dailyData);
-      setFlows(flowData);
-    } catch (e) {
+  const fetchMetrics = useCallback(async () => {
+    const [m, dailyData, flowData] = await Promise.all([
+      api("GET", "/api/metrics"),
+      api("GET", `/api/analytics/daily?days=${days}`),
+      api("GET", `/api/analytics/flows?days=${days}`),
+    ]);
+    return { summary: m, daily: dailyData, flows: flowData };
+  }, [days]);
+
+  const { load, loading, loadError } = useResilientLoad(fetchMetrics, {
+    onSuccess: ({ summary, daily, flows }) => {
+      setSummary(summary);
+      setDaily(daily);
+      setFlows(flows);
+    },
+    onHardError: (e) => {
       setSummary(null);
       setDaily([]);
       setFlows([]);
-      setLoadError(e.message || "Failed to load metrics");
       showToast(e.message, "error");
-    } finally {
-      setLoading(false);
-    }
-  }, [showToast]);
+    },
+    getErrorMessage: (e) => e.message || "Failed to load metrics",
+  });
 
-  useEffect(() => { load(days); }, [days, load]);
+  useEffect(() => { load(); }, [days, load]);
 
   function openFlow(graphId) {
     sessionStorage.setItem("canvas_open_graph", graphId);

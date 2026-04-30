@@ -1,7 +1,8 @@
-import { Fragment, useState, useEffect, useCallback, useRef } from "react";
+import { Fragment, useState, useEffect, useCallback } from "react";
 import { api } from "../../api/client.js";
 import { ViewerBanner } from "../../components/ViewerBanner.jsx";
 import { ReplayEditModal } from "../../components/ReplayEditModal.jsx";
+import { useResilientLoad } from "../../components/useResilientLoad.js";
 import { useAuth } from "../../contexts/AuthContext.jsx";
 import { useWorkspace } from "../../contexts/WorkspaceContext.jsx";
 
@@ -12,47 +13,40 @@ export function Dashboard({ showToast }) {
   const [runs, setRuns]             = useState([]);      // last 20 runs for the feed
   const [workflows, setWfs]         = useState([]);
   const [graphs, setGraphs]         = useState([]);
-  const [loading, setLoading]       = useState(true);
-  const [loadError, setLoadError]   = useState("");
   const [expandedRunId, setExpanded] = useState(null);
   const [replayEdit, setReplayEdit] = useState(null);
   const [queue, setQueue]           = useState(null);
-  const hasDataRef                  = useRef(false);
+  const fetchDashboard = useCallback(async () => {
+    const [m, r, w, g] = await Promise.all([
+      api("GET", "/api/metrics"),
+      api("GET", "/api/runs?page_size=20"),
+      api("GET", "/api/workflows"),
+      api("GET", "/api/graphs"),
+    ]);
+    return {
+      metrics: m,
+      runs: r.runs ?? r,
+      workflows: w,
+      graphs: g,
+    };
+  }, []);
 
-  const load = useCallback(async ({ silent = false } = {}) => {
-    if (!silent || !hasDataRef.current) setLoading(true);
-    try {
-      const [m, r, w, g] = await Promise.all([
-        api("GET", "/api/metrics"),
-        api("GET", "/api/runs?page_size=20"),
-        api("GET", "/api/workflows"),
-        api("GET", "/api/graphs"),
-      ]);
-      setMetrics(m);
-      setRuns(r.runs ?? r);
-      setWfs(w);
-      setGraphs(g);
-      setLoadError("");
-      hasDataRef.current = true;
-    } catch (e) {
-      if (silent && hasDataRef.current) {
-        return;
-      }
-      if (!silent) {
-        showToast(e.message, "error");
-      }
+  const { load, loading, loadError } = useResilientLoad(fetchDashboard, {
+    onSuccess: ({ metrics, runs, workflows, graphs }) => {
+      setMetrics(metrics);
+      setRuns(runs);
+      setWfs(workflows);
+      setGraphs(graphs);
+    },
+    onHardError: (e) => {
       setMetrics(null);
       setRuns([]);
       setWfs([]);
       setGraphs([]);
-      setLoadError(e.message || "Failed to load dashboard");
-      hasDataRef.current = false;
-    } finally {
-      if (!silent || !hasDataRef.current) {
-        setLoading(false);
-      }
-    }
-  }, [showToast]);
+      showToast(e.message, "error");
+    },
+    getErrorMessage: (e) => e.message || "Failed to load dashboard",
+  });
 
   const loadQueue = useCallback(async () => {
     try { setQueue(await api("GET", "/api/runs/queue")); }
@@ -62,7 +56,7 @@ export function Dashboard({ showToast }) {
   useEffect(() => {
     load();
     loadQueue();
-    const t1 = setInterval(() => load({ silent: true }), 5000);
+    const t1 = setInterval(() => load({ silent: true, clearError: false }), 5000);
     const t2 = setInterval(loadQueue, 10000);
     return () => { clearInterval(t1); clearInterval(t2); };
   }, [load, loadQueue]);
