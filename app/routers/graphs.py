@@ -88,6 +88,9 @@ def api_graph_create(body: GraphCreate, request: Request):
     return _graph_with_data(g)
 
 
+# Maximum import payload size: 10 MB
+GRAPH_IMPORT_MAX_BYTES = 10 * 1024 * 1024
+
 @router.post("/api/graphs/import")
 async def api_graph_import(request: Request):
     """Import a flow from a JSON bundle.
@@ -100,10 +103,17 @@ async def api_graph_import(request: Request):
     if not _is_admin_or_owner(user):
         raise HTTPException(403, "Importing flows requires admin or owner role")
     workspace_id = _resolve_workspace(request, user)
+    content_length = request.headers.get("content-length")
+    if content_length and int(content_length) > GRAPH_IMPORT_MAX_BYTES:
+        raise HTTPException(413, f"Payload too large — maximum {GRAPH_IMPORT_MAX_BYTES // (1024*1024)} MB")
     try:
         body = await request.json()
     except JSONDecodeError:
         raise HTTPException(400, "Invalid JSON body")
+
+    # Reject suspiciously large parsed bodies even if Content-Length was not set
+    if len(json.dumps(body)) > GRAPH_IMPORT_MAX_BYTES:
+        raise HTTPException(413, f"Payload too large — maximum {GRAPH_IMPORT_MAX_BYTES // (1024*1024)} MB")
 
     name = (body.get("name") or "Imported Flow").strip()
     desc = body.get("description") or ""
