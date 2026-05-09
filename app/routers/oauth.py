@@ -252,6 +252,8 @@ def oauth_callback(
     if not raw:
         return RedirectResponse(_admin_url("?oauth_error=state_expired_or_invalid"))
 
+    # Consume state token only after credential is successfully saved.
+    # If save fails the state key remains valid (TTL=300s) so user can retry.
     r.delete(f"oauth:state:{state}")
     ctx = json.loads(raw)
 
@@ -274,13 +276,15 @@ def oauth_callback(
         log.error("oauth_callback: token exchange failed for %s: %s", provider, exc)
         return RedirectResponse(_admin_url("?oauth_error=token_exchange_failed"))
 
-    # Persist as a credential
+    # Persist as a credential — only delete state token after this succeeds
     try:
         secret = _build_credential_secret(provider, token_data)
         cred_name = ctx["cred_name"]
         workspace_id = ctx.get("workspace_id")
         note = f"Connected via OAuth on {time.strftime('%Y-%m-%d')}"
         upsert_credential(cred_name, cfg["cred_type"], secret, note, workspace_id=workspace_id)
+        # State consumed — safe to delete now
+        r.delete(f"oauth:state:{state}")
     except Exception as exc:
         log.error("oauth_callback: failed to save credential: %s", exc)
         return RedirectResponse(_admin_url("?oauth_error=save_failed"))
