@@ -287,17 +287,55 @@ def startup():
 # ── Health ────────────────────────────────────────────────────────────────────
 @app.get("/health")
 def health():
-    # Check frontend dist availability (detect missing dist state)
+    checks = {}
+    overall = "ok"
+
+    # ── Database ─────────────────────────────────────────────────────────────
+    try:
+        from app.core.db import get_conn
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT 1")
+        checks["database"] = {"status": "ok"}
+    except Exception as exc:
+        checks["database"] = {
+            "status": "error",
+            "message": str(exc),
+            "fix": "Check DATABASE_URL in .env and ensure the postgres container is running.",
+        }
+        overall = "degraded"
+
+    # ── Redis ─────────────────────────────────────────────────────────────────
+    try:
+        import redis as _redis
+        redis_url = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
+        r = _redis.from_url(redis_url, socket_connect_timeout=3, socket_timeout=3)
+        r.ping()
+        display_url = redis_url.split("@")[-1]  # strip credentials if present
+        checks["redis"] = {"status": "ok", "url": display_url}
+    except Exception as exc:
+        checks["redis"] = {
+            "status": "error",
+            "message": str(exc),
+            "fix": "Check REDIS_URL in .env and ensure the redis container is running.",
+        }
+        overall = "degraded"
+
+    # ── Frontend dist ─────────────────────────────────────────────────────────
     dist_available = _docker_dist.is_dir() and any(_docker_dist.iterdir()) if _docker_dist.exists() else False
-    status_detail = {
-        "version": __version__,
-        "frontend_dist": {
-            "path": str(DIST_DIR),
-            "available": dist_available,
-            "note": "run 'docker compose up -d --build' if unavailable" if not dist_available else "ok",
-        },
+    checks["frontend_dist"] = {
+        "status": "ok" if dist_available else "error",
+        "path": str(DIST_DIR),
+        "fix": "run 'docker compose up -d --build' if unavailable" if not dist_available else "ok",
     }
-    return {"status": "ok", **status_detail}
+    if not dist_available:
+        overall = "degraded"
+
+    return {
+        "status": overall,
+        "version": __version__,
+        "checks": checks,
+    }
 
 
 # ── Page routes ───────────────────────────────────────────────────────────────
