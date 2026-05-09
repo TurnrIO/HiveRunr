@@ -48,7 +48,15 @@ STATIC_DIR   = Path(__file__).parent / "static"
 _docker_dist = Path("/app/frontend_dist")
 DIST_DIR     = _docker_dist if _docker_dist.is_dir() else STATIC_DIR / "dist"
 WORKFLOWS    = ["example"]
-API_KEY      = os.environ.get("API_KEY", "dev_api_key")
+# Fail fast: an unset API_KEY is a deployment error, not a warning.
+# The app will not start until a secure, non-default key is configured.
+API_KEY = os.environ.get("API_KEY", "")
+if not API_KEY or API_KEY in {"dev_api_key", "change-me-before-deployment"}:
+    raise RuntimeError(
+        "API_KEY environment variable is not set or is set to an insecure default. "
+        "Set API_KEY to a random secret in .env before deploying this instance. "
+        "Generate one with: python -c \"import secrets; print(secrets.token_urlsafe(32))\""
+    )
 
 # ── F-series migration tracker ────────────────────────────────────────────────
 # Pages listed here are served from the Vite dist/ build instead of app/static/.
@@ -232,12 +240,8 @@ def _validate_config() -> None:
         )
 
     # ── Warning: API_KEY ──────────────────────────────────────────────────────
-    unsafe_keys = {"dev_api_key", "change-me-before-deployment", ""}
-    if os.environ.get("API_KEY", "dev_api_key") in unsafe_keys:
-        log.warning(
-            "startup: API_KEY is set to an unsafe default. "
-            "Set API_KEY to a random secret in .env before exposing this instance publicly."
-        )
+    # API_KEY is now enforced at module level — no fallback default.
+    # (The check above guarantees it is set and non-unsafe at startup.)
 
     # ── Warning: APP_URL ──────────────────────────────────────────────────────
     app_url = os.environ.get("APP_URL", "http://localhost")
