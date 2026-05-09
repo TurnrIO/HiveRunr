@@ -704,6 +704,8 @@ def load_all_credentials(workspace_id: int | None = None):
         return {r['name']: decrypt(r['secret']) for r in cur.fetchall()}
 
 def upsert_credential(name, type_, secret, note="", workspace_id: int | None = None):
+    if workspace_id is None:
+        raise ValueError("workspace_id is required — cannot create credentials without a workspace")
     from app.crypto import encrypt, encryption_configured
     if not encryption_configured():
         raise RuntimeError(
@@ -724,6 +726,8 @@ def upsert_credential(name, type_, secret, note="", workspace_id: int | None = N
         return dict(cur.fetchone())
 
 def update_credential(cred_id, type_, secret, note, workspace_id: int | None = None):
+    if workspace_id is None:
+        raise ValueError("workspace_id is required — cannot update credentials without a workspace")
     from app.crypto import encrypt, encryption_configured
     if not encryption_configured():
         raise RuntimeError(
@@ -751,13 +755,11 @@ def update_credential(cred_id, type_, secret, note, workspace_id: int | None = N
         return dict(cur.fetchone())
 
 def delete_credential(cred_id, workspace_id: int | None = None):
+    if workspace_id is None:
+        raise ValueError("workspace_id is required — cannot delete credentials without a workspace")
     with get_conn() as conn:
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-        if workspace_id is not None:
-            cur.execute("DELETE FROM credentials WHERE id=%s AND workspace_id=%s RETURNING id", (cred_id, workspace_id))
-        else:
-            cur.execute("DELETE FROM credentials WHERE id=%s RETURNING id", (cred_id,))
-        return cur.rowcount > 0
+        cur.execute("DELETE FROM credentials WHERE id=%s AND workspace_id=%s RETURNING id", (cred_id, workspace_id))
 
 # ── graph_versions ────────────────────────────────────────────────────────
 def list_graph_versions(graph_id):

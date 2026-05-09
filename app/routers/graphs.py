@@ -241,7 +241,7 @@ def api_test_node(graph_id: int, node_id: str, body: NodeTestBody, request: Requ
 
     try:
         from app.core.db import load_all_credentials
-        creds = load_all_credentials()
+        creds = load_all_credentials(workspace_id=g.get("workspace_id"))
     except (ImportError, psycopg2.Error):
         creds = {}
 
