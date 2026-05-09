@@ -30,7 +30,7 @@ def _graph_with_data(g):
         return None
     try:
         gd = json.loads(g.get('graph_json') or '{}')
-    except Exception:
+    except JSONDecodeError:
         gd = {}
     return {**{k: v for k, v in g.items() if k != 'graph_json'}, 'graph_data': gd}
 
@@ -102,7 +102,7 @@ async def api_graph_import(request: Request):
     workspace_id = _resolve_workspace(request, user)
     try:
         body = await request.json()
-    except Exception:
+    except JSONDecodeError:
         raise HTTPException(400, "Invalid JSON body")
 
     name = (body.get("name") or "Imported Flow").strip()
@@ -214,7 +214,7 @@ def api_test_node(graph_id: int, node_id: str, body: NodeTestBody, request: Requ
 
     try:
         graph_data = json.loads(g.get('graph_json') or '{}')
-    except Exception:
+    except JSONDecodeError:
         graph_data = {}
 
     nodes_map = {n['id']: n for n in graph_data.get('nodes', [])}
@@ -230,7 +230,7 @@ def api_test_node(graph_id: int, node_id: str, body: NodeTestBody, request: Requ
     try:
         from app.core.db import load_all_credentials
         creds = load_all_credentials()
-    except Exception:
+    except (ImportError, psycopg2.Error):
         creds = {}
 
     from app.core.executor import run_one_node
@@ -263,7 +263,7 @@ async def api_graph_run(graph_id: int, request: Request):
     workspace_id = _resolve_workspace(request, user)
     try:
         body = await request.json()
-    except Exception:
+    except JSONDecodeError:
         body = {}
     payload        = (body or {}).get("payload") or body or {"source": "api"}
     start_node_id  = (body or {}).get("start_node_id")   # "run from this node" feature
@@ -283,7 +283,7 @@ async def api_graph_run(graph_id: int, request: Request):
                 "INSERT INTO runs(task_id, graph_id, status, initial_payload, workspace_id) VALUES(%s,%s,'queued',%s,%s)",
                 (task.id, graph_id, json.dumps(payload), workspace_id)
             )
-    except Exception as e:
+    except psycopg2.Error as e:
         log.warning(f"Could not pre-create run record: {e}")
     log_audit(user["username"], "graph.run", "graph", graph_id,
               {"name": g["name"], "task_id": task.id},
@@ -331,7 +331,7 @@ def api_get_graph_version(graph_id: int, version_id: int, request: Request):
         raise HTTPException(404, "Version not found")
     try:
         gd = json.loads(v.get('graph_json') or '{}')
-    except Exception:
+    except JSONDecodeError:
         gd = {}
     return {**{k: val for k, val in v.items() if k != 'graph_json'}, 'graph_data': gd}
 
@@ -350,7 +350,7 @@ def api_restore_version(graph_id: int, version_id: int, request: Request):
     update_graph(graph_id, graph_json=v['graph_json'])
     try:
         gd = json.loads(v['graph_json'])
-    except Exception:
+    except JSONDecodeError:
         gd = {}
     _sync_cron_triggers(graph_id, gd)
     save_graph_version(graph_id, g['name'], v['graph_json'], note=f"Restored from v{v['version']}")

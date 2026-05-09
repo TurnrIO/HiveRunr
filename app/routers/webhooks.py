@@ -2,6 +2,7 @@
 import hashlib
 import hmac
 import json
+import logging
 import os
 
 from fastapi import APIRouter, HTTPException, Request
@@ -30,7 +31,8 @@ def _check_webhook_rate(token: str) -> tuple[bool, int, int]:
         count, _ = pipe.execute()
         return count <= limit, limit, window
     except Exception:
-        return True, limit, window
+        log.error(f"Redis unavailable for webhook rate limit check: {token} — fail open is unsafe, returning denied")
+        return False, limit, window
 
 
 def _get_webhook_trigger_config(g: dict) -> dict:
@@ -43,7 +45,7 @@ def _get_webhook_trigger_config(g: dict) -> dict:
         for node in nodes:
             if node.get("type") == "trigger.webhook" or node.get("data", {}).get("type") == "trigger.webhook":
                 return node.get("data", {}).get("config", {})
-    except Exception:
+    except JSONDecodeError:
         pass
     return {}
 
@@ -95,7 +97,7 @@ async def webhook_trigger(token: str, request: Request):
     # ── Parse payload ──────────────────────────────────────────────────────
     try:
         payload = json.loads(body) if body else {}
-    except Exception:
+    except JSONDecodeError:
         payload = {}
 
     workspace_id = g.get("workspace_id")
@@ -108,8 +110,10 @@ async def webhook_trigger(token: str, request: Request):
                 "INSERT INTO runs(task_id, graph_id, status, initial_payload, workspace_id) VALUES(%s,%s,'queued',%s,%s)",
                 (task.id, g["id"], json.dumps(payload), workspace_id)
             )
-    except Exception:
-        pass
+    except psycopg2.Error as exc:
+        log.warning("Could not record webhook run: %s", exc)
+    except Exception as exc:
+        log.warning("Unexpected error recording webhook run: %s", exc)
 
     # ── CORS response headers ──────────────────────────────────────────────
     headers = {}

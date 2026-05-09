@@ -86,7 +86,7 @@ def decode_json_value(value, fallback):
     if isinstance(value, str):
         try:
             return json.loads(value)
-        except Exception:
+        except JSONDecodeError:
             return fallback
     return value
 
@@ -125,7 +125,7 @@ def get_conn():
     finally:
         try:
             pool.putconn(conn, close=close_conn)
-        except Exception:
+        except (AttributeError, ValueError, RuntimeError):
             pass
 
 psycopg2.extras.register_uuid()
@@ -1303,7 +1303,7 @@ def log_audit(
                     ip,
                 ),
             )
-    except Exception:
+    except (psycopg2.Error, IOError, OSError):
         log.exception("audit_log write failed (non-fatal)")
 
 
