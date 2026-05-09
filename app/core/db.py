@@ -714,10 +714,15 @@ def upsert_credential(name, type_, secret, note="", workspace_id: int | None = N
         """, (name, type_, encrypt(secret), note, workspace_id))
         return dict(cur.fetchone())
 
-def update_credential(cred_id, type_, secret, note):
+def update_credential(cred_id, type_, secret, note, workspace_id: int | None = None):
     from app.crypto import encrypt
     with get_conn() as conn:
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        if workspace_id is not None:
+            # Verify ownership before mutating
+            cur.execute("SELECT id FROM credentials WHERE id=%s AND workspace_id=%s", (cred_id, workspace_id))
+            if cur.fetchone() is None:
+                return None  # Credential not found in this workspace
         if secret:
             cur.execute(
                 "UPDATE credentials SET type=%s, secret=%s, note=%s, updated_at=NOW() WHERE id=%s RETURNING id, name, type, note, created_at, updated_at",
@@ -730,9 +735,14 @@ def update_credential(cred_id, type_, secret, note):
             )
         return dict(cur.fetchone())
 
-def delete_credential(cred_id):
+def delete_credential(cred_id, workspace_id: int | None = None):
     with get_conn() as conn:
-        conn.cursor().execute("DELETE FROM credentials WHERE id=%s", (cred_id,))
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        if workspace_id is not None:
+            cur.execute("DELETE FROM credentials WHERE id=%s AND workspace_id=%s RETURNING id", (cred_id, workspace_id))
+        else:
+            cur.execute("DELETE FROM credentials WHERE id=%s RETURNING id", (cred_id,))
+        return cur.rowcount > 0
 
 # ── graph_versions ────────────────────────────────────────────────────────
 def list_graph_versions(graph_id):

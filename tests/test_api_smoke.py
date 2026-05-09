@@ -25,6 +25,15 @@ def app_with_mocks():
     import unittest.mock as mock
     import app.core.db as db_mod
 
+    import os, unittest.mock as mock
+    import app.core.db as db_mod
+
+    # Set required env vars before app.main is imported
+    os.environ["API_KEY"] = "test-ci-api-key-for-pytest-only"
+    os.environ["SECRET_KEY"] = "test-secret-key-for-pytest-only"
+    os.environ["DATABASE_URL"] = "postgresql://localhost/test"
+    os.environ["REDIS_URL"] = "redis://localhost/0"
+
     fake_conn = mock.MagicMock()
     fake_conn.__enter__ = lambda s: s
     fake_conn.__exit__ = mock.MagicMock(return_value=False)
@@ -36,7 +45,8 @@ def app_with_mocks():
     with mock.patch.object(db_mod, "get_conn", return_value=fake_conn), \
          mock.patch.object(db_mod, "run_migrations", return_value=None), \
          mock.patch("app.main.init_db", return_value=None), \
-         mock.patch("app.main.seed_example_graphs", return_value=None):
+         mock.patch("app.main.seed_example_graphs", return_value=None), \
+         mock.patch("app.main.load_secrets", return_value=None):
 
         from app.main import app as _app
         yield _app
