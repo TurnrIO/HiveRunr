@@ -29,24 +29,35 @@ def _login_redis():
 
 
 def _check_login_allowed(ip: str) -> None:
-    """Raise HTTP 429 if this IP is currently locked out."""
+    """Raise HTTP 429 if this IP is currently locked out.
+
+    Fail-closed: if Redis is unavailable, reject logins rather than
+    bypass brute-force protection.
+    """
     r = _login_redis()
     if r is None:
-        return  # Redis unavailable — fail open rather than block all logins
+        log.critical("Login check unavailable — Redis is down; rejecting login attempt from %s", ip)
+        raise HTTPException(503, "Login service temporarily unavailable")
     lockout_key = f"hiverunr:login:lockout:{ip}"
     if r.exists(lockout_key):
         ttl = r.ttl(lockout_key)
+        # Round to nearest 5-minute window to avoid leaking precise TTL
+        rounded_minutes = ((ttl + 59) // 60 + 1) * 5
         raise HTTPException(
             429,
-            f"Too many failed login attempts. Try again in {ttl // 60 + 1} minute(s).",
+            f"Too many failed login attempts. Try again in {rounded_minutes} minutes.",
         )
 
 
 def _record_login_failure(ip: str) -> None:
-    """Increment the failure counter; lock out the IP after _MAX_ATTEMPTS."""
+    """Increment the failure counter; lock out the IP after _MAX_ATTEMPTS.
+
+    Fail-closed: if Redis is unavailable, log and raise rather than silently permit.
+    """
     r = _login_redis()
     if r is None:
-        return
+        log.critical("Cannot record login failure — Redis is down for IP %s", ip)
+        raise HTTPException(503, "Login service temporarily unavailable")
     attempt_key = f"hiverunr:login:attempts:{ip}"
     lockout_key = f"hiverunr:login:lockout:{ip}"
     count = r.incr(attempt_key)
