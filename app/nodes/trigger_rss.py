@@ -41,7 +41,10 @@ Output shape
   "published":entries[0].published,
 }
 """
+import ipaddress
 import re
+import socket
+import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone, timedelta
@@ -57,6 +60,55 @@ _NS = {
     "dc":      "http://purl.org/dc/elements/1.1/",
     "media":   "http://search.yahoo.com/mrss/",
 }
+
+
+# ── URL validation — SSRF protection ─────────────────────────────────────────
+
+
+# Blocksheet CIDRs that are never safe to fetch from
+_BLOCKED_NETWORKS: list[ipaddress.IPv4Network] = [
+    ipaddress.IPv4Network("0.0.0.0/8"),       # current node
+    ipaddress.IPv4Network("10.0.0.0/8"),      # private
+    ipaddress.IPv4Network("127.0.0.0/8"),     # loopback
+    ipaddress.IPv4Network("169.254.0.0/16"), # AWS/GCP metadata (IMDS)
+    ipaddress.IPv4Network("172.16.0.0/12"),  # private
+    ipaddress.IPv4Network("192.168.0.0/16"),  # private
+    ipaddress.IPv4Network("224.0.0.0/4"),     # multicast
+    ipaddress.IPv4Network("240.0.0.0/4"),     # reserved
+    ipaddress.IPv4Network("169.254.169.254/32"),  # AWS metadata endpoint
+]
+
+
+def _validate_feed_url(url: str) -> None:
+    """"Raise ValueError if the URL is not a safe HTTPS feed URL.
+
+
+    Blocks:
+    - Non-HTTPS schemes (http, file, ftp, gopher, etc.)
+    - IP addresses in blocked ranges (including cloud metadata IPs)
+    - Unsafe hostnames (empty host, literal IP)
+
+    Allows public domain names that resolve to safe IPs.
+    """
+    parsed = urllib.parse.urlparse(url)
+    if parsed.scheme.lower() != "https":
+        raise ValueError(f"trigger.rss: only HTTPS feeds are supported; got scheme '{parsed.scheme}'")
+    if not parsed.netloc:
+        raise ValueError("trigger.rss: URL has no host")
+    # Resolve the hostname and check each resolved IP
+    try:
+        host = parsed.netloc.split(":")[0]  # strip port
+        infos = urllib.parse.getaddrinfo(host, 443 if parsed.scheme == "https" else 80,
+                                        proto=socket.IPPROTO_TCP)
+    except Exception as exc:
+        raise ValueError(f"trigger.rss: could not resolve host '{host}': {exc}") from exc
+    for family, _, _, _, sockaddr in infos:
+        if family != socket.AF_INET:
+            continue
+        ip = ipaddress.IPv4Address(sockaddr[0])
+        for network in _BLOCKED_NETWORKS:
+            if ip in network:
+                raise ValueError(f"trigger.rss: host '{host}' resolved to blocked IP {ip}")
 
 
 # ── Date parsing ──────────────────────────────────────────────────────────────
@@ -165,6 +217,8 @@ def run(config, inp, context, logger, creds=None, **kwargs):
     url = _render(config.get("url", ""), context, creds).strip()
     if not url:
         raise ValueError("trigger.rss: 'url' is required")
+
+    _validate_feed_url(url)  # SSRF guard — raises ValueError on blocked URLs
 
     lookback_minutes = int(_render(config.get("lookback_minutes", "60"), context, creds) or 60)
     max_entries      = int(_render(config.get("max_entries", "50"),       context, creds) or 50)
