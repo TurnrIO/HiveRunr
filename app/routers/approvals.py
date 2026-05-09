@@ -154,19 +154,52 @@ def approval_status(token: str, request: Request):
 
 @router.get("/api/approvals")
 def list_approvals(request: Request, status: str = "", limit: int = 50):
+    from app.auth import get_current_user
+    from app.deps import _resolve_workspace
+    user = get_current_user(request)
+    if not user:
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
     _check_admin(request)
+    workspace_id = _resolve_workspace(request, user)
     with get_conn() as conn:
         cur = conn.cursor()
-        if status:
-            cur.execute(
-                "SELECT * FROM approvals WHERE status=%s ORDER BY created_at DESC LIMIT %s",
-                (status, limit),
-            )
+        is_global_owner = user.get("role") == "owner"
+        # Check if workspace_id column exists before using it
+        col_exists = False
+        try:
+            cur.execute("SELECT 1 FROM information_schema.columns WHERE table_name='approvals' AND column_name='workspace_id'")
+            col_exists = cur.fetchone() is not None
+        except Exception:
+            pass
+        # Determine scope: non-owners/global-admins must be scoped to their workspace
+        if col_exists and workspace_id is not None and not is_global_owner:
+            scope_col = "workspace_id"
+            scope_val = workspace_id
         else:
-            cur.execute(
-                "SELECT * FROM approvals ORDER BY created_at DESC LIMIT %s",
-                (limit,),
-            )
+            scope_col = None
+            scope_val = None
+        if status:
+            if scope_col:
+                cur.execute(
+                    f"SELECT * FROM approvals WHERE status=%s AND {scope_col}=%s ORDER BY created_at DESC LIMIT %s",
+                    (status, scope_val, limit),
+                )
+            else:
+                cur.execute(
+                    "SELECT * FROM approvals WHERE status=%s ORDER BY created_at DESC LIMIT %s",
+                    (status, limit),
+                )
+        else:
+            if scope_col:
+                cur.execute(
+                    f"SELECT * FROM approvals WHERE {scope_col}=%s ORDER BY created_at DESC LIMIT %s",
+                    (scope_val, limit),
+                )
+            else:
+                cur.execute(
+                    "SELECT * FROM approvals ORDER BY created_at DESC LIMIT %s",
+                    (limit,),
+                )
         return cur.fetchall()
 
 
