@@ -236,14 +236,17 @@ def api_cancel_run(run_id: int, request: Request):
     DB row if the run is still in a cancellable state.
     """
     user = _require_run_scope(request)
+    workspace_id = _resolve_workspace(request, user)
     from app.core.db import get_conn
     import psycopg2.extras
     with get_conn() as conn:
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-        cur.execute("SELECT task_id, status FROM runs WHERE id=%s", (run_id,))
+        cur.execute("SELECT task_id, status, workspace_id FROM runs WHERE id=%s", (run_id,))
         row = cur.fetchone()
     if not row:
         raise HTTPException(404, f"Run {run_id} not found")
+    if workspace_id is not None and row.get("workspace_id") != workspace_id:
+        raise HTTPException(403, "Run belongs to a different workspace")
     if row["status"] not in ("queued", "running"):
         raise HTTPException(400, f"Run is already {row['status']} — cannot cancel")
     task_id = row["task_id"]
@@ -324,15 +327,18 @@ class _ReplayBody(BaseModel):
 @router.get("/api/runs/{run_id}/payload")
 def api_get_run_payload(run_id: int, request: Request):
     """Return the initial_payload stored for a run (used to pre-fill replay modal)."""
-    _require_run_scope(request)
+    user = _require_run_scope(request)
+    workspace_id = _resolve_workspace(request, user)
     from app.core.db import get_conn
     import psycopg2.extras
     with get_conn() as conn:
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-        cur.execute("SELECT initial_payload FROM runs WHERE id=%s", (run_id,))
+        cur.execute("SELECT initial_payload, workspace_id FROM runs WHERE id=%s", (run_id,))
         row = cur.fetchone()
     if not row:
         raise HTTPException(404, f"Run {run_id} not found")
+    if workspace_id is not None and row.get("workspace_id") != workspace_id:
+        raise HTTPException(403, "Run belongs to a different workspace")
     payload = decode_json_value(row["initial_payload"], {})
     return {"run_id": run_id, "payload": payload}
 
@@ -345,15 +351,18 @@ def api_replay_run(run_id: int, request: Request, body: _ReplayBody = None):
     allowing callers to tweak the trigger data before re-running.
     """
     user = _require_run_scope(request)
+    workspace_id = _resolve_workspace(request, user)
     from app.core.db import get_conn
     import psycopg2.extras
     from app.worker import enqueue_graph
     with get_conn() as conn:
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-        cur.execute("SELECT graph_id, initial_payload FROM runs WHERE id=%s", (run_id,))
+        cur.execute("SELECT graph_id, initial_payload, workspace_id FROM runs WHERE id=%s", (run_id,))
         row = cur.fetchone()
     if not row:
         raise HTTPException(404, f"Run {run_id} not found")
+    if workspace_id is not None and row.get("workspace_id") != workspace_id:
+        raise HTTPException(403, "Run belongs to a different workspace")
     graph_id = row["graph_id"]
     initial_payload = row["initial_payload"]
     if not graph_id:
