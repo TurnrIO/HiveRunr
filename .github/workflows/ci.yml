@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, Flux]
   pull_request:
-    branches: [main]
+    branches: [main, Flux]
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
