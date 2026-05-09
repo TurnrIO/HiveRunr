@@ -287,7 +287,17 @@ def startup():
 # ── Health ────────────────────────────────────────────────────────────────────
 @app.get("/health")
 def health():
-    return {"status": "ok", "version": __version__}
+    # Check frontend dist availability (detect missing dist state)
+    dist_available = _docker_dist.is_dir() and any(_docker_dist.iterdir()) if _docker_dist.exists() else False
+    status_detail = {
+        "version": __version__,
+        "frontend_dist": {
+            "path": str(DIST_DIR),
+            "available": dist_available,
+            "note": "run 'docker compose up -d --build' if unavailable" if not dist_available else "ok",
+        },
+    }
+    return {"status": "ok", **status_detail}
 
 
 # ── Page routes ───────────────────────────────────────────────────────────────
