@@ -400,9 +400,15 @@ def api_reset(request: Request):
     user = _check_admin(request)
     from app.core.db import get_conn
     with get_conn() as conn:
+        conn.autocommit = False
         cur = conn.cursor()
-        for t in ["runs", "schedules", "graph_versions", "graph_workflows", "workflows"]:
-            cur.execute(f"DELETE FROM {t}")
+        try:
+            for t in ["runs", "schedules", "graph_versions", "graph_workflows", "workflows"]:
+                cur.execute(f"DELETE FROM {t}")
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
     log_audit(user["username"], "admin.reset", None, None, {"tables": "runs,schedules,graph_versions,graph_workflows,workflows"},
               request.client.host if request.client else None)
     return {"reset": True}
