@@ -40,6 +40,7 @@ from __future__ import annotations
 
 import json
 import logging
+from json import JSONDecodeError
 from ._utils import _render, _resolve_cred_raw
 
 log = logging.getLogger(__name__)
@@ -88,8 +89,12 @@ def _jira_request(
         body = exc.read()
         try:
             err_body = json.loads(body)
-        except Exception:
-            err_body = {"raw": body.decode(errors="replace")}
+        except JSONDecodeError:
+            # Log a safe prefix only — raw response body may contain sensitive Jira data
+            safe_body = body.decode(errors="replace")[:200]
+            log.warning("Jira API error %s: response was not JSON; body prefix: %r",
+                        exc.code, safe_body)
+            err_body = {"message": "(raw non-JSON response from Jira)"}
         raise RuntimeError(
             f"Jira API error {exc.code}: {err_body.get('errorMessages') or err_body.get('message') or err_body}"
         ) from exc
