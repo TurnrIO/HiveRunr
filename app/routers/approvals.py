@@ -171,7 +171,8 @@ def list_approvals(request: Request, status: str = "", limit: int = 50):
             col_exists = cur.fetchone() is not None
         except Exception:
             pass
-        # Determine scope: non-owners/global-admins must be scoped to their workspace
+        # Scope: always scope to workspace if one is contextually available,
+        # unless the user is the global owner (who can see all workspaces)
         if col_exists and workspace_id is not None and not is_global_owner:
             scope_col = "workspace_id"
             scope_val = workspace_id
