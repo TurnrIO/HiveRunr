@@ -50,8 +50,8 @@ def _get_webhook_trigger_config(g: dict) -> dict:
                 return node.get("data", {}).get("config", {})
     except JSONDecodeError:
         log.warning("webhook trigger config parse failed: graph_data is not valid JSON")
-    except Exception as exc:
-        log.warning("webhook trigger config parse failed: %s", exc)
+    except (AttributeError, KeyError, TypeError) as exc:
+        log.warning("webhook trigger config parse failed accessing graph_data: %s", exc)
     return {}
 
 
