@@ -178,11 +178,14 @@ class TestLoginBruteForce:
                 _check_login_allowed("1.2.3.4")
         assert exc_info.value.status_code == 429
 
-    def test_redis_unavailable_fails_open(self):
+    def test_redis_unavailable_fails_closed(self):
+        """If Redis is unavailable, _check_login_allowed raises 503 (fail closed)."""
+        from fastapi import HTTPException
         from app.routers.auth import _check_login_allowed
         with patch("app.routers.auth._login_redis", return_value=None):
-            # Should not raise even without Redis
-            _check_login_allowed("1.2.3.4")
+            with pytest.raises(HTTPException) as exc_info:
+                _check_login_allowed("1.2.3.4")
+            assert exc_info.value.status_code == 503
 
     def test_fifth_failure_triggers_lockout(self):
         from app.routers.auth import _record_login_failure
