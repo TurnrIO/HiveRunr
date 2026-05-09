@@ -701,7 +701,13 @@ def load_all_credentials(workspace_id: int | None = None):
         return {r['name']: decrypt(r['secret']) for r in cur.fetchall()}
 
 def upsert_credential(name, type_, secret, note="", workspace_id: int | None = None):
-    from app.crypto import encrypt
+    from app.crypto import encrypt, encryption_configured
+    if not encryption_configured():
+        raise RuntimeError(
+            "SECRET_KEY is not set — cannot create or update credentials. "
+            "Set SECRET_KEY in .env before storing credentials. "
+            "Generate one with: python -c \"from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())\""
+        )
     with get_conn() as conn:
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         cur.execute("""
@@ -715,7 +721,13 @@ def upsert_credential(name, type_, secret, note="", workspace_id: int | None = N
         return dict(cur.fetchone())
 
 def update_credential(cred_id, type_, secret, note, workspace_id: int | None = None):
-    from app.crypto import encrypt
+    from app.crypto import encrypt, encryption_configured
+    if not encryption_configured():
+        raise RuntimeError(
+            "SECRET_KEY is not set — cannot create or update credentials. "
+            "Set SECRET_KEY in .env before storing credentials. "
+            "Generate one with: python -c \"from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())\""
+        )
     with get_conn() as conn:
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         if workspace_id is not None:
