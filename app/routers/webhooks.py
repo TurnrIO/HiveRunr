@@ -5,6 +5,8 @@ import json
 import logging
 import os
 
+log = logging.getLogger(__name__)
+
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
 
@@ -31,8 +33,8 @@ def _check_webhook_rate(token: str) -> tuple[bool, int, int]:
         pipe.expire(key, window)
         count, _ = pipe.execute()
         return count <= limit, limit, window
-    except Exception:
-        log.error(f"Redis unavailable for webhook rate limit check: {token} — fail open is unsafe, returning denied")
+    except (OSError, TimeoutError):  # Redis connection/network failures → fail closed
+        log.error(f"Redis unavailable for webhook rate limit check: {token} — fail closed, returning denied")
         return False, limit, window
 
 
@@ -47,7 +49,9 @@ def _get_webhook_trigger_config(g: dict) -> dict:
             if node.get("type") == "trigger.webhook" or node.get("data", {}).get("type") == "trigger.webhook":
                 return node.get("data", {}).get("config", {})
     except JSONDecodeError:
-        pass
+        log.warning("webhook trigger config parse failed: graph_data is not valid JSON")
+    except Exception as exc:
+        log.warning("webhook trigger config parse failed: %s", exc)
     return {}
 
 
