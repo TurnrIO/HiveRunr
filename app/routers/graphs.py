@@ -134,7 +134,8 @@ async def api_graph_import(request: Request):
 @router.get("/api/graphs/by-slug/{slug}")
 def api_graph_by_slug(slug: str, request: Request):
     user = _check_admin(request)
-    g = get_graph_by_slug(slug)
+    workspace_id = _resolve_workspace(request, user)
+    g = get_graph_by_slug(slug, workspace_id=workspace_id)
     if not g:
         raise HTTPException(404, "Graph not found")
     if not _is_admin_or_owner(user) and user.get("id", 0) != 0:

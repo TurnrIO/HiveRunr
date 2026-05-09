@@ -596,10 +596,13 @@ def get_graph(graph_id):
         row = cur.fetchone()
         return dict(row) if row else None
 
-def get_graph_by_slug(slug):
+def get_graph_by_slug(slug, workspace_id=None):
     with get_conn() as conn:
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-        cur.execute("SELECT * FROM graph_workflows WHERE slug=%s", (slug,))
+        if workspace_id is not None:
+            cur.execute("SELECT * FROM graph_workflows WHERE slug=%s AND workspace_id=%s", (slug, workspace_id))
+        else:
+            cur.execute("SELECT * FROM graph_workflows WHERE slug=%s", (slug,))
         row = cur.fetchone()
         return dict(row) if row else None
 
