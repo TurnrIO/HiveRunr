@@ -26,12 +26,20 @@ def _resolve_cred_raw(cred_name: str, creds: dict):
     return raw
 
 
-def _render(text: str, ctx: dict, creds: dict = None) -> str:
+def _render(text: str, ctx: dict, creds: dict = None, predecessor_ids=None) -> str:
     """
     Render template variables in text.
     Supports:
     - {{node_id.field}} — reference output of a previous node
     - {{creds.name}} or {{creds.name.field}} — credential vault access
+
+    Args:
+        predecessor_ids: set of node IDs that are actual predecessors of the
+            current node in the execution graph. Node references outside this
+            set are treated as unsafe and return the placeholder unchanged,
+            preventing cross-node data exfiltration via template injection.
+            When None (default), no graph-based restriction is applied
+            (backward-compatible for direct callers not invoked via executor).
     """
     if not isinstance(text, str):
         return text
@@ -61,6 +69,12 @@ def _render(text: str, ctx: dict, creds: dict = None) -> str:
         parts = key.split('.', 1)
         node_id = parts[0]
         field   = parts[1] if len(parts) > 1 else None
+
+        # Guard: only allow references to actual predecessors in the graph
+        # when predecessor_ids is explicitly provided (via executor path)
+        if predecessor_ids is not None and node_id not in predecessor_ids:
+            return m.group(0)
+
         val = ctx.get(node_id)
         if val is None:
             return m.group(0)

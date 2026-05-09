@@ -113,13 +113,18 @@ def _run_node(node_type, config, inp, context, logger, edges, nodes_map, creds=N
     handler = get_handler(node_type)
     if handler is None:
         raise ValueError(f"Unknown node type: {node_type!r} — not found in node registry")
-    upstream_ids = [e['source'] for e in edges if e['target'] == kwargs.get('_nid', '')]
+    nid = kwargs.get('_nid', '')
+    # upstream_ids: list for backward-compat callers (action_merge, action_aggregate)
+    upstream_ids = [e['source'] for e in edges if e['target'] == nid]
+    # predecessor_ids: set for template injection guard in _render
+    predecessor_ids = set(upstream_ids)
     return handler(
         config, inp, context, logger,
         creds=creds,
         upstream_ids=upstream_ids,
         edges=edges,
         nodes_map=nodes_map,
+        predecessor_ids=predecessor_ids,
         **{k: v for k, v in kwargs.items() if k != '_nid'},
     )
 
