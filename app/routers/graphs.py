@@ -19,6 +19,7 @@ from app.core.db import (
     create_invite_token,
 )
 from app.worker import enqueue_graph
+from app.core.executor import run_graph
 
 log = logging.getLogger(__name__)
 router = APIRouter()
@@ -284,20 +285,48 @@ async def api_graph_run(graph_id: int, request: Request):
     task_kwargs = {}
     if start_node_id:
         task_kwargs = {"start_node_id": start_node_id, "prior_context": prior_context or {}}
-    task = enqueue_graph.apply_async(
-        args=[graph_id, payload], kwargs=task_kwargs, priority=flow_priority
-    )
+
+    task_id = None
+    try:
+        task = enqueue_graph.apply_async(
+            args=[graph_id, payload], kwargs=task_kwargs, priority=flow_priority
+        )
+        task_id = task.id
+    except Exception as exc:
+        log.warning("Celery unavailable (%s) — running graph inline", exc)
+        # Fall back to inline execution so the API still responds
+        import uuid
+        task_id = str(uuid.uuid4())
+        try:
+            from app.core.db import update_run, init_db
+            init_db()
+            update_run(task_id, "running")
+            graph_data = json.loads(g.get('graph_json') or '{}')
+            result = run_graph(
+                graph_data,
+                payload,
+                workspace_id=g.get('workspace_id'),
+                start_node_id=start_node_id,
+                prior_context=prior_context,
+            )
+            update_run(task_id, "succeeded", result=result,
+                       traces=result.get('traces', []))
+        except Exception as inline_err:
+            log.exception("Inline graph run failed")
+            update_run(task_id, "failed", result={"error": str(inline_err)})
+            raise HTTPException(500, f"Graph run failed: {inline_err}")
+
     try:
         from app.core.db import get_conn
         with get_conn() as conn:
             conn.cursor().execute(
                 "INSERT INTO runs(task_id, graph_id, status, initial_payload, workspace_id) VALUES(%s,%s,'queued',%s,%s)",
-                (task.id, graph_id, json.dumps(payload), workspace_id)
+                (task_id, graph_id, json.dumps(payload), workspace_id)
             )
     except psycopg2.Error as e:
         log.warning(f"Could not pre-create run record: {e}")
     log_audit(user["username"], "graph.run", "graph", graph_id,
-              {"name": g["name"], "task_id": task.id},
+              {"name": g["name"], "task_id": task_id},
               request.client.host if request.client else None)
     return {"queued": True, "task_id": task.id, "graph": g["name"]}
 

@@ -10,6 +10,7 @@ from fastapi.responses import JSONResponse
 
 from app.core.db import get_graph_by_token, get_ratelimit_policy
 from app.worker import enqueue_graph
+from app.core.executor import run_graph
 
 router = APIRouter()
 
@@ -101,14 +102,41 @@ async def webhook_trigger(token: str, request: Request):
         payload = {}
 
     workspace_id = g.get("workspace_id")
-    task = enqueue_graph.apply_async(args=[g["id"], payload],
-                                     priority=g.get("priority", 5))
+
+    task_id = None
+    try:
+        task = enqueue_graph.apply_async(
+            args=[g["id"], payload],
+            priority=g.get("priority", 5),
+        )
+        task_id = task.id
+    except Exception as exc:
+        log.warning("Celery unavailable (%s) — running webhook graph inline", exc)
+        import uuid
+        task_id = str(uuid.uuid4())
+        try:
+            from app.core.db import init_db as _init_db, update_run
+            _init_db()
+            update_run(task_id, "running")
+            graph_data = json.loads(g.get('graph_json') or '{}')
+            result = run_graph(
+                graph_data,
+                payload,
+                workspace_id=workspace_id,
+            )
+            update_run(task_id, "succeeded", result=result,
+                       traces=result.get('traces', []))
+        except Exception as inline_err:
+            log.exception("Inline webhook graph run failed")
+            update_run(task_id, "failed", result={"error": str(inline_err)})
+            raise HTTPException(500, f"Graph run failed: {inline_err}")
+
     try:
         from app.core.db import get_conn
         with get_conn() as conn:
             conn.cursor().execute(
                 "INSERT INTO runs(task_id, graph_id, status, initial_payload, workspace_id) VALUES(%s,%s,'queued',%s,%s)",
-                (task.id, g["id"], json.dumps(payload), workspace_id)
+                (task_id, g["id"], json.dumps(payload), workspace_id)
             )
     except psycopg2.Error as exc:
         log.warning("Could not record webhook run: %s", exc)

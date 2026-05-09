@@ -18,6 +18,7 @@ from app.core.db import (
     decode_json_value,
     log_audit,
 )
+from app.core.executor import run_graph
 
 log = logging.getLogger(__name__)
 router = APIRouter()
@@ -369,18 +370,45 @@ def api_replay_run(run_id: int, request: Request, body: _ReplayBody = None):
 
     from app.deps import _resolve_workspace
     workspace_id = _resolve_workspace(request, user)
-    task = enqueue_graph.apply_async(args=[graph_id, payload],
-                                     priority=g.get("priority", 5))
+
+    task_id = None
+    try:
+        task = enqueue_graph.apply_async(
+            args=[graph_id, payload],
+            priority=g.get("priority", 5),
+        )
+        task_id = task.id
+    except Exception as exc:
+        log.warning("Celery unavailable (%s) — replaying graph inline", exc)
+        import uuid
+        task_id = str(uuid.uuid4())
+        try:
+            from app.core.db import init_db as _init_db
+            _init_db()
+            update_run(task_id, "running")
+            graph_data = json.loads(g.get('graph_json') or '{}')
+            result = run_graph(
+                graph_data,
+                payload,
+                workspace_id=g.get('workspace_id'),
+            )
+            update_run(task_id, "succeeded", result=result,
+                       traces=result.get('traces', []))
+        except Exception as inline_err:
+            log.exception("Inline graph replay failed")
+            update_run(task_id, "failed", result={"error": str(inline_err)})
+            raise HTTPException(500, f"Graph replay failed: {inline_err}")
+
     with get_conn() as conn:
         conn.cursor().execute(
             "INSERT INTO runs(task_id, graph_id, status, initial_payload, workspace_id) VALUES(%s,%s,'queued',%s,%s)",
             (task.id, graph_id, json.dumps(payload), workspace_id)
         )
     log_audit(user["username"], "run.replay", "graph", graph_id,
-              {"replayed_run_id": run_id, "task_id": task.id, "graph": g["name"],
+              {"replayed_run_id": run_id, "task_id": task_id, "graph": g["name"],
                "payload_overridden": body is not None and body.payload is not None},
               request.client.host if request.client else None)
-    return {"queued": True, "task_id": task.id, "graph": g["name"], "replayed_run_id": run_id}
+    return {"queued": True, "task_id": task_id, "graph": g["name"], "replayed_run_id": run_id}
 
 
 # ── Real-time run log streaming (SSE) ─────────────────────────────────────────

@@ -40,7 +40,8 @@ load_secrets()
 from app.telemetry import setup_tracing
 setup_tracing()
 
-from app.core.db import init_db, list_schedules, delete_schedule, purge_expired_sessions
+from app.core.db import init_db, list_schedules, delete_schedule, purge_expired_sessions, update_run
+from app.core.executor import run_graph
 
 log = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -117,20 +118,40 @@ def _make_job(sched, scheduler_ref=None):
                 _priority = int((_g or {}).get("priority", 5))
             except Exception:
                 _priority = 5
-            task = enqueue_graph.apply_async(args=[sched["graph_id"], payload], priority=_priority)
-            # Pre-create a run record scoped to the schedule's workspace
+
+            task_id = None
             try:
-                from app.core.db import get_conn
-                workspace_id = sched.get("workspace_id")
-                with get_conn() as conn:
-                    conn.cursor().execute(
-                        "INSERT INTO runs(task_id, graph_id, status, initial_payload, workspace_id)"
-                        " VALUES(%s,%s,'queued',%s,%s)"
-                        " ON CONFLICT (task_id) DO NOTHING",
-                        (task.id, sched["graph_id"], _json.dumps(payload), workspace_id),
-                    )
+                task = enqueue_graph.apply_async(args=[sched["graph_id"], payload], priority=_priority)
+                task_id = task.id
             except Exception as exc:
-                log.warning("Could not pre-create run record for schedule %s: %s", sid, exc)
+                log.warning("Celery unavailable (%s) — running scheduled graph inline", exc)
+                import uuid
+                task_id = str(uuid.uuid4())
+                try:
+                    _g_data = json.loads(_g.get('graph_json') or '{}') if _g else {}
+                    update_run(task_id, "running")
+                    result = run_graph(_g_data, payload, workspace_id=sched.get("workspace_id"))
+                    update_run(task_id, "succeeded", result=result,
+                               traces=result.get('traces', []))
+                except Exception as inline_err:
+                    log.exception("Inline scheduled graph run failed")
+                    update_run(task_id, "failed", result={"error": str(inline_err)})
+                    return  # skip run record, graph failed inline
+
+            # Pre-create a run record scoped to the schedule's workspace
+            if task_id:
+                try:
+                    from app.core.db import get_conn
+                    workspace_id = sched.get("workspace_id")
+                    with get_conn() as conn:
+                        conn.cursor().execute(
+                            "INSERT INTO runs(task_id, graph_id, status, initial_payload, workspace_id)"
+                            " VALUES(%s,%s,'queued',%s,%s)"
+                            " ON CONFLICT (task_id) DO NOTHING",
+                            (task_id, sched["graph_id"], _json.dumps(payload), workspace_id),
+                        )
+                except Exception as exc:
+                    log.warning("Could not pre-create run record for schedule %s: %s", sid, exc)
         elif sched.get("workflow", "").startswith("script:"):
             script_name = sched["workflow"][len("script:"):]
             enqueue_script.delay(script_name, payload)
