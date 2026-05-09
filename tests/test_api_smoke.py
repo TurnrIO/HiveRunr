@@ -22,10 +22,8 @@ def app_with_mocks():
     their own TestClient instance (function-scoped) to avoid event-loop
     lifecycle issues with module-scoped clients.
     """
+    import os
     import unittest.mock as mock
-    import app.core.db as db_mod
-
-    import os, unittest.mock as mock
     import app.core.db as db_mod
 
     # Set required env vars before app.main is imported
