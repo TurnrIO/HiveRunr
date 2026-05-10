@@ -248,7 +248,7 @@ def _exec_node(nid, nodes_map, edges, context, creds, logger, succ, _depth):
                 )
                 last_err = None
                 break
-            except (JSONDecodeError, OSError, ValueError) as e:
+            except (JSONDecodeError, OSError, ValueError, TypeError, RuntimeError) as e:
                 last_err = e
                 logger(f"ERROR attempt {attempt+1} {ntype} [{nid}]: {e}")
 
@@ -365,8 +365,11 @@ def run_graph(graph_data: dict, initial_payload: dict = None, logger=None, _dept
     try:
         from app.core.db import load_all_credentials
         creds = load_all_credentials(workspace_id=workspace_id)
-    except (OSError, TimeoutError) as e:
+    except (OSError, TimeoutError, ImportError) as e:
         log.warning(f"Could not load credentials: {e}")
+        creds = {}
+    except Exception:
+        # DB not available (no DB, network error, etc.) — degrade gracefully
         creds = {}
 
     nodes_map    = {n['id']: n for n in nodes}
