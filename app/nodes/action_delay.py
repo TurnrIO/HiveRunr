@@ -14,5 +14,6 @@ def run(config, inp, context, logger, creds=None, **kwargs):
     except (ValueError, TypeError):
         secs = 1.0
     time.sleep(max(0.0, secs))
+    logger.info("Delay: slept %s seconds", secs)
     return {'slept': secs}
 

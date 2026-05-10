@@ -20,6 +20,7 @@ def run(config, inp, context, logger, creds=None, **kwargs):
     upstream_outputs = [context.get(uid) for uid in upstream_ids if context.get(uid) is not None]
 
     if mode == 'all':
+        logger.info("Merge: mode=all, merged %s outputs", len(upstream_outputs))
         return {'merged': upstream_outputs, 'count': len(upstream_outputs)}
 
     elif mode == 'dict':

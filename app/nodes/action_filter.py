@@ -18,5 +18,6 @@ def run(config, inp, context, logger, creds=None, **kwargs):
     kept = [item for item in items
             if eval(expr, {'__builtins__': safe_builtins}, {'item': item, 'context': context, 'input': inp})]
 
+    logger.info("Filter: kept %s/%s items", len(kept), len(items))
     return {'items': kept, 'count': len(kept), 'total': len(items)}
 

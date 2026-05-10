@@ -94,6 +94,8 @@ def run(config, inp, context, logger, creds=None, **kwargs):
     if not api_key:
         raise ValueError("LLM Call: no api_key configured and OPENAI_API_KEY env not set")
 
+    logger.info("LLM Call: model=%s api_base=%s", model, api_base)
+
     # ── SSRF check on api_base ───────────────────────────────────────────
     _check_ssrf(api_base)
 

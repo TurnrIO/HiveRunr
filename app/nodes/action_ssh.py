@@ -35,6 +35,8 @@ def run(config, inp, context, logger, creds=None, **kwargs):
 
     port = int(port_str or 22)
 
+    logger.info("SSH: host=%s port=%s user=%s", host, port, username)
+
     if not host:
         raise ValueError("SSH: no host configured")
     if not command:

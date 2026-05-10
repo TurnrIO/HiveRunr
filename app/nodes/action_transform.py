@@ -22,5 +22,6 @@ def run(config, inp, context, logger, creds=None, **kwargs):
                 f"Cannot slice a dict with {notation} — 'input' is a dict, not a list.{hint}"
             ) from None
         raise
+    logger.info("Transform: evaluated expression")
     return result
 

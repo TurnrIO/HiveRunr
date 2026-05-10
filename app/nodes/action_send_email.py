@@ -49,6 +49,7 @@ def run(config, inp, context, logger, creds=None, **kwargs):
     if not host:
         raise ValueError("Send Email: no SMTP host configured")
 
+    logger.info("Send Email: to=%s subject=%s", to, subject)
     from_addr = os.environ.get('SMTP_FROM', '') or user
 
     msg = MIMEMultipart()

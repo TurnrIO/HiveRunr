@@ -10,5 +10,6 @@ def run(config, inp, context, logger, creds=None, **kwargs):
     key = config.get('key', 'var')
     val = _render(config.get('value', ''), context, creds)
     context[key] = val
+    logger.info("Set variable: %s", key)
     return {key: val}
 

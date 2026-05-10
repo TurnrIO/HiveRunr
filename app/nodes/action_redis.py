@@ -71,6 +71,7 @@ def run(config, inp, context, logger, creds=None, **kwargs):
     if not key and operation not in ("ping",):
         raise ValueError("Redis: 'key' is required")
 
+    logger.info("Redis: op=%s key=%s", operation, key)
     r = _get_client(config, context, creds)
 
     try:

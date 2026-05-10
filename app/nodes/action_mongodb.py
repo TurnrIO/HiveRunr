@@ -40,6 +40,8 @@ def run(config, inp, context, logger, creds=None, **kwargs):
     db_name   = _render(config.get("database", ""), context, creds)
     coll_name = _render(config.get("collection", ""), context, creds)
     op        = _render(config.get("operation", "find"), context, creds)
+
+    logger.info("MongoDB: op=%s db=%s coll=%s", op, db_name, coll_name)
     try: limit_val = int(_render(config.get("limit", "100"), context, creds))
     except (ValueError, TypeError): limit_val = 100
 

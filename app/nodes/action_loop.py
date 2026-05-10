@@ -19,6 +19,6 @@ def run(config, inp, context, logger, creds=None, **kwargs):
         items = [items]
 
     items = items[:max_items]
-
+    logger.info("Loop: prepared %s items (max=%s)", len(items), max_items)
     return {'items': items, 'count': len(items), '__loop__': True}
 
