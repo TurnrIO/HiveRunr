@@ -3,6 +3,7 @@ import json
 import socket
 import ipaddress
 import urllib.parse
+import httpx
 from app.nodes._utils import _render, _resolve_cred_raw
 
 NODE_TYPE = "action.http_request"
@@ -82,7 +83,6 @@ def _check_url_ssrf(url: str) -> None:
 
 def run(config, inp, context, logger, creds=None, **kwargs):
     """Execute HTTP request and return response."""
-    import httpx
     import urllib.parse
 
     url     = _render(config.get("url", ""),    context, creds)
