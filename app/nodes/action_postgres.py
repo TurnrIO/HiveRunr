@@ -190,7 +190,7 @@ def run(config: dict, inp: dict, context: dict, logger, creds=None, **kwargs) ->
     try: row_limit = int(_render(str(config.get("row_limit", "1000")), context, creds))
     except (ValueError, TypeError): row_limit = 1000
 
-    logger(f"[action.postgres] driver={driver} query={query[:80]}{'…' if len(query)>80 else ''}")
+    logger.info("[action.postgres] driver=%s query=%s", driver, query[:80] + ('…' if len(query)>80 else ''))
 
     conn = _connect(dsn, driver, connect_kwargs)
     db_conn, placeholder = conn
@@ -217,12 +217,12 @@ def run(config: dict, inp: dict, context: dict, logger, creds=None, **kwargs) ->
             columns, rows = _rows_to_dicts(cur, driver)
             if row_limit and len(rows) > row_limit:
                 rows = rows[:row_limit]
-                logger(f"[action.postgres] result truncated to {row_limit} rows")
+                logger.info("[action.postgres] result truncated to %s rows", row_limit)
 
         # Commit for write statements (psycopg2/pymysql are not autocommit by default)
         db_conn.commit()
 
-        logger(f"[action.postgres] rows={len(rows)} affected={affected}")
+        logger.info("[action.postgres] rows=%s affected=%s", len(rows), affected)
         return {
             "rows":     rows,
             "count":    len(rows),

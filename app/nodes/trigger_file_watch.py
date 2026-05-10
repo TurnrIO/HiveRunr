@@ -67,7 +67,7 @@ def _scan_local(path: str, pattern: str, recursive: bool,
         try:
             entries = list(os.scandir(dirpath))
         except PermissionError as exc:
-            logger(f"[trigger.file_watch] Permission denied: {exc}")
+            logger.info("[trigger.file_watch] Permission denied: %s", exc)
             return
         for entry in entries:
             if entry.is_dir(follow_symlinks=False):
@@ -192,7 +192,7 @@ def run(config: dict, inp: dict, context: dict, logger, creds=None, **kwargs) ->
             transport.connect(username=username or None, password=password or None)
             sftp = paramiko.SFTPClient.from_transport(transport)
             try:
-                logger(f"[trigger.file_watch] SFTP {host}:{port} path={path} pattern={pattern}")
+                logger.info("[trigger.file_watch] SFTP %s:%s path=%s pattern=%s", host, port, path, pattern)
                 files = _scan_sftp(sftp, path, pattern, recursive,
                                    newer_than, older_than, min_size)
             finally:
@@ -206,12 +206,11 @@ def run(config: dict, inp: dict, context: dict, logger, creds=None, **kwargs) ->
             raise ValueError(
                 f"trigger.file_watch: path '{path}' does not exist or is not a directory"
             )
-        logger(f"[trigger.file_watch] local path={path} pattern={pattern} "
-               f"lookback={lookback_min}m recursive={recursive}")
+        logger.info("[trigger.file_watch] local path=%s pattern=%s lookback=%sm recursive=%s", path, pattern, lookback_min, recursive)
         files = _scan_local(path, pattern, recursive,
                             newer_than, older_than, min_size, logger)
 
-    logger(f"[trigger.file_watch] found {len(files)} matching file(s)")
+    logger.info("[trigger.file_watch] found %s matching file(s)", len(files))
 
     result = {
         "files": files,

@@ -176,7 +176,7 @@ def run(config: dict, inp: dict, context: dict, logger, creds=None, **kwargs) ->
                     if not keep:
                         continue
                 except (SyntaxError, ValueError, NameError, TypeError) as exc:
-                    logger(f"[trigger.email] Filter expression error: {exc} — skipping message")
+                    logger.info("[trigger.email] Filter expression error: %s — skipping message", exc)
                     continue
 
             emails.append(entry)
@@ -184,7 +184,7 @@ def run(config: dict, inp: dict, context: dict, logger, creds=None, **kwargs) ->
             if mark_read:
                 conn.store(uid, "+FLAGS", "\\Seen")
 
-        logger(f"[trigger.email] Fetched {len(emails)} message(s) from {folder}")
+        logger.info("[trigger.email] Fetched %s message(s) from %s", len(emails), folder)
 
         result = {"emails": emails, "count": len(emails)}
         # Expose first-email fields at the top level for simpler single-email flows

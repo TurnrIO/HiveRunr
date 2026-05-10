@@ -263,7 +263,7 @@ def run(config: dict, inp: dict, context: dict, logger, creds=None, **kwargs) ->
             f"Valid: {', '.join(_OPERATIONS)}"
         )
 
-    logger(f"[action.s3] op={operation} bucket={bucket} key={key or '(prefix)'}")
+    logger.info("[action.s3] op=%s bucket=%s key=%s", operation, bucket, key or '(prefix)')
 
     s3 = _make_client(cred)
     return _OPERATIONS[operation](s3, bucket, key, config, context, creds)

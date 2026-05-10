@@ -61,12 +61,12 @@ def run(config, inp, context, logger, creds=None, **kwargs):
         if case_result:
             matched_case = case.get("label") or match_val
             matched_index = i
-            logger(f"Switch matched case {i}: {matched_case!r} (value={value!r})")
+            logger.info("Switch matched case %s: %r (value=%r)", i, matched_case, value)
             break
 
     no_match = matched_case is None
     if no_match:
-        logger(f"Switch: no case matched value={value!r}")
+        logger.info("Switch: no case matched value=%r", value)
 
     return {
         "value": value,

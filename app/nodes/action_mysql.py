@@ -162,10 +162,10 @@ def run(config: dict, inp: dict, context: dict, logger, creds=None, **kwargs) ->
                 rows = [dict(r) for r in raw_rows]
                 if row_limit and len(rows) > row_limit:
                     rows = rows[:row_limit]
-                    logger(f"[action.mysql] result truncated to {row_limit} rows")
+                    logger.info("[action.mysql] result truncated to %s rows", row_limit)
 
         conn.commit()
-        logger(f"[action.mysql] rows={len(rows)} affected={affected}")
+        logger.info("[action.mysql] rows=%s affected=%s", len(rows), affected)
 
         return {
             "rows":           rows,

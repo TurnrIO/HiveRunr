@@ -43,7 +43,7 @@ def run(config, inp, context, logger, creds=None, **kwargs):
         script_hash,
         script_preview,
     )
-    logger(f"[AUDIT] run_script executing | hash={script_hash} | preview={script_preview!r}")
+    logger.info("[AUDIT] run_script executing | hash=%s | preview=%r", script_hash, script_preview)
 
     _UNSET = object()
     ns = {
