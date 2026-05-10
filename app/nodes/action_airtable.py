@@ -144,7 +144,10 @@ def run(config, inp, context, logger, creds=None, **kwargs):
             if view:
                 params["view"] = view
             if max_raw:
-                params["maxRecords"] = int(max_raw)
+                try: max_records = int(max_raw)
+                except (ValueError, TypeError): max_records = None
+            if max_records is not None:
+                params["maxRecords"] = max_records
             if sort:
                 # Airtable expects sort[0][field]=... sort[0][direction]=...
                 for i, s in enumerate(sort):
