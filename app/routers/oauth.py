@@ -12,6 +12,7 @@ Env vars required per provider (add to .env):
   Notion : NOTION_CLIENT_ID  NOTION_CLIENT_SECRET
 """
 import base64
+from json import JSONDecodeError
 import json
 import logging
 import os
@@ -207,7 +208,7 @@ def oauth_start(provider: str, cred_name: str, request: Request):
                 "user_id": user["id"],
             }),
         )
-    except Exception as exc:
+    except (AttributeError, TypeError, OSError) as exc:
         log.error("oauth_start: Redis error: %s", exc)
         return RedirectResponse(_admin_url("?oauth_error=redis_unavailable"))
 
@@ -245,14 +246,17 @@ def oauth_callback(
     try:
         r = _redis()
         raw = r.get(f"oauth:state:{state}")
-    except Exception as exc:
+    except (AttributeError, TypeError, OSError) as exc:
         log.error("oauth_callback: Redis error: %s", exc)
         return RedirectResponse(_admin_url("?oauth_error=redis_unavailable"))
 
     if not raw:
         return RedirectResponse(_admin_url("?oauth_error=state_expired_or_invalid"))
 
-    ctx = json.loads(raw)
+    try:
+        ctx = json.loads(raw)
+    except JSONDecodeError:
+        ctx = {}
 
     if ctx.get("provider") != provider:
         return RedirectResponse(_admin_url("?oauth_error=state_mismatch"))
@@ -269,7 +273,7 @@ def oauth_callback(
             token_data = _exchange_notion(cfg, code, provider)
         else:
             return RedirectResponse(_admin_url("?oauth_error=unsupported_provider"))
-    except Exception as exc:
+    except (httpx.HTTPStatusError, httpx.RequestError, OSError) as exc:
         log.error("oauth_callback: token exchange failed for %s: %s", provider, exc)
         return RedirectResponse(_admin_url("?oauth_error=token_exchange_failed"))
 
@@ -282,7 +286,7 @@ def oauth_callback(
         upsert_credential(cred_name, cfg["cred_type"], secret, note, workspace_id=workspace_id)
         # State consumed — safe to delete now
         r.delete(f"oauth:state:{state}")
-    except Exception as exc:
+    except (AttributeError, TypeError, RuntimeError) as exc:
         log.error("oauth_callback: failed to save credential: %s", exc)
         return RedirectResponse(_admin_url("?oauth_error=save_failed"))
 

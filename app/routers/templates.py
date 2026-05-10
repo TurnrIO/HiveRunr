@@ -12,6 +12,7 @@ Templates are JSON files stored in app/templates/.  Each file must contain:
 GET /api/templates   — list all templates (graph_data omitted for speed)
 GET /api/templates/{slug}  — full bundle including graph_data
 """
+from json import JSONDecodeError
 import json
 import pathlib
 import logging
@@ -81,7 +82,7 @@ def use_template(slug: str, request: Request):
         try:
             _sync_cron_triggers(g["id"], gd)
             save_graph_version(g["id"], name, gd_str, note=f"Created from template: {name}")
-        except Exception as exc:
+        except (AttributeError, TypeError, OSError) as exc:
             log.warning("use_template post-create steps failed: %s", exc)
 
         return {"id": g["id"], "name": g["name"], "slug": g.get("slug", "")}
@@ -104,9 +105,12 @@ def get_template(slug: str, request: Request):
     if not path.exists():
         raise HTTPException(404, f"Template '{slug}' not found")
     try:
-        data = json.loads(path.read_text())
-        data["slug"] = slug
-        return data
-    except Exception as exc:
-        log.error("Error reading template %s: %s", slug, exc)
-        raise HTTPException(500, "Failed to load template")
+        raw = path.read_text()
+    except OSError as exc:
+        raise HTTPException(500, f"Failed to read template: {exc}")
+    try:
+        data = json.loads(raw)
+    except JSONDecodeError as exc:
+        raise HTTPException(500, f"Invalid template JSON: {exc}")
+    data["slug"] = slug
+    return data

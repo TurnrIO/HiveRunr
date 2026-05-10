@@ -112,7 +112,7 @@ def _scan_sftp(sftp, path: str, pattern: str, recursive: bool,
     def _walk(dirpath: str):
         try:
             entries = sftp.listdir_attr(dirpath)
-        except Exception:
+        except OSError:
             return
         for entry in entries:
             full_path = dirpath.rstrip("/") + "/" + entry.filename

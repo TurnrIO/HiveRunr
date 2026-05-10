@@ -88,7 +88,7 @@ def api_run_schedule_now(sid: int, request: Request):
     if isinstance(payload, str):
         try:
             payload = _json.loads(payload)
-        except Exception:
+        except JSONDecodeError:
             payload = {}
 
     task = enqueue_graph.delay(s["graph_id"], payload)
@@ -102,7 +102,7 @@ def api_run_schedule_now(sid: int, request: Request):
                 "VALUES(%s,%s,'queued',%s,%s)",
                 (task.id, s["graph_id"], _json.dumps(payload), workspace_id)
             )
-    except Exception as exc:
+    except (AttributeError, TypeError, RuntimeError) as exc:
         log.warning("Could not pre-create run record for schedule %s: %s", sid, exc)
 
     log.info("Manual trigger: schedule %s → graph %s (task %s)", sid, s["graph_id"], task.id)
@@ -139,5 +139,5 @@ def api_cron_next_run(
 
         return {"valid": True, "next": next_times}
 
-    except Exception as exc:
+    except (ValueError, TypeError) as exc:
         return {"valid": False, "error": str(exc)}

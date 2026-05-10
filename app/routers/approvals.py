@@ -169,7 +169,7 @@ def list_approvals(request: Request, status: str = "", limit: int = 50):
         try:
             cur.execute("SELECT 1 FROM information_schema.columns WHERE table_name='approvals' AND column_name='workspace_id'")
             col_exists = cur.fetchone() is not None
-        except Exception:
+        except (AttributeError, TypeError, RuntimeError):
             pass
         # Scope: always scope to workspace if one is contextually available,
         # unless the user is the global owner (who can see all workspaces)
@@ -212,6 +212,6 @@ def _get_approval(token: str):
             cur = conn.cursor()
             cur.execute("SELECT * FROM approvals WHERE token=%s", (token,))
             return cur.fetchone()
-    except Exception as exc:
+    except (AttributeError, TypeError, RuntimeError) as exc:
         log.error("approvals: DB lookup failed — %s", exc)
         return None
