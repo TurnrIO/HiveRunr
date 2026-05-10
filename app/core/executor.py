@@ -143,7 +143,7 @@ def run_one_node(node: dict, inp: Any, context: dict,
         {"output": ..., "duration_ms": ..., "error": None | str}
     """
     if logger is None:
-        logger = lambda msg: log.info(msg)
+        logger = log  # supports both log(msg) and log.info(msg, ...)
     if creds is None:
         creds = {}
     if edges is None:
@@ -239,7 +239,7 @@ def _exec_node(nid, nodes_map, edges, context, creds, logger, succ, _depth):
         for attempt in range(retry_max + 1):
             try:
                 if attempt > 0:
-                    logger(f"RETRY {attempt}/{retry_max} {ntype} [{nid}]")
+                    log.info(f"RETRY {attempt}/{retry_max} {ntype} [{nid}]")
                     time.sleep(retry_delay)
                 result = _run_node(
                     ntype, config, inp, context, logger,
@@ -250,7 +250,7 @@ def _exec_node(nid, nodes_map, edges, context, creds, logger, succ, _depth):
                 break
             except (JSONDecodeError, OSError, ValueError, TypeError, RuntimeError) as e:
                 last_err = e
-                logger(f"ERROR attempt {attempt+1} {ntype} [{nid}]: {e}")
+                log.info(f"ERROR attempt {attempt+1} {ntype} [{nid}]: {e}")
 
         trace['duration_ms'] = int((time.time() - t_start) * 1000)
         trace['attempts']    = attempt + 1
@@ -264,7 +264,7 @@ def _exec_node(nid, nodes_map, edges, context, creds, logger, succ, _depth):
             if fail_mode == 'continue':
                 error_out = {'__error': err_msg, '__node': nid, '__type': ntype}
                 trace['output'] = error_out
-                logger(f"CONTINUE-ON-ERROR [{nid}]: {err_msg}")
+                log.info(f"CONTINUE-ON-ERROR [{nid}]: {err_msg}")
                 return error_out, trace, set(), None
             else:
                 result_err = {'__error': err_msg}
@@ -282,10 +282,10 @@ def _exec_node(nid, nodes_map, edges, context, creds, logger, succ, _depth):
             false_reach = _reachable_via_handle(nid, 'false', succ)
             if condition_val:
                 skip_delta = false_reach - true_reach
-                logger(f"Condition [{nid}] = True  → skipping {len(skip_delta)} false-branch node(s)")
+                log.info(f"Condition [{nid}] = True  → skipping {len(skip_delta)} false-branch node(s)")
             else:
                 skip_delta = true_reach - false_reach
-                logger(f"Condition [{nid}] = False → skipping {len(skip_delta)} true-branch node(s)")
+                log.info(f"Condition [{nid}] = False → skipping {len(skip_delta)} true-branch node(s)")
 
         # Detect loop node (caller handles body expansion sequentially)
         loop_result = result if (isinstance(result, dict) and result.get('__loop__')) else None
@@ -351,7 +351,7 @@ def run_graph(graph_data: dict, initial_payload: dict = None, logger=None, _dept
     ('node_start' | 'node_done').  Safe to be None.
     """
     if logger is None:
-        logger = lambda msg: log.info(msg)
+        logger = log  # supports both log(msg) and log.info(msg, ...)
     if _depth > 5:
         raise RuntimeError("Call Graph: maximum sub-flow nesting depth (5) exceeded")
 
@@ -370,6 +370,10 @@ def run_graph(graph_data: dict, initial_payload: dict = None, logger=None, _dept
         creds = {}
     except (AttributeError, KeyError, RuntimeError, TypeError, ValueError):
         # DB not available (no DB, network error, etc.) — degrade gracefully
+        creds = {}
+    except Exception:
+        # psycopg2.OperationalError, redis.exceptions.ConnectionError, and any other
+        # DB-unavailable error — degrade gracefully instead of crashing the whole run
         creds = {}
 
     nodes_map    = {n['id']: n for n in nodes}
@@ -404,7 +408,7 @@ def run_graph(graph_data: dict, initial_payload: dict = None, logger=None, _dept
             for node_id, output in prior_context.items():
                 if node_id not in ('__initial_payload__',) and node_id in visited:
                     context[node_id] = output
-        logger(f"[run_from] starting at node {start_node_id}, skipping {len(skip_nodes)} ancestor(s)")
+        log.info(f"[run_from] starting at node {start_node_id}, skipping {len(skip_nodes)} ancestor(s)")
 
     # Determine execution mode
     parallel    = graph_data.get('parallel', False) or \
@@ -479,13 +483,13 @@ def _run_sequential(order, nodes_map, edges, context, results, traces,
             continue
 
         if ndata.get('disabled', False) and nid != start_node_id:
-            logger(f"SKIP (disabled) {ntype} [{nid}]")
+            log.info(f"SKIP (disabled) {ntype} [{nid}]")
             results[nid] = {'__disabled': True}
             traces.append(trace)
             continue
 
         if nid in skip_nodes:
-            logger(f"SKIP (branch not taken) {ntype} [{nid}]")
+            log.info(f"SKIP (branch not taken) {ntype} [{nid}]")
             results[nid] = {'__skipped': True}
             trace['error'] = 'Branch not taken'
             traces.append(trace)
@@ -569,7 +573,7 @@ def _run_parallel(levels, nodes_map, edges, context, results, traces,
                 continue
 
             if ndata.get('disabled', False) and nid != start_node_id:
-                logger(f"SKIP (disabled) {ntype} [{nid}]")
+                log.info(f"SKIP (disabled) {ntype} [{nid}]")
                 results[nid] = {'__disabled': True}
                 traces.append({'node_id': nid, 'type': ntype,
                                 'label': ndata.get('label', ''),
@@ -578,7 +582,7 @@ def _run_parallel(levels, nodes_map, edges, context, results, traces,
                 continue
 
             if nid in skip_nodes:
-                logger(f"SKIP (branch not taken) {ntype} [{nid}]")
+                log.info(f"SKIP (branch not taken) {ntype} [{nid}]")
                 results[nid] = {'__skipped': True}
                 traces.append({'node_id': nid, 'type': ntype,
                                 'label': ndata.get('label', ''),
