@@ -30,7 +30,6 @@ def _req(method, path, account_sid, auth_token, body=None):
         raise RuntimeError(f"Twilio {e.code}: {detail}")
 
 def run(config, inp, context, logger, creds=None, **kwargs):
-    logger.info("Twilio: op=%s", op)
     # ── resolve credentials ────────────────────────────────────────────────
     cred_name   = config.get("credential", "")
     account_sid = ""
@@ -50,6 +49,7 @@ def run(config, inp, context, logger, creds=None, **kwargs):
         raise ValueError("Twilio: account_sid and auth_token are required")
 
     op = _render(config.get("operation", "send_sms"), context, creds)
+    logger.info("Twilio: op=%s", op)
 
     # ── send SMS ───────────────────────────────────────────────────────────
     if op in ("send_sms", "send_whatsapp"):
@@ -73,13 +73,13 @@ def run(config, inp, context, logger, creds=None, **kwargs):
             "raw":    result,
         }
 
-    # ── make call ──────────────────────────────────────────────────────────
+    # ── make call ────────────────────────────────────────────────────────────
     elif op == "make_call":
-        logger.info("Twilio: make_call to=%s", to_)
         to_    = _render(config.get("to", ""), context, creds)
         from_  = _render(config.get("from", ""), context, creds)
         url_   = _render(config.get("twiml_url", ""), context, creds)
         twiml_ = _render(config.get("twiml", ""), context, creds)
+        logger.info("Twilio: make_call to=%s", to_)
         if not url_ and not twiml_:
             raise ValueError("Twilio make_call: twiml_url or twiml is required")
         params = {"To": to_, "From": from_}
@@ -96,11 +96,11 @@ def run(config, inp, context, logger, creds=None, **kwargs):
             "raw":    result,
         }
 
-    # ── check status ───────────────────────────────────────────────────────
+    # ── check status ─────────────────────────────────────────────────────────
     elif op == "check_status":
-        logger.info("Twilio: check_status sid=%s", sid)
         sid    = _render(config.get("sid", ""), context, creds)
         kind   = _render(config.get("resource_type", "message"), context, creds).lower()
+        logger.info("Twilio: check_status sid=%s", sid)
         suffix = "/Messages" if kind == "message" else "/Calls"
         result = _req("GET", f"{suffix}/{sid}.json", account_sid, auth_token)
         return {
@@ -113,7 +113,7 @@ def run(config, inp, context, logger, creds=None, **kwargs):
             "raw":        result,
         }
 
-    # ── list messages ──────────────────────────────────────────────────────
+    # ── list messages ───────────────────────────────────────────────────────
     elif op == "list_messages":
         logger.info("Twilio: list_messages")
         to_   = _render(config.get("to", ""), context, creds)
