@@ -28,6 +28,7 @@ in single-instance mode (no HA, same behaviour as before this change).
 import os
 import time
 import logging
+from json import JSONDecodeError
 import json
 import secrets as _secrets
 

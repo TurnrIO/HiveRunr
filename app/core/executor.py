@@ -12,6 +12,7 @@ import os
 import json
 import time
 import logging
+from json import JSONDecodeError
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any
 
