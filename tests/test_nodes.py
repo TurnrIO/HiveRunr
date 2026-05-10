@@ -92,6 +92,7 @@ def test_http_request_get_success():
     mock_response.json.return_value = {"ok": True}
     mock_response.raise_for_status.return_value = None
     mock_response.headers = {}
+    mock_response.is_redirect = False
 
     with mock.patch("app.nodes.action_http_request.httpx.Client") as MockClient:
         instance = MockClient.return_value.__enter__.return_value
