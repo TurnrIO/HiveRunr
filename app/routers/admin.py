@@ -326,7 +326,7 @@ def api_version(request: Request):
     # Cache result (even on error, to avoid hammering GH on every page load)
     try:
         set_setting(_VERSION_CACHE_KEY, json.dumps({k: v for k, v in payload.items() if k != "current"}))
-    except Exception:
+    except (ValueError, AttributeError, TypeError):
         pass
 
     return payload
@@ -338,7 +338,7 @@ def _version_gt(a: str, b: str) -> bool:
         def _parts(v):
             return tuple(int(x) for x in v.lstrip("v").split(".")[:3])
         return _parts(a) > _parts(b)
-    except Exception:
+    except (ValueError, AttributeError):
         return False
 
 

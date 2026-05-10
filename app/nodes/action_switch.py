@@ -32,7 +32,7 @@ def run(config, inp, context, logger, creds=None, **kwargs):
     try:
         value = eval(value_expr, {"__builtins__": safe_builtins},
                      {"input": inp, "context": context})
-    except Exception:
+    except (SyntaxError, ValueError, NameError, TypeError):
         # If expression fails, use raw string as the value
         value = value_expr
 
@@ -55,7 +55,7 @@ def run(config, inp, context, logger, creds=None, **kwargs):
                 f"{repr(value)} == {repr(match_val)}",
                 {"__builtins__": safe_builtins}, {}
             )
-        except Exception:
+        except (SyntaxError, ValueError):
             case_result = str(value) == str(match_val)
 
         if case_result:
