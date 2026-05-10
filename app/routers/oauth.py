@@ -252,9 +252,6 @@ def oauth_callback(
     if not raw:
         return RedirectResponse(_admin_url("?oauth_error=state_expired_or_invalid"))
 
-    # Consume state token only after credential is successfully saved.
-    # If save fails the state key remains valid (TTL=300s) so user can retry.
-    r.delete(f"oauth:state:{state}")
     ctx = json.loads(raw)
 
     if ctx.get("provider") != provider:
