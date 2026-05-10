@@ -68,7 +68,7 @@ def _send_run_alert(
                 alert_webhook      = cfg.get("alert_webhook") or ""
                 alert_on_success   = bool(cfg.get("alert_on_success", False))
                 alert_min_failures = int(cfg.get("alert_min_failures") or 1)
-        except Exception as exc:
+        except (OSError, KeyError, ValueError, TypeError, RuntimeError) as exc:
             log.warning("Could not load alert config for graph %s: %s", graph_id, exc)
 
     # Decide whether to fire
@@ -149,7 +149,7 @@ def enqueue_workflow(self, workflow_name: str, payload: dict):
     try:
         from app.core.db import init_db
         init_db()
-    except Exception:
+    except (OSError, ImportError):
         pass
     update_run(task_id, "running")
     try:
