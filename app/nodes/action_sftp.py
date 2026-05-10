@@ -2,6 +2,7 @@
 import io
 import stat as _stat
 import json
+from json import JSONDecodeError
 from app.nodes._utils import _render, _resolve_cred_raw
 
 NODE_TYPE = "action.sftp"
@@ -156,7 +157,7 @@ def run(config, inp, context, logger, creds=None, **kwargs):
                 port_str = port_str or str(c.get('port', ''))
                 username = username or c.get('username', '')
                 password = password or c.get('password', '')
-            except (json.JSONDecodeError, AttributeError):
+            except (JSONDecodeError, AttributeError):
                 pass
 
     default_port = 22 if protocol == 'sftp' else 21
