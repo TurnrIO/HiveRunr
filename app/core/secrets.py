@@ -42,6 +42,7 @@ Typical secret JSON stored in the provider:
     }
 """
 import json
+from json import JSONDecodeError
 import logging
 import os
 import re
@@ -159,6 +160,8 @@ def _load_aws() -> None:
         _merge(data, f"AWS/{secret_name}")
     except ImportError:  # botocore missing
         log.error("botocore is not installed")
+    except JSONDecodeError as exc:
+        log.error(f"AWS Secrets Manager: invalid JSON in secret %s: %s", secret_name, exc)
     except Exception as exc:
         # Catch ClientError and everything else — never crash the app over this
         code = getattr(getattr(exc, "response", None), "__getitem__", lambda _: {})(

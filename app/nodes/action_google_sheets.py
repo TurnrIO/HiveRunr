@@ -37,12 +37,19 @@ def run(config, inp, context, logger, creds=None, **kwargs):
         from google.oauth2 import service_account as _sa
         from google.auth.transport.requests import Request as _GReq
 
+        try:
+            creds_dict = json.loads(service_account_json)
+        except JSONDecodeError as exc:
+            raise ValueError(f"Google Sheets: auth failed — invalid JSON in credential: {exc}")
+
         _creds = _sa.Credentials.from_service_account_info(
-            json.loads(service_account_json),
+            creds_dict,
             scopes=['https://www.googleapis.com/auth/spreadsheets']
         )
         _creds.refresh(_GReq())
         access_token = _creds.token
+    except ValueError:
+        raise
     except Exception as e:
         raise ValueError(f"Google Sheets: auth failed — {e}")
 

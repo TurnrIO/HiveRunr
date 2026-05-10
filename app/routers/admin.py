@@ -1,5 +1,6 @@
 """Admin, maintenance, system status, metrics, scripts, nodes, and templates routers."""
 import json
+from json import JSONDecodeError
 import re as _re
 import uuid
 from pathlib import Path
@@ -290,7 +291,7 @@ def api_version(request: Request):
                 cached["current"] = __version__
                 cached["update_available"] = _version_gt(cached.get("latest", __version__), __version__)
                 return cached
-        except Exception:
+        except JSONDecodeError:
             cached = None
 
     # ── Fetch latest release from GitHub ──────────────────────────────────
