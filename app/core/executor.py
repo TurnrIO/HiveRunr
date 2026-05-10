@@ -185,6 +185,9 @@ def run_one_node(node: dict, inp: Any, context: dict,
     Returns:
         {"output": ..., "duration_ms": ..., "error": None | str}
     """
+    # Always wrap: run_graph wraps here, run_one_node wraps here. If called directly
+    # (not via run_graph), we wrap. If called from run_graph, run_graph already
+    # wrapped — but wrapping twice is safe since LoggingLoggerAdapter just delegates.
     logger = LoggingLoggerAdapter(logger if logger is not None else log)
     if creds is None:
         creds = {}

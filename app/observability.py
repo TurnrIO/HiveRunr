@@ -59,7 +59,7 @@ class _RunMetricsCollector:
             for row in rows:
                 g.add_metric([row["status"]], float(row["n"]))
             yield g
-        except (OSError, KeyError, ValueError):
+        except (OSError, KeyError, ValueError, psycopg2.Error):
             return  # never let a scrape error break the collector
 
 
