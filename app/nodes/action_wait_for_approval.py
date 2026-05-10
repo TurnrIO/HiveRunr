@@ -44,7 +44,9 @@ def run(config, inp, context, logger, creds=None, **kwargs):
 
     subject       = _render(config.get("subject",  "Action required: approval needed"), context, creds)
     message       = _render(config.get("message",  ""), context, creds)
-    timeout_hours = min(int(config.get("timeout_hours", 48) or 48), _MAX_HOURS)
+    try: timeout_hours = int(_render(str(config.get("timeout_hours", 48)), context, creds) or 48)
+    except (ValueError, TypeError): timeout_hours = 48
+    timeout_hours = min(timeout_hours, _MAX_HOURS)
 
     token       = uuid.uuid4().hex           # 32-char hex, no dashes
     task_id     = str(context.get("__task_id", "") or "")

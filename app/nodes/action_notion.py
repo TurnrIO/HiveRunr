@@ -57,7 +57,9 @@ def run(config, inp, context, logger, creds=None, **kwargs):
                 body['sorts'] = json.loads(_render(config['sorts_json'], context, creds))
             except (JSONDecodeError, ValueError):
                 pass
-        body['page_size'] = int(config.get('page_size', 50))
+        try: page_size = int(_render(str(config.get('page_size', 50)), context, creds))
+        except (ValueError, TypeError): page_size = 50
+        body['page_size'] = page_size
 
         data = notion('POST', f'{base}/databases/{database_id}/query', json=body)
 
@@ -139,7 +141,9 @@ def run(config, inp, context, logger, creds=None, **kwargs):
         return notion('PATCH', f'{base}/pages/{page_id}', json={'properties': props})
 
     elif action == 'search':
-        body = {'page_size': int(config.get('page_size', 20))}
+        try: page_size = int(_render(str(config.get('page_size', 20)), context, creds))
+        except (ValueError, TypeError): page_size = 20
+        body = {'page_size': page_size}
         if query:
             body['query'] = query
         return notion('POST', f'{base}/search', json=body)
