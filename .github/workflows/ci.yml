@@ -94,7 +94,9 @@ jobs:
         run: |
           cp .env.example .env
           SECRET_KEY=$(python3 -c "import base64,os; print(base64.urlsafe_b64encode(os.urandom(32)).decode())")
+          API_KEY=$(python3 -c "import secrets; print(secrets.token_urlsafe(32))")
           sed -i "s|^SECRET_KEY=$|SECRET_KEY=$SECRET_KEY|" .env
+          sed -i "s|^API_KEY=.*|API_KEY=$API_KEY|" .env
           docker compose up -d --build
       - name: Wait for api container to be healthy
         run: |
