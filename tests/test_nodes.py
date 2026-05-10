@@ -93,10 +93,13 @@ def test_http_request_get_success():
     mock_response.raise_for_status.return_value = None
     mock_response.headers = {}
     mock_response.is_redirect = False
+    mock_response.content = None
+    mock_response.data = None
 
     with mock.patch("app.nodes.action_http_request.httpx.Client") as MockClient:
         instance = MockClient.return_value.__enter__.return_value
         instance.request.return_value = mock_response
+        instance.request.return_value.is_redirect = False
         out = run({"url": "https://example.com/api", "method": "GET"}, {}, {}, log)
 
     assert out["status"] == 200
