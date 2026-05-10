@@ -25,6 +25,7 @@ this), so there is no explicit migration step required.
 
 import os
 import base64
+import binascii
 import hashlib
 import logging
 
@@ -54,7 +55,7 @@ def _get_fernet():
                 key = base64.urlsafe_b64encode(decoded)
             else:
                 raise ValueError("not 32 bytes")
-    except (binascii.Error, ValueError):
+        except (binascii.Error, ValueError):
             # Derive a 32-byte key from whatever string was provided
             key = base64.urlsafe_b64encode(
                 hashlib.sha256(raw.encode()).digest()
