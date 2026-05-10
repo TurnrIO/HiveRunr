@@ -207,7 +207,7 @@ def _validate_config() -> None:
         with get_conn() as conn:
             conn.cursor().execute("SELECT 1")
         log.info("startup: database connection OK")
-    except Exception as exc:
+    except (OSError, RuntimeError, AttributeError) as exc:
         raise RuntimeError(
             f"Cannot connect to the database: {exc}. "
             "Check DATABASE_URL in .env and ensure the postgres container is running."
@@ -224,7 +224,7 @@ def _validate_config() -> None:
         import redis as _redis
         _redis.from_url(redis_url, socket_connect_timeout=3).ping()
         log.info("startup: Redis connection OK")
-    except Exception as exc:
+    except (OSError, RuntimeError, AttributeError) as exc:
         raise RuntimeError(
             f"Cannot connect to Redis: {exc}. "
             "Check REDIS_URL in .env and ensure the redis container is running."
@@ -280,7 +280,7 @@ def startup():
     for name in WORKFLOWS:
         try:
             upsert_workflow(name)
-        except Exception as exc:
+        except (AttributeError, RuntimeError, OSError) as exc:
             log.warning("startup: could not register workflow %r — %s", name, exc)
 
 

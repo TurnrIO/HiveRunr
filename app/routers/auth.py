@@ -24,7 +24,7 @@ def _login_redis():
         r = _redis.from_url(url, socket_connect_timeout=2, socket_timeout=2)
         r.ping()
         return r
-    except Exception:
+    except (OSError, RuntimeError, AttributeError):
         return None
 
 
@@ -242,7 +242,7 @@ def api_create_user(body: CreateUserBody, request: Request):
     try:
         user = create_user(body.username.strip(), body.email.strip().lower(),
                            hash_password(body.password), body.role)
-    except Exception as e:
+    except (ValueError, RuntimeError, TypeError) as e:
         raise HTTPException(400, str(e))
     log_audit(actor["username"], "user.create", "user", user["id"],
               {"username": user["username"], "role": user["role"]},
@@ -407,7 +407,7 @@ def auth_forgot_password(body: ForgotPasswordBody):
                 reset_url=reset_url,
                 username=owner["username"],
             )
-        except Exception as exc:
+        except (OSError, AttributeError, RuntimeError) as exc:
             log.error("forgot-password: %s", exc)
 
     return {"ok": True, "message": "If that email matches the owner account, a reset link has been sent."}
@@ -531,7 +531,7 @@ def invite_signup(body: InviteSignupBody, request: Request):
             hash_password(body.password),
             role="viewer",   # global role is always viewer for invited users
         )
-    except Exception as exc:
+    except (ValueError, RuntimeError, TypeError) as exc:
         raise HTTPException(400, str(exc))
 
     if graph_id:

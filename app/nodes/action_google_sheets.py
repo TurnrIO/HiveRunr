@@ -50,7 +50,7 @@ def run(config, inp, context, logger, creds=None, **kwargs):
         access_token = _creds.token
     except ValueError:
         raise
-    except Exception as e:
+    except (OSError, RuntimeError, TypeError) as e:
         raise ValueError(f"Google Sheets: auth failed — {e}")
 
     headers = {'Authorization': f'Bearer {access_token}', 'Content-Type': 'application/json'}

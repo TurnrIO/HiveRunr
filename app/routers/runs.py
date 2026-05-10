@@ -63,9 +63,9 @@ def _sync_stuck_runs():
                         from app.worker import enqueue_script as _enqueue_script
                         _enqueue_script.apply_async(args=[row['workflow'], {}], task_id=row['task_id'])
                         log.info(f"Re-dispatched lost task {row['task_id']} for {row['workflow']}")
-            except Exception:
+            except (AttributeError, TypeError, RuntimeError, KeyError):
                 pass
-    except Exception:
+    except (AttributeError, TypeError, KeyError, RuntimeError, OSError):
         pass
 
 
@@ -203,7 +203,7 @@ def api_get_ratelimit(request: Request):
             count = int(r.get(k) or 0)
             ttl   = r.ttl(k)
             counters.append({"token": token, "count": count, "ttl_seconds": ttl})
-    except Exception:
+    except (AttributeError, KeyError, OSError, RuntimeError):
         pass
     return {**policy, "counters": counters}
 
@@ -255,7 +255,7 @@ def api_cancel_run(run_id: int, request: Request):
         from celery.result import AsyncResult
         from app.worker import app as _celery_app
         AsyncResult(task_id, app=_celery_app).revoke(terminate=True, signal="SIGTERM")
-    except Exception as exc:
+    except (AttributeError, RuntimeError, OSError) as exc:
         log.warning("Could not revoke Celery task %s: %s", task_id, exc)
     update_run(task_id, "cancelled", result={"cancelled_by": "user"})
     log_audit(user["username"], "run.cancel", "run", run_id,
@@ -316,7 +316,7 @@ def api_run_queue(request: Request):
             "workers":      workers,
             "worker_count": len(workers),
         }
-    except Exception as exc:
+    except (AttributeError, RuntimeError, TypeError) as exc:
         log.warning("Queue inspect failed: %s", exc)
         return {"ok": False, "error": str(exc), "active": 0, "reserved": 0, "scheduled": 0, "total_queued": 0, "workers": [], "worker_count": 0}
 
@@ -385,7 +385,7 @@ def api_replay_run(run_id: int, request: Request, body: _ReplayBody = None):
             priority=g.get("priority", 5),
         )
         task_id = task.id
-    except Exception as exc:
+    except (OSError, RuntimeError, AttributeError) as exc:
         log.warning("Celery unavailable (%s) — replaying graph inline", exc)
         import uuid
         task_id = str(uuid.uuid4())
@@ -404,7 +404,7 @@ def api_replay_run(run_id: int, request: Request, body: _ReplayBody = None):
             )
             update_run(task_id, "succeeded", result=result,
                        traces=result.get('traces', []))
-        except Exception as inline_err:
+        except (ValueError, RuntimeError, TypeError, KeyError) as inline_err:
             log.exception("Inline graph replay failed")
             update_run(task_id, "failed", result={"error": str(inline_err)})
             raise HTTPException(500, f"Graph replay failed: {inline_err}")
@@ -464,7 +464,7 @@ def api_stream_run(task_id: str, request: Request):
             r.ping()
             pubsub = r.pubsub(ignore_subscribe_messages=True)
             pubsub.subscribe(f"run:{task_id}:stream")
-        except Exception:
+        except (AttributeError, OSError, RuntimeError):
             pubsub = None  # fall through to polling-only path
 
         deadline       = _time.time() + 300   # 5-minute hard timeout
@@ -482,7 +482,7 @@ def api_stream_run(task_id: str, request: Request):
                             raw = raw.decode()
                         try:
                             event = json.loads(raw)
-                        except Exception:
+                        except JSONDecodeError:
                             continue
                         yield f"data: {raw}\n\n"
                         if event.get("type") == "run_done":
@@ -517,7 +517,7 @@ def api_stream_run(task_id: str, request: Request):
                 try:
                     pubsub.unsubscribe()
                     pubsub.close()
-                except Exception:
+                except (AttributeError, RuntimeError, OSError):
                     pass
 
         # Timeout — send a synthetic done event so the client doesn't hang

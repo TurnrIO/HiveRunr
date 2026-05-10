@@ -89,7 +89,7 @@ def use_template(slug: str, request: Request):
 
     except HTTPException:
         raise
-    except Exception as exc:
+    except (ValueError, TypeError, RuntimeError, AttributeError) as exc:
         log.error("use_template ERROR for %s: %s\n%s", slug, exc, _tb.format_exc())
         raise HTTPException(500, f"Failed to create flow from template: {exc}")
 

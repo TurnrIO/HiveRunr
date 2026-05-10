@@ -42,7 +42,7 @@ def _sync_cron_triggers(graph_id: int, graph_data: dict):
     try:
         nodes = (graph_data or {}).get('nodes', [])
         sync_graph_schedules(graph_id, [n for n in nodes if n.get('type') == 'trigger.cron'])
-    except Exception as e:
+    except (AttributeError, RuntimeError, OSError) as e:
         log.warning(f"Could not sync schedules for graph {graph_id}: {e}")
 
 
@@ -294,7 +294,7 @@ async def api_graph_run(graph_id: int, request: Request):
             args=[graph_id, payload], kwargs=task_kwargs, priority=flow_priority
         )
         task_id = task.id
-    except Exception as exc:
+    except (OSError, RuntimeError, AttributeError) as exc:
         log.warning("Celery unavailable (%s) — running graph inline", exc)
         # Fall back to inline execution so the API still responds
         import uuid
@@ -316,7 +316,7 @@ async def api_graph_run(graph_id: int, request: Request):
             )
             update_run(task_id, "succeeded", result=result,
                        traces=result.get('traces', []))
-        except Exception as inline_err:
+        except (ValueError, RuntimeError, TypeError, KeyError) as inline_err:
             log.exception("Inline graph run failed")
             update_run(task_id, "failed", result={"error": str(inline_err)})
             raise HTTPException(500, f"Graph run failed: {inline_err}")
@@ -565,7 +565,7 @@ def api_invite_to_flow(graph_id: int, body: InviteBody, request: Request):
                 invited_by=user["username"],
             )
             sent = True
-        except Exception as exc:
+        except (OSError, RuntimeError, AttributeError) as exc:
             log.warning("Could not send invite email: %s", exc)
 
     log_audit(user["username"], "flow.invite", "graph", graph_id,

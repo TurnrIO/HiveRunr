@@ -116,7 +116,7 @@ async def webhook_trigger(token: str, request: Request):
             priority=g.get("priority", 5),
         )
         task_id = task.id
-    except Exception as exc:
+    except (OSError, RuntimeError, AttributeError) as exc:
         log.warning("Celery unavailable (%s) — running webhook graph inline", exc)
         import uuid
         task_id = str(uuid.uuid4())
@@ -139,7 +139,7 @@ async def webhook_trigger(token: str, request: Request):
             log.error("DB error during inline webhook run: %s", db_err)
         except (TypeError, KeyError, ValueError) as data_err:
             log.error("Data error during inline webhook run: %s", data_err)
-        except Exception as inline_err:
+        except (ValueError, RuntimeError, TypeError) as inline_err:
             log.exception("Inline webhook graph run failed")
             update_run(task_id, "failed", result={"error": str(inline_err)})
             raise HTTPException(500, f"Graph run failed: {inline_err}")
@@ -153,7 +153,7 @@ async def webhook_trigger(token: str, request: Request):
             )
     except psycopg2.Error as exc:
         log.warning("Could not record webhook run: %s", exc)
-    except Exception as exc:
+    except (AttributeError, RuntimeError, OSError) as exc:
         log.warning("Unexpected error recording webhook run: %s", exc)
 
     # ── CORS response headers ──────────────────────────────────────────────

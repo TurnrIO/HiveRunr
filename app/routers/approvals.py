@@ -98,7 +98,7 @@ def _decide(token: str, decision: str) -> HTMLResponse:
         redis_url = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
         r = _redis.from_url(redis_url, socket_connect_timeout=5)
         r.setex(f"approval:{token}:decision", 86400 * 7, decision)
-    except Exception as exc:
+    except (OSError, RuntimeError, AttributeError) as exc:
         log.error("approvals: Redis write failed for token %s — %s", token[:8], exc)
         return _page(
             "⚠️", "Error",
@@ -114,7 +114,7 @@ def _decide(token: str, decision: str) -> HTMLResponse:
                 "UPDATE approvals SET status=%s, decided_at=NOW() WHERE token=%s AND status='pending'",
                 (decision, token),
             )
-    except Exception as exc:
+    except (AttributeError, RuntimeError, OSError) as exc:
         log.warning("approvals: DB update failed — %s", exc)
 
     log.info("approvals: %s decision=%s graph=%s", token[:8], decision, row.get("graph_name", ""))

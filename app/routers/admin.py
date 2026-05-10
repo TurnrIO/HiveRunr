@@ -1,5 +1,6 @@
 """Admin, maintenance, system status, metrics, scripts, nodes, and templates routers."""
 import json
+import httpx
 from json import JSONDecodeError
 import re as _re
 import uuid
@@ -85,7 +86,7 @@ def api_system_status(request: Request):
             "latency_ms": latency_ms,
             "pool": pool,
         }
-    except Exception as exc:
+    except (OSError, RuntimeError, AttributeError, KeyError) as exc:
         results["db"] = {
             "status": "error",
             "message": str(exc),
@@ -106,7 +107,7 @@ def api_system_status(request: Request):
             "message": f"Reachable at {display_url}",
             "latency_ms": latency_ms,
         }
-    except Exception as exc:
+    except (OSError, RuntimeError, AttributeError) as exc:
         results["redis"] = {
             "status": "error",
             "message": str(exc),
@@ -134,7 +135,7 @@ def api_system_status(request: Request):
                 "workers": count,
                 "worker_names": worker_names,
             }
-    except Exception as exc:
+    except (OSError, RuntimeError, AttributeError) as exc:
         results["worker"] = {
             "status": "error",
             "message": str(exc),
@@ -160,7 +161,7 @@ def api_system_status(request: Request):
                 "fix": "Check that the scheduler container/process is running: `docker compose ps scheduler`.",
                 "lock_held": False,
             }
-    except Exception as exc:
+    except (OSError, RuntimeError, AttributeError) as exc:
         results["scheduler"] = {
             "status": "warning",
             "message": f"Could not check scheduler lock: {exc}",
@@ -275,7 +276,7 @@ _VERSION_CACHE_TTL = 86400                   # 24 hours in seconds
 @router.get("/api/version")
 def api_version(request: Request):
     """Return current version + latest GitHub release (cached 24 h)."""
-    import time, httpx
+    import time
     from app.core.db import get_setting, set_setting
     _check_admin(request)
 
@@ -310,7 +311,7 @@ def api_version(request: Request):
             if tag:
                 latest = tag
                 release_url = data.get("html_url", release_url)
-    except Exception as exc:
+    except (httpx.HTTPError, OSError, JSONDecodeError) as exc:
         error = str(exc)
 
     payload = {
@@ -407,7 +408,7 @@ def api_reset(request: Request):
             for t in ["runs", "schedules", "graph_versions", "graph_workflows", "workflows"]:
                 cur.execute(f"DELETE FROM {t}")
             conn.commit()
-        except Exception:
+        except (AttributeError, RuntimeError, OSError):
             conn.rollback()
             raise
     log_audit(user["username"], "admin.reset", None, None, {"tables": "runs,schedules,graph_versions,graph_workflows,workflows"},
@@ -523,7 +524,7 @@ async def api_run_script(name: str, request: Request):
     _safe_script_name(name)
     try:
         payload = await request.json()
-    except Exception:
+    except (JSONDecodeError, UnicodeDecodeError):
         payload = {}
     from app.core.db import get_conn
     from app.deps import _resolve_workspace
