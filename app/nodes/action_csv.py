@@ -38,7 +38,7 @@ def run(config, inp, context, logger, creds=None, **kwargs):
         reader = csv.DictReader(io.StringIO(content), delimiter=delimiter)
         rows = [dict(row) for row in reader]
         headers = list(reader.fieldnames or [])
-        logger(f"CSV parsed {len(rows)} rows, {len(headers)} columns")
+        logger.info("CSV parsed %s rows, %s columns", len(rows), len(headers))
         return {"rows": rows, "count": len(rows), "headers": headers}
 
     elif operation == "generate":
@@ -74,8 +74,7 @@ def run(config, inp, context, logger, creds=None, **kwargs):
             writer.writerows(items)
 
         csv_str = buf.getvalue()
-        logger(f"CSV generated {len(items)} rows")
+        logger.info("CSV generated %s rows", len(items))
         return {"csv": csv_str, "count": len(items)}
-
     else:
         raise ValueError(f"action.csv: unknown operation {operation!r}")

@@ -21,6 +21,8 @@ def run(config, inp, context, logger, creds=None, **kwargs):
     except (ValueError, TypeError):
         raise ValueError(f"Call Graph: graph_id must be an integer, got '{target_id}'")
 
+    logger.info("Call Graph: invoking graph_id=%s", target_id)
+
     sub_payload = {}
     if config.get('payload'):
         try:
@@ -41,5 +43,6 @@ def run(config, inp, context, logger, creds=None, **kwargs):
 
     sub = run_graph(gd, initial_payload=sub_payload, logger=logger, _depth=kwargs.get('_depth', 0) + 1)
 
+    logger.info("Call Graph: completed graph_id=%s", target_id)
     return sub.get('context', {})
 

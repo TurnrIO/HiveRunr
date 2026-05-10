@@ -10,5 +10,6 @@ def run(config, inp, context, logger, creds=None, **kwargs):
     expr = _render(config.get('expression') or 'True', context, creds)
     safe_builtins = {'len': len, 'str': str, 'int': int, 'float': float, 'bool': bool, 'list': list, 'dict': dict, 'tuple': tuple}
     result = eval(expr, {'__builtins__': safe_builtins}, {'input': inp, 'context': context})
+    logger.info("Condition: expression=%s -> %s", expr, result)
     return {'result': bool(result), 'input': inp}
 
