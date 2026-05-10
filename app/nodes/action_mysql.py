@@ -178,11 +178,11 @@ def run(config: dict, inp: dict, context: dict, logger, creds=None, **kwargs) ->
     except Exception:
         try:
             conn.rollback()
-        except Exception:
+        except (AttributeError, TypeError, RuntimeError):
             pass
         raise
     finally:
         try:
             conn.close()
-        except Exception:
+        except (AttributeError, TypeError, RuntimeError):
             pass
