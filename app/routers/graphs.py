@@ -1,6 +1,7 @@
 """Graphs, graph versions, and graph-run routers."""
 import json
 from json import JSONDecodeError
+import psycopg2
 import logging
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
