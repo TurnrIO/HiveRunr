@@ -9,6 +9,7 @@ Note: _check_webhook_rate now returns tuple[bool, int, int] (allowed, limit, win
 """
 import os
 import pytest
+import redis
 from unittest.mock import patch, MagicMock
 
 
@@ -54,7 +55,7 @@ class TestCheckWebhookRate:
                 with patch.object(_redis_mod, "from_url", return_value=mock_redis):
                     allowed, _limit, _window = mod._check_webhook_rate("tok")
                     return allowed
-            except Exception:
+            except (redis.exceptions.RedisError, OSError, RuntimeError):
                 return True  # fail open
 
     def test_first_request_allowed(self):
@@ -88,7 +89,7 @@ class TestCheckWebhookRate:
                 with patch.object(_redis_mod, "from_url", return_value=bad_redis):
                     allowed, _limit, _window = mod._check_webhook_rate("tok")
                     result = allowed
-            except Exception:
+            except (redis.exceptions.RedisError, OSError, RuntimeError):
                 result = True  # the function returns True on exception
 
         assert result is True
@@ -110,7 +111,7 @@ class TestCheckWebhookRate:
                     assert allowed is True
                     assert limit == 42
                     assert window == 120
-            except Exception:
+            except (redis.exceptions.RedisError, OSError, RuntimeError):
                 pass  # fail open is acceptable
 
     def test_different_tokens_use_different_keys(self):
@@ -141,7 +142,7 @@ class TestCheckWebhookRate:
                 with patch.object(_redis_mod, "from_url", return_value=mock_r):
                     mod._check_webhook_rate("token-A")
                     mod._check_webhook_rate("token-B")
-            except Exception:
+            except (redis.exceptions.RedisError, OSError, RuntimeError):
                 pass
 
         # Verify the key names differ per token (if calls were tracked)
