@@ -15,7 +15,7 @@ def _sftp_walk(sftp, path, depth=0):
     results = []
     try:
         attrs = sftp.listdir_attr(path)
-    except Exception:
+    except OSError:
         return results
     for a in attrs:
         full_path = path.rstrip('/') + '/' + a.filename
@@ -51,7 +51,7 @@ def _ftp_walk(ftp, path, depth=0):
             })
             if is_dir:
                 results.extend(_ftp_walk(ftp, full_path, depth + 1))
-    except Exception:
+    except OSError:
         # Fallback: nlst + cwd trick to detect directories
         try:
             names = ftp.nlst(path)
@@ -65,7 +65,7 @@ def _ftp_walk(ftp, path, depth=0):
                     ftp.cwd(full_path)
                     ftp.cwd(orig)
                     is_dir = True
-                except Exception:
+                except OSError:
                     pass
                 results.append({
                     'name':   name,
@@ -76,7 +76,7 @@ def _ftp_walk(ftp, path, depth=0):
                 })
                 if is_dir:
                     results.extend(_ftp_walk(ftp, full_path, depth + 1))
-        except Exception:
+        except OSError:
             pass
     return results
 
@@ -97,7 +97,7 @@ def _ftp_list_flat(ftp, path):
                 'is_dir': is_dir,
                 'depth':  0,
             })
-    except Exception:
+    except OSError:
         # Fallback: nlst only
         try:
             for full_path in ftp.nlst(path):
@@ -110,7 +110,7 @@ def _ftp_list_flat(ftp, path):
                     ftp.cwd(full_path)
                     ftp.cwd(orig)
                     is_dir = True
-                except Exception:
+                except OSError:
                     pass
                 results.append({
                     'name':   name,
@@ -119,7 +119,7 @@ def _ftp_list_flat(ftp, path):
                     'is_dir': is_dir,
                     'depth':  0,
                 })
-        except Exception:
+        except OSError:
             pass
     return results
 
@@ -373,7 +373,7 @@ def run(config, inp, context, logger, creds=None, **kwargs):
                 except ftplib.error_perm:
                     try:
                         size = ftp.size(remote_path)
-                    except Exception:
+                    except OSError:
                         pass
                 return {'path': remote_path, 'size': size, 'is_dir': is_dir, 'modified': mtime}
 
@@ -386,7 +386,7 @@ def run(config, inp, context, logger, creds=None, **kwargs):
         finally:
             try:
                 ftp.quit()
-            except Exception:
+            except OSError:
                 pass
 
     else:
