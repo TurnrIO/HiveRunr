@@ -102,6 +102,8 @@ def get_template(slug: str, request: Request):
     if not all(c.isalnum() or c in "-_" for c in slug):
         raise HTTPException(400, "Invalid template slug")
     path = TEMPLATES_DIR / f"{slug}.json"
+    if not str(path.resolve()).startswith(str(TEMPLATES_DIR.resolve())):
+        raise HTTPException(404, f"Template '{slug}' not found")
     if not path.exists():
         raise HTTPException(404, f"Template '{slug}' not found")
     try:
