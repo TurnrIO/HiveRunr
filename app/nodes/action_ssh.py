@@ -1,7 +1,9 @@
 """SSH command action node."""
-import json
+import json, logging
 from json import JSONDecodeError
 from app.nodes._utils import _render, _resolve_cred_raw
+
+log = logging.getLogger(__name__)
 
 NODE_TYPE = "action.ssh"
 LABEL = "SSH"
@@ -44,10 +46,18 @@ def run(config, inp, context, logger, creds=None, **kwargs):
     try:
         client.connect(host, port=port, username=username or None,
                        password=password or None, timeout=30)
+    except Exception as exc:
+        log.error("SSH connection to %s:%s failed: %s", host, port, exc)
+        return {'stdout': '', 'stderr': str(exc), 'exit_code': -1, 'success': False}
+
+    try:
         _, stdout_f, stderr_f = client.exec_command(command, timeout=60)
         exit_code = stdout_f.channel.recv_exit_status()
         out = stdout_f.read().decode('utf-8', errors='replace').strip()
         err = stderr_f.read().decode('utf-8', errors='replace').strip()
+    except Exception as exc:
+        log.error("SSH command execution on %s failed: %s", host, exc)
+        return {'stdout': '', 'stderr': str(exc), 'exit_code': -1, 'success': False}
     finally:
         client.close()
 
