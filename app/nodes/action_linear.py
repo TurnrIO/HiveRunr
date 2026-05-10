@@ -63,7 +63,7 @@ def run(config, inp, context, logger, creds=None, **kwargs):
         description = _render(config.get("description", ""), context, creds)
         priority_str = config.get("priority", "0")
         try:   priority = int(priority_str)
-        except: priority = 0
+        except json.JSONDecodeError: priority = 0
         data = _gql(api_key, """
             mutation($input: IssueCreateInput!) {
               issueCreate(input: $input) {
@@ -81,7 +81,7 @@ def run(config, inp, context, logger, creds=None, **kwargs):
         issue_id = _render(config.get("issue_id", ""), context, creds)
         updates_raw = _render(config.get("updates", "{}"), context, creds)
         try:   updates = json.loads(updates_raw) if isinstance(updates_raw, str) else updates_raw
-        except: raise ValueError("Linear update_issue: updates must be valid JSON")
+        except json.JSONDecodeError: raise ValueError("Linear update_issue: updates must be valid JSON")
         data = _gql(api_key, """
             mutation($id: String!, $input: IssueUpdateInput!) {
               issueUpdate(id: $id, input: $input) {
