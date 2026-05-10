@@ -137,9 +137,10 @@ def run(config: dict, inp: dict, context: dict, logger, creds=None, **kwargs) ->
     try: row_limit = int(_render(str(config.get("row_limit", "1000")), context, creds))
     except (ValueError, TypeError): row_limit = 1000
 
-    logger(
-        f"[action.mysql] host={connect_kw.get('host')} db={connect_kw.get('db')} "
-        f"query={query[:80]}{'…' if len(query) > 80 else ''}"
+    logger.info(
+        "[action.mysql] host=%s db=%s query=%s",
+        connect_kw.get('host'), connect_kw.get('db'),
+        query[:80] + ('…' if len(query) > 80 else ''),
     )
 
     conn = _connect(connect_kw)

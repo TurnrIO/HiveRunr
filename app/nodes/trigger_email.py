@@ -125,9 +125,11 @@ def run(config: dict, inp: dict, context: dict, logger, creds=None, **kwargs) ->
             "trigger.email: IMAP credential must include at least 'host' and 'username'"
         )
 
-    logger(
-        f"[trigger.email] Connecting to {host}:{port} "
-        f"({'SSL' if use_ssl else 'plain'}) as {username}"
+    logger.info(
+        "[trigger.email] Connecting to %s:%s (%s) as %s",
+        host, port,
+        "SSL" if use_ssl else "plain",
+        username,
     )
 
     conn = imaplib.IMAP4_SSL(host, port) if use_ssl else imaplib.IMAP4(host, port)
