@@ -412,7 +412,7 @@ def api_replay_run(run_id: int, request: Request, body: _ReplayBody = None):
     with get_conn() as conn:
         conn.cursor().execute(
             "INSERT INTO runs(task_id, graph_id, status, initial_payload, workspace_id) VALUES(%s,%s,'queued',%s,%s)",
-            (task.id, graph_id, json.dumps(payload), workspace_id)
+            (task_id, graph_id, json.dumps(payload), workspace_id)
         )
     log_audit(user["username"], "run.replay", "graph", graph_id,
               {"replayed_run_id": run_id, "task_id": task_id, "graph": g["name"],

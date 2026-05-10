@@ -164,7 +164,7 @@ async def webhook_trigger(token: str, request: Request):
         headers["Access-Control-Allow-Origin"] = "*"
 
     return JSONResponse(
-        {"queued": True, "task_id": task.id, "graph": g["name"]},
+        {"queued": True, "task_id": task_id, "graph": g["name"]},
         headers=headers,
     )
 

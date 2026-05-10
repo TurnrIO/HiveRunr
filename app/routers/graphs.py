@@ -333,7 +333,7 @@ async def api_graph_run(graph_id: int, request: Request):
     log_audit(user["username"], "graph.run", "graph", graph_id,
               {"name": g["name"], "task_id": task_id},
               request.client.host if request.client else None)
-    return {"queued": True, "task_id": task.id, "graph": g["name"]}
+    return {"queued": True, "task_id": task_id, "graph": g["name"]}
 
 
 # ── Graph versions ────────────────────────────────────────────────────────────
