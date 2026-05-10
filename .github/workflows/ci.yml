@@ -99,14 +99,14 @@ jobs:
       - name: Wait for stack to be healthy
         run: |
           echo "Waiting for stack..."
-          for i in $(seq 1 45); do
+          for i in $(seq 1 60); do
             if curl -sf http://localhost/health > /dev/null 2>&1; then
               echo "Stack healthy after $((i*2))s"
               exit 0
             fi
             sleep 2
           done
-          echo "Stack did not become healthy in 90s — dumping logs"
+          echo "Stack did not become healthy in 120s — dumping logs"
           docker compose logs --tail=50
           exit 1
       - name: Bootstrap first admin user
