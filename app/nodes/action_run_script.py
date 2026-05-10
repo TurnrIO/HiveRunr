@@ -57,7 +57,7 @@ def run(config, inp, context, logger, creds=None, **kwargs):
     }
     try:
         exec(script, ns)  # noqa: S102
-    except Exception as exc:
+    except (ValueError, RuntimeError, TypeError) as exc:
         raise RuntimeError(f"run_script raised {type(exc).__name__}: {exc}") from exc
 
     _audit.warning(

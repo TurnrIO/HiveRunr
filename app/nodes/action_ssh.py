@@ -1,5 +1,5 @@
 """SSH command action node."""
-import json, logging
+import json, logging, socket
 from json import JSONDecodeError
 from app.nodes._utils import _render, _resolve_cred_raw
 
@@ -46,7 +46,7 @@ def run(config, inp, context, logger, creds=None, **kwargs):
     try:
         client.connect(host, port=port, username=username or None,
                        password=password or None, timeout=30)
-    except Exception as exc:
+    except (socket.error, OSError, paramiko.AuthenticationException, paramiko.SSHException) as exc:
         log.error("SSH connection to %s:%s failed: %s", host, port, exc)
         return {'stdout': '', 'stderr': str(exc), 'exit_code': -1, 'success': False}
 
@@ -55,7 +55,7 @@ def run(config, inp, context, logger, creds=None, **kwargs):
         exit_code = stdout_f.channel.recv_exit_status()
         out = stdout_f.read().decode('utf-8', errors='replace').strip()
         err = stderr_f.read().decode('utf-8', errors='replace').strip()
-    except Exception as exc:
+    except (socket.error, OSError, paramiko.SSHException) as exc:
         log.error("SSH command execution on %s failed: %s", host, exc)
         return {'stdout': '', 'stderr': str(exc), 'exit_code': -1, 'success': False}
     finally:

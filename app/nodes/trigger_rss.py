@@ -100,7 +100,7 @@ def _validate_feed_url(url: str) -> None:
         host = parsed.netloc.split(":")[0]  # strip port
         infos = urllib.parse.getaddrinfo(host, 443 if parsed.scheme == "https" else 80,
                                         proto=socket.IPPROTO_TCP)
-    except Exception as exc:
+    except (socket.gaierror, OSError) as exc:
         raise ValueError(f"trigger.rss: could not resolve host '{host}': {exc}") from exc
     for family, _, _, _, sockaddr in infos:
         if family != socket.AF_INET:
@@ -122,7 +122,7 @@ def _parse_date(s: str | None) -> datetime | None:
     try:
         dt = parsedate_to_datetime(s)
         return dt.astimezone(timezone.utc)
-    except Exception:
+    except (ValueError, TypeError):
         pass
     # Try ISO-8601 variants (Atom <updated>/<published>)
     for fmt in ("%Y-%m-%dT%H:%M:%S%z", "%Y-%m-%dT%H:%M:%SZ", "%Y-%m-%dT%H:%M:%S"):

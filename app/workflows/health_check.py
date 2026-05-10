@@ -34,7 +34,7 @@ for target in TARGETS:
         ms = int((time.time() - t0) * 1000)
         results.append({"name": name, "url": url, "status": e.code, "ms": ms, "ok": False})
         print(f"  ✗  {name:20s}  HTTP {e.code}  ({ms} ms)")
-    except Exception as e:
+    except (urllib.error.HTTPError, urllib.error.URLError, OSError) as e:
         ms = int((time.time() - t0) * 1000)
         results.append({"name": name, "url": url, "status": None, "ms": ms, "ok": False, "error": str(e)})
         print(f"  ✗  {name:20s}  ERROR: {e}")
