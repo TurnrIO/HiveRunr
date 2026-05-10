@@ -32,7 +32,7 @@ def run(config, inp, context, logger, creds=None, **kwargs):
         raw = creds.get(cred_name, {})
         if isinstance(raw, str):
             try:   raw = json.loads(raw)
-            except: raw = {}
+            except json.JSONDecodeError: raw = {}
         api_key = raw.get("api_key", raw.get("token", ""))
     if not api_key:
         api_key = _render(config.get("api_key", ""), context, creds)
