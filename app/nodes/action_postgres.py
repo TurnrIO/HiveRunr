@@ -27,6 +27,7 @@ Output shape
 """
 import json
 from json import JSONDecodeError
+import psycopg2
 import logging
 from ._utils import _render, _resolve_cred_raw
 
@@ -228,12 +229,12 @@ def run(config: dict, inp: dict, context: dict, logger, creds=None, **kwargs) ->
             "row":      rows[0] if rows else {},
             "affected": affected,
         }
-    except Exception:
+    except (psycopg2.Error, AttributeError, TypeError, ValueError, RuntimeError) as exc:
         try:
             db_conn.rollback()
         except (AttributeError, TypeError, RuntimeError):
             pass
-        raise
+        raise RuntimeError(f"action.postgres: query failed — {exc}") from exc
     finally:
         try:
             db_conn.close()

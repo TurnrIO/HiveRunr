@@ -175,12 +175,12 @@ def run(config: dict, inp: dict, context: dict, logger, creds=None, **kwargs) ->
             "last_insert_id": last_insert_id,
         }
 
-    except Exception:
+    except (AttributeError, TypeError, ValueError, RuntimeError) as exc:
         try:
             conn.rollback()
         except (AttributeError, TypeError, RuntimeError):
             pass
-        raise
+        raise RuntimeError(f"action.mysql: query failed — {exc}") from exc
     finally:
         try:
             conn.close()
