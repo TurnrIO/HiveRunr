@@ -94,8 +94,24 @@ jobs:
         run: |
           cp .env.example .env
           SECRET_KEY=$(python3 -c "import base64,os; print(base64.urlsafe_b64encode(os.urandom(32)).decode())")
+          API_KEY=$(python3 -c "import secrets; print(secrets.token_urlsafe(32))")
           sed -i "s|^SECRET_KEY=$|SECRET_KEY=$SECRET_KEY|" .env
+          sed -i "s|^API_KEY=.*|API_KEY=$API_KEY|" .env
           docker compose up -d --build
+      - name: Wait for api container to be healthy
+        run: |
+          echo "Waiting for api container to be healthy..."
+          for i in $(seq 1 40); do
+            status=$(docker compose ps api --format json 2>/dev/null | python3 -c "import sys,json; d=json.load(sys.stdin); print(d[0]['Health'])")
+            if [ "$status" = "healthy" ]; then
+              echo "Api healthy after $((i*2))s"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Api did not become healthy in 80s"
+          docker compose ps
+          exit 1
       - name: Wait for stack to be healthy
         run: |
           echo "Waiting for stack..."
@@ -136,18 +152,3 @@ jobs:
       - name: Dump logs on failure
         if: failure()
         run: docker compose logs --tail=100
-
-      - name: Wait for api container to be healthy
-        run: |
-          echo "Waiting for api container to be healthy..."
-          for i in $(seq 1 40); do
-            status=$(docker compose ps api --format json 2>/dev/null | python3 -c "import sys,json; d=json.load(sys.stdin); print(d[0]['Health'])")
-            if [ "$status" = "healthy" ]; then
-              echo "Api healthy after $((i*2))s"
-              exit 0
-            fi
-            sleep 2
-          done
-          echo "Api did not become healthy in 80s"
-          docker compose ps
-          exit 1
