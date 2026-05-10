@@ -150,7 +150,7 @@ def run(config, inp, context, logger, creds=None, **kwargs):
     # GraphQL servers typically return 200 even for errors; parse body first
     try:
         body = resp.json()
-    except Exception:
+    except json.JSONDecodeError:
         resp.raise_for_status()
         raise ValueError(f"GraphQL: non-JSON response (status {resp.status_code})")
 
