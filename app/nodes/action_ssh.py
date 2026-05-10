@@ -1,5 +1,6 @@
 """SSH command action node."""
 import json
+from json import JSONDecodeError
 from app.nodes._utils import _render, _resolve_cred_raw
 
 NODE_TYPE = "action.ssh"
@@ -27,7 +28,7 @@ def run(config, inp, context, logger, creds=None, **kwargs):
                 port_str = port_str or str(c.get('port', ''))
                 username = username or c.get('username', '')
                 password = password or c.get('password', '')
-            except (json.JSONDecodeError, AttributeError):
+            except (JSONDecodeError, AttributeError):
                 pass
 
     port = int(port_str or 22)

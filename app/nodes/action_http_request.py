@@ -1,5 +1,6 @@
 """HTTP request action node."""
 import json
+from json import JSONDecodeError
 import socket
 import ipaddress
 import urllib.parse
@@ -100,7 +101,7 @@ def run(config, inp, context, logger, creds=None, **kwargs):
                 token = c.get("token") or c.get("api_key") or c.get("Authorization")
                 if token:
                     headers["Authorization"] = f"Bearer {token}"
-            except (json.JSONDecodeError, AttributeError):
+            except (JSONDecodeError, AttributeError):
                 # Raw string — treat as a Bearer token directly
                 headers["Authorization"] = f"Bearer {raw}"
 
@@ -109,7 +110,7 @@ def run(config, inp, context, logger, creds=None, **kwargs):
         try:
             extra = json.loads(_render(config["headers_json"], context, creds))
             headers.update(extra)
-        except (json.JSONDecodeError, ValueError):
+        except (JSONDecodeError, ValueError):
             pass
 
     # ── Body (JSON) ───────────────────────────────────────────────────────
@@ -123,14 +124,14 @@ def run(config, inp, context, logger, creds=None, **kwargs):
             parsed = json.loads(rendered)
             json_body = parsed if isinstance(parsed, dict) else None
             raw_body  = rendered if not isinstance(parsed, dict) else None
-        except (json.JSONDecodeError, ValueError):
+        except (JSONDecodeError, ValueError):
             raw_body = rendered
 
     # ── Form data ─────────────────────────────────────────────────────────
     if config.get("form_json"):
         try:
             form_body = json.loads(_render(config["form_json"], context, creds))
-        except (json.JSONDecodeError, ValueError):
+        except (JSONDecodeError, ValueError):
             pass
 
     # ── Timeout ───────────────────────────────────────────────────────────
@@ -188,7 +189,7 @@ def run(config, inp, context, logger, creds=None, **kwargs):
 
         try:
             rbody = r.json()
-        except (json.JSONDecodeError, ValueError):
+        except (JSONDecodeError, ValueError):
             rbody = r.text
 
         ok = 200 <= r.status_code < 300

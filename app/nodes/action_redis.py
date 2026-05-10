@@ -8,6 +8,7 @@ Credential JSON fields:
   host, port, password, db — individual fields (url takes precedence).
 """
 import json
+from json import JSONDecodeError
 from app.nodes._utils import _render, _resolve_cred_raw
 
 NODE_TYPE = "action.redis"
@@ -35,7 +36,7 @@ def _get_client(config, context, creds):
                     db       = int(c.get("db", 0))
                     return _redis.Redis(host=host, port=port, password=password, db=db,
                                        socket_timeout=10, decode_responses=True)
-            except (json.JSONDecodeError, AttributeError, ValueError):
+            except (JSONDecodeError, AttributeError, ValueError):
                 url = raw.strip()
 
     if url:

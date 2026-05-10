@@ -26,6 +26,7 @@ Output shape
 from __future__ import annotations
 
 import json
+from json import JSONDecodeError
 import logging
 import re
 from ._utils import _render, _resolve_cred_raw
@@ -102,7 +103,7 @@ def _normalize_params(raw: str, context: dict, creds: dict):
         if isinstance(val, (list, tuple)):
             return list(val)
         return [val]
-    except (json.JSONDecodeError, TypeError):
+    except (JSONDecodeError, TypeError):
         return []
 
 
@@ -116,7 +117,7 @@ def run(config: dict, inp: dict, context: dict, logger, creds=None, **kwargs) ->
     raw_cred  = _resolve_cred_raw(cred_name, creds)
     try:
         cred = json.loads(raw_cred) if raw_cred else {}
-    except (json.JSONDecodeError, TypeError):
+    except (JSONDecodeError, TypeError):
         cred = {}
 
     if not cred:

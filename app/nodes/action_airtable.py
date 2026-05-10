@@ -32,6 +32,7 @@ Output
     { id, deleted: true }
 """
 import json
+from json import JSONDecodeError
 from app.nodes._utils import _render, _resolve_cred_raw
 
 NODE_TYPE = "action.airtable"
@@ -60,7 +61,7 @@ def _resolve_creds(config, context, creds):
                 c = json.loads(raw)
                 api_key = api_key or c.get("api_key", "") or c.get("token", "")
                 base_id = base_id or c.get("base_id", "") or c.get("base", "")
-            except (json.JSONDecodeError, AttributeError):
+            except (JSONDecodeError, AttributeError):
                 api_key = api_key or raw.strip()
 
     if not api_key:
@@ -119,14 +120,14 @@ def run(config, inp, context, logger, creds=None, **kwargs):
     if fields_raw:
         try:
             fields = json.loads(fields_raw)
-        except json.JSONDecodeError as exc:
+        except JSONDecodeError as exc:
             raise ValueError(f"Airtable: fields_json is not valid JSON — {exc}") from exc
 
     sort = []
     if sort_raw:
         try:
             sort = json.loads(sort_raw)
-        except json.JSONDecodeError:
+        except JSONDecodeError:
             pass
 
     table_url  = f"{_BASE_URL}/{base_id}/{table}"

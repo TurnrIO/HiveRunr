@@ -10,6 +10,7 @@ Credential JSON fields (store as a generic/API Key credential):
 All config fields support {{template}} rendering.
 """
 import json
+from json import JSONDecodeError
 import socket
 import ipaddress
 import urllib.parse
@@ -85,7 +86,7 @@ def _parse_json_field(raw, label):
         return {}
     try:
         return json.loads(raw)
-    except (json.JSONDecodeError, ValueError) as exc:
+    except (JSONDecodeError, ValueError) as exc:
         raise ValueError(f"GraphQL: {label} is not valid JSON — {exc}") from exc
 
 
@@ -108,7 +109,7 @@ def run(config, inp, context, logger, creds=None, **kwargs):
                 token    = token    or c.get("token", "")    or c.get("api_key", "")
                 if not extra_headers_raw:
                     extra_headers_raw = c.get("headers", "") or ""
-            except (json.JSONDecodeError, AttributeError):
+            except (JSONDecodeError, AttributeError):
                 # raw value might be a bare token
                 token = token or raw.strip()
 
@@ -150,7 +151,7 @@ def run(config, inp, context, logger, creds=None, **kwargs):
     # GraphQL servers typically return 200 even for errors; parse body first
     try:
         body = resp.json()
-    except json.JSONDecodeError:
+    except JSONDecodeError:
         resp.raise_for_status()
         raise ValueError(f"GraphQL: non-JSON response (status {resp.status_code})")
 

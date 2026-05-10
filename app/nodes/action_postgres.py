@@ -26,6 +26,7 @@ Output shape
 }
 """
 import json
+from json import JSONDecodeError
 import logging
 from ._utils import _render, _resolve_cred_raw
 
@@ -131,7 +132,7 @@ def _normalize_params(raw: str, context: dict, creds: dict):
         if isinstance(val, dict):
             return val   # named params (psycopg2 supports %(name)s)
         return [val]
-    except (json.JSONDecodeError, TypeError):
+    except (JSONDecodeError, TypeError):
         return []
 
 
@@ -164,7 +165,7 @@ def run(config: dict, inp: dict, context: dict, logger, creds=None, **kwargs) ->
     raw_cred  = _resolve_cred_raw(cred_name, creds)
     try:
         cred = json.loads(raw_cred) if raw_cred else {}
-    except (json.JSONDecodeError, TypeError):
+    except (JSONDecodeError, TypeError):
         cred = {}
 
     # Allow DSN to be set directly in config as a fallback

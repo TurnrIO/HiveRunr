@@ -9,6 +9,7 @@ Output (generate): { csv: "...", count: N }
 """
 import csv
 import io
+from json import JSONDecodeError
 from app.nodes._utils import _render
 
 NODE_TYPE = "action.csv"
@@ -50,7 +51,7 @@ def run(config, inp, context, logger, creds=None, **kwargs):
                 try:
                     import json as _json
                     items = _json.loads(items)
-                except _json.JSONDecodeError:
+                except JSONDecodeError:
                     items = inp
         else:
             items = inp

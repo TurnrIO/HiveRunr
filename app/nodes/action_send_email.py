@@ -1,6 +1,7 @@
 """Send email action node."""
 import os
 import json
+from json import JSONDecodeError
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from app.nodes._utils import _render, _resolve_cred_raw
@@ -37,7 +38,7 @@ def run(config, inp, context, logger, creds=None, **kwargs):
                 port = port or c.get('port')
                 user = user or c.get('user', '')
                 pwd  = pwd  or c.get('pass', '')
-            except (json.JSONDecodeError, AttributeError):
+            except (JSONDecodeError, AttributeError):
                 pass
 
     host      = host or os.environ.get('SMTP_HOST', '')

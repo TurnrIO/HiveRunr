@@ -1,5 +1,6 @@
 """OpenAI Assistants API node."""
 import json
+from json import JSONDecodeError
 import time
 import urllib.request
 import urllib.error
@@ -24,7 +25,7 @@ def _req(method, path, api_key, body=None):
     except urllib.error.HTTPError as e:
         body_txt = e.read().decode()
         try:   detail = json.loads(body_txt).get("error", {}).get("message", body_txt)
-        except json.JSONDecodeError: detail = body_txt
+        except JSONDecodeError: detail = body_txt
         raise RuntimeError(f"OpenAI {e.code}: {detail}")
 
 
@@ -36,7 +37,7 @@ def run(config, inp, context, logger, creds=None, **kwargs):
         raw = creds.get(cred_name, {})
         if isinstance(raw, str):
             try:   raw = json.loads(raw)
-            except json.JSONDecodeError: raw = {}
+            except JSONDecodeError: raw = {}
         api_key = raw.get("api_key", raw.get("token", ""))
     if not api_key:
         api_key = _render(config.get("api_key", ""), context, creds)

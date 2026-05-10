@@ -1,5 +1,6 @@
 """Twilio SMS / WhatsApp / Voice REST API node."""
 import json, base64
+from json import JSONDecodeError
 import urllib.request, urllib.error, urllib.parse
 from app.nodes._utils import _render
 
@@ -22,7 +23,7 @@ def _req(method, path, account_sid, auth_token, body=None):
     except urllib.error.HTTPError as e:
         body_txt = e.read().decode()
         try:    detail = json.loads(body_txt).get("message", body_txt)
-        except json.JSONDecodeError: detail = body_txt
+        except JSONDecodeError: detail = body_txt
         raise RuntimeError(f"Twilio {e.code}: {detail}")
 
 def run(config, inp, context, logger, creds=None, **kwargs):
@@ -34,7 +35,7 @@ def run(config, inp, context, logger, creds=None, **kwargs):
         raw = creds.get(cred_name, {})
         if isinstance(raw, str):
             try:   raw = json.loads(raw)
-            except json.JSONDecodeError: raw = {}
+            except JSONDecodeError: raw = {}
         account_sid = raw.get("account_sid", "")
         auth_token  = raw.get("auth_token", "")
     if not account_sid:

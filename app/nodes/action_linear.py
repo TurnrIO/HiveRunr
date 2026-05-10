@@ -1,5 +1,6 @@
 """Linear.app issue tracker node (GraphQL API)."""
 import json
+from json import JSONDecodeError
 import urllib.request
 import urllib.error
 from app.nodes._utils import _render
@@ -32,7 +33,7 @@ def run(config, inp, context, logger, creds=None, **kwargs):
         raw = creds.get(cred_name, {})
         if isinstance(raw, str):
             try:   raw = json.loads(raw)
-            except json.JSONDecodeError: raw = {}
+            except JSONDecodeError: raw = {}
         api_key = raw.get("api_key", raw.get("token", ""))
     if not api_key:
         api_key = _render(config.get("api_key", ""), context, creds)
@@ -63,7 +64,7 @@ def run(config, inp, context, logger, creds=None, **kwargs):
         description = _render(config.get("description", ""), context, creds)
         priority_str = config.get("priority", "0")
         try:   priority = int(priority_str)
-        except json.JSONDecodeError: priority = 0
+        except JSONDecodeError: priority = 0
         data = _gql(api_key, """
             mutation($input: IssueCreateInput!) {
               issueCreate(input: $input) {
@@ -81,7 +82,7 @@ def run(config, inp, context, logger, creds=None, **kwargs):
         issue_id = _render(config.get("issue_id", ""), context, creds)
         updates_raw = _render(config.get("updates", "{}"), context, creds)
         try:   updates = json.loads(updates_raw) if isinstance(updates_raw, str) else updates_raw
-        except json.JSONDecodeError: raise ValueError("Linear update_issue: updates must be valid JSON")
+        except JSONDecodeError: raise ValueError("Linear update_issue: updates must be valid JSON")
         data = _gql(api_key, """
             mutation($id: String!, $input: IssueUpdateInput!) {
               issueUpdate(id: $id, input: $input) {

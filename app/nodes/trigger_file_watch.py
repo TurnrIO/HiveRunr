@@ -31,6 +31,7 @@ Output shape
 import datetime
 import fnmatch
 import json
+from json import JSONDecodeError
 import logging
 import os
 import time
@@ -168,7 +169,7 @@ def run(config: dict, inp: dict, context: dict, logger, creds=None, **kwargs) ->
         raw_cred = _resolve_cred_raw(sftp_cred_name, creds)
         try:
             cred = json.loads(raw_cred) if raw_cred else {}
-        except (json.JSONDecodeError, TypeError):
+        except (JSONDecodeError, TypeError):
             cred = {}
 
         host     = cred.get("host", "")

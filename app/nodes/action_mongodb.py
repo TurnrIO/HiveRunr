@@ -1,5 +1,6 @@
 """MongoDB node — uses pymongo (optional dep)."""
 import json
+from json import JSONDecodeError
 from app.nodes._utils import _render
 
 NODE_TYPE = "action.mongodb"
@@ -19,7 +20,7 @@ def _parse_json(raw, label):
         return raw
     try:
         return json.loads(raw)
-    except json.JSONDecodeError:
+    except JSONDecodeError:
         raise ValueError(f"MongoDB {label}: must be valid JSON, got: {raw!r}")
 
 def run(config, inp, context, logger, creds=None, **kwargs):
@@ -29,7 +30,7 @@ def run(config, inp, context, logger, creds=None, **kwargs):
         raw = creds.get(cred_name, {})
         if isinstance(raw, str):
             try:   raw = json.loads(raw)
-            except json.JSONDecodeError: raw = {}
+            except JSONDecodeError: raw = {}
         uri = raw.get("uri", raw.get("connection_string", raw.get("url", "")))
     if not uri:
         uri = _render(config.get("uri", ""), context, creds)
@@ -103,7 +104,7 @@ def run(config, inp, context, logger, creds=None, **kwargs):
             pipeline_raw = _render(config.get("pipeline", "[]"), context, creds)
             try:
                 pipeline = json.loads(pipeline_raw) if isinstance(pipeline_raw, str) else pipeline_raw
-            except json.JSONDecodeError:
+            except JSONDecodeError:
                 raise ValueError("MongoDB aggregate: pipeline must be valid JSON array")
             docs = [_bson_to_dict(d) for d in coll.aggregate(pipeline)]
             return {"documents": docs, "count": len(docs), "document": docs[0] if docs else None}

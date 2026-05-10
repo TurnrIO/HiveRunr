@@ -172,7 +172,7 @@ def _update_issue(base_url, email, token, issue_key, fields_json):
     if isinstance(fields_json, str):
         try:
             fields = json.loads(fields_json)
-        except json.JSONDecodeError as exc:
+        except JSONDecodeError as exc:
             raise ValueError(f"action.jira update-issue: 'fields' must be valid JSON — {exc}") from exc
     else:
         fields = fields_json or {}
@@ -263,7 +263,7 @@ def run(config: dict, inp: dict, context: dict, logger, creds=None, **kwargs) ->
     raw_cred  = _resolve_cred_raw(cred_name, creds)
     try:
         cred = json.loads(raw_cred) if raw_cred else {}
-    except (json.JSONDecodeError, TypeError):
+    except (JSONDecodeError, TypeError):
         cred = {}
 
     if not cred:
@@ -296,7 +296,7 @@ def run(config: dict, inp: dict, context: dict, logger, creds=None, **kwargs) ->
         extra_raw = r("extra_fields")
         try:
             extra = json.loads(extra_raw) if extra_raw.strip() else {}
-        except json.JSONDecodeError:
+        except JSONDecodeError:
             extra = {}
         labels_raw = r("labels")
         labels = [l.strip() for l in labels_raw.split(",") if l.strip()] if labels_raw else []

@@ -1,5 +1,6 @@
 """Call subgraph action node."""
 import json
+from json import JSONDecodeError
 from app.nodes._utils import _render
 
 NODE_TYPE = "action.call_graph"
@@ -24,7 +25,7 @@ def run(config, inp, context, logger, creds=None, **kwargs):
     if config.get('payload'):
         try:
             sub_payload = json.loads(_render(config['payload'], context, creds))
-        except (json.JSONDecodeError, ValueError):
+        except (JSONDecodeError, ValueError):
             sub_payload = {}
 
     sub_payload = {**inp, **sub_payload} if isinstance(inp, dict) else sub_payload
@@ -35,7 +36,7 @@ def run(config, inp, context, logger, creds=None, **kwargs):
 
     try:
         gd = json.loads(g.get('graph_json') or '{}')
-    except (json.JSONDecodeError, ValueError):
+    except (JSONDecodeError, ValueError):
         gd = {}
 
     sub = run_graph(gd, initial_payload=sub_payload, logger=logger, _depth=kwargs.get('_depth', 0) + 1)

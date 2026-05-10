@@ -13,6 +13,7 @@ Output:
   { value, matched_case, matched_index, no_match: bool }
 """
 import json
+from json import JSONDecodeError
 from app.nodes._utils import _render
 
 NODE_TYPE = "action.switch"
@@ -39,7 +40,7 @@ def run(config, inp, context, logger, creds=None, **kwargs):
     cases_raw = config.get("cases", "[]")
     try:
         cases = json.loads(cases_raw)
-    except (json.JSONDecodeError, TypeError):
+    except (JSONDecodeError, TypeError):
         cases = []
 
     matched_case = None

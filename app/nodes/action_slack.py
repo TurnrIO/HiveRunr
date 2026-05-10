@@ -1,5 +1,6 @@
 """Slack message action node."""
 import json
+from json import JSONDecodeError
 from app.nodes._utils import _render, _resolve_cred_raw
 
 NODE_TYPE = "action.slack"
@@ -22,7 +23,7 @@ def run(config, inp, context, logger, creds=None, **kwargs):
             try:
                 c = json.loads(raw)
                 webhook_url = c.get('webhook_url', '') or c.get('url', '')
-            except (json.JSONDecodeError, AttributeError):
+            except (JSONDecodeError, AttributeError):
                 webhook_url = raw  # fallback: raw value is the URL
 
     if not webhook_url:

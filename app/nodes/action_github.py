@@ -1,5 +1,6 @@
 """GitHub API action node."""
 import json
+from json import JSONDecodeError
 from app.nodes._utils import _render, _resolve_cred_raw
 
 NODE_TYPE = "action.github"
@@ -28,7 +29,7 @@ def run(config, inp, context, logger, creds=None, **kwargs):
         if raw:
             try:
                 token = json.loads(raw).get('token', raw)
-            except (json.JSONDecodeError, ValueError):
+            except (JSONDecodeError, ValueError):
                 token = raw
 
     if not token:

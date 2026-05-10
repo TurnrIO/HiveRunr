@@ -1,5 +1,6 @@
 """HubSpot CRM REST API v3 node."""
 import json, time
+from json import JSONDecodeError
 import urllib.request, urllib.error
 from app.nodes._utils import _render
 
@@ -21,7 +22,7 @@ def _req(method, path, token, body=None):
     except urllib.error.HTTPError as e:
         body_txt = e.read().decode()
         try:    detail = json.loads(body_txt).get("message", body_txt)
-        except json.JSONDecodeError: detail = body_txt
+        except JSONDecodeError: detail = body_txt
         raise RuntimeError(f"HubSpot {e.code}: {detail}")
 
 def _flatten(obj):
@@ -39,7 +40,7 @@ def run(config, inp, context, logger, creds=None, **kwargs):
         raw = creds.get(cred_name, {})
         if isinstance(raw, str):
             try:   raw = json.loads(raw)
-            except json.JSONDecodeError: raw = {}
+            except JSONDecodeError: raw = {}
         token = raw.get("access_token", raw.get("token", ""))
     if not token:
         token = _render(config.get("access_token", ""), context, creds)
@@ -62,7 +63,7 @@ def run(config, inp, context, logger, creds=None, **kwargs):
     elif op in ("create_contact", "create_object"):
         props_raw = _render(config.get("properties", "{}"), context, creds)
         try:   props = json.loads(props_raw) if isinstance(props_raw, str) else props_raw
-        except json.JSONDecodeError: raise ValueError(f"HubSpot create: properties must be valid JSON, got: {props_raw!r}")
+        except JSONDecodeError: raise ValueError(f"HubSpot create: properties must be valid JSON, got: {props_raw!r}")
         result = _req("POST", f"/crm/v3/objects/{object_type}", token, {"properties": props})
         flat   = _flatten(result)
         return {"object": flat, "id": flat.get("id"), "properties": result.get("properties", {}), "raw": result}
@@ -72,7 +73,7 @@ def run(config, inp, context, logger, creds=None, **kwargs):
         obj_id    = _render(config.get("object_id", ""), context, creds)
         props_raw = _render(config.get("properties", "{}"), context, creds)
         try:   props = json.loads(props_raw) if isinstance(props_raw, str) else props_raw
-        except json.JSONDecodeError: raise ValueError(f"HubSpot update: properties must be valid JSON, got: {props_raw!r}")
+        except JSONDecodeError: raise ValueError(f"HubSpot update: properties must be valid JSON, got: {props_raw!r}")
         result = _req("PATCH", f"/crm/v3/objects/{object_type}/{obj_id}", token, {"properties": props})
         flat   = _flatten(result)
         return {"object": flat, "id": flat.get("id"), "properties": result.get("properties", {}), "raw": result}
@@ -84,7 +85,7 @@ def run(config, inp, context, logger, creds=None, **kwargs):
         limit        = int(_render(config.get("limit", "20"), context, creds) or 20)
         after_cursor = _render(config.get("after", ""), context, creds)
         try:   filters = json.loads(filters_raw) if isinstance(filters_raw, str) else filters_raw
-        except json.JSONDecodeError: filters = []
+        except JSONDecodeError: filters = []
         body = {"filterGroups": [{"filters": filters}], "limit": min(limit, 200)}
         if props_str:
             body["properties"] = [p.strip() for p in props_str.split(",") if p.strip()]
@@ -113,7 +114,7 @@ def run(config, inp, context, logger, creds=None, **kwargs):
     elif op == "create_deal":
         props_raw = _render(config.get("properties", "{}"), context, creds)
         try:   props = json.loads(props_raw) if isinstance(props_raw, str) else props_raw
-        except json.JSONDecodeError: raise ValueError("HubSpot create_deal: properties must be valid JSON")
+        except JSONDecodeError: raise ValueError("HubSpot create_deal: properties must be valid JSON")
         result = _req("POST", "/crm/v3/objects/deals", token, {"properties": props})
         flat   = _flatten(result)
         return {"object": flat, "id": flat.get("id"), "properties": result.get("properties", {}), "raw": result}

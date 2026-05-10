@@ -1,6 +1,7 @@
 """Shared utilities for node modules."""
 import re
 import json
+from json import JSONDecodeError
 
 _TMPL = re.compile(r'\{\{([^}]+)\}\}')
 
@@ -61,7 +62,7 @@ def _render(text: str, ctx: dict, creds: dict = None, predecessor_ids=None) -> s
                     data = json.loads(raw)
                     val  = data.get(cred_field)
                     return str(val) if val is not None else m.group(0)
-                except (json.JSONDecodeError, AttributeError):
+                except (JSONDecodeError, AttributeError):
                     return m.group(0)
             return raw
 

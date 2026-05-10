@@ -32,6 +32,7 @@ Output shape
 """
 import base64
 import json
+from json import JSONDecodeError
 import logging
 from ._utils import _render, _resolve_cred_raw
 
@@ -107,7 +108,7 @@ def _op_put(s3, bucket: str, key: str, config: dict, context: dict, creds: dict)
     metadata_raw = _render(config.get("metadata_json", "{}"), context, creds).strip()
     try:
         metadata = json.loads(metadata_raw) if metadata_raw else {}
-    except json.JSONDecodeError:
+    except JSONDecodeError:
         metadata = {}
 
     body = content.encode("utf-8") if isinstance(content, str) else content
@@ -236,7 +237,7 @@ def run(config: dict, inp: dict, context: dict, logger, creds=None, **kwargs) ->
     raw_cred  = _resolve_cred_raw(cred_name, creds)
     try:
         cred = json.loads(raw_cred) if raw_cred else {}
-    except (json.JSONDecodeError, TypeError):
+    except (JSONDecodeError, TypeError):
         cred = {}
 
     if not cred:

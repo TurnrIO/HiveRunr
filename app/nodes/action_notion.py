@@ -1,5 +1,6 @@
 """Notion API action node."""
 import json
+from json import JSONDecodeError
 from app.nodes._utils import _render, _resolve_cred_raw
 
 NODE_TYPE = "action.notion"
@@ -18,7 +19,7 @@ def run(config, inp, context, logger, creds=None, **kwargs):
         if raw:
             try:
                 token = json.loads(raw).get('token', raw)
-            except (json.JSONDecodeError, ValueError):
+            except (JSONDecodeError, ValueError):
                 token = raw
 
     if not token:
@@ -49,12 +50,12 @@ def run(config, inp, context, logger, creds=None, **kwargs):
         if config.get('filter_json'):
             try:
                 body['filter'] = json.loads(_render(config['filter_json'], context, creds))
-            except (json.JSONDecodeError, ValueError):
+            except (JSONDecodeError, ValueError):
                 pass
         if config.get('sorts_json'):
             try:
                 body['sorts'] = json.loads(_render(config['sorts_json'], context, creds))
-            except (json.JSONDecodeError, ValueError):
+            except (JSONDecodeError, ValueError):
                 pass
         body['page_size'] = int(config.get('page_size', 50))
 
@@ -104,7 +105,7 @@ def run(config, inp, context, logger, creds=None, **kwargs):
         props_raw = _render(config.get('properties_json', '{}'), context, creds)
         try:
             props = json.loads(props_raw)
-        except (json.JSONDecodeError, ValueError):
+        except (JSONDecodeError, ValueError):
             raise ValueError("Notion create_page: properties_json must be valid JSON")
 
         # Auto-wrap plain string values as title/rich_text
@@ -132,7 +133,7 @@ def run(config, inp, context, logger, creds=None, **kwargs):
         props_raw = _render(config.get('properties_json', '{}'), context, creds)
         try:
             props = json.loads(props_raw)
-        except (json.JSONDecodeError, ValueError):
+        except (JSONDecodeError, ValueError):
             raise ValueError("Notion update_page: properties_json must be valid JSON")
 
         return notion('PATCH', f'{base}/pages/{page_id}', json={'properties': props})

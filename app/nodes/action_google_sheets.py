@@ -1,5 +1,6 @@
 """Google Sheets API action node."""
 import json
+from json import JSONDecodeError
 from app.nodes._utils import _render, _resolve_cred_raw
 
 NODE_TYPE = "action.google_sheets"
@@ -18,7 +19,7 @@ def run(config, inp, context, logger, creds=None, **kwargs):
         if raw:
             try:
                 service_account_json = json.loads(raw).get('json', raw)
-            except (json.JSONDecodeError, ValueError):
+            except (JSONDecodeError, ValueError):
                 service_account_json = raw
 
     if not service_account_json:
@@ -66,7 +67,7 @@ def run(config, inp, context, logger, creds=None, **kwargs):
         values_raw = _render(config.get('values_json', '[]'), context, creds)
         try:
             values = json.loads(values_raw)
-        except (json.JSONDecodeError, ValueError):
+        except (JSONDecodeError, ValueError):
             raise ValueError("Google Sheets write_range: values_json must be valid JSON array")
 
         body = {'values': values, 'majorDimension': 'ROWS'}
@@ -79,7 +80,7 @@ def run(config, inp, context, logger, creds=None, **kwargs):
         values_raw = _render(config.get('values_json', '[]'), context, creds)
         try:
             values = json.loads(values_raw)
-        except (json.JSONDecodeError, ValueError):
+        except (JSONDecodeError, ValueError):
             raise ValueError("Google Sheets append_rows: values_json must be valid JSON array")
 
         r = httpx.post(f'{sheets_base}/values/{sheet_range}:append',
