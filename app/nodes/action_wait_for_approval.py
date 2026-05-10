@@ -96,7 +96,7 @@ def run(config, inp, context, logger, creds=None, **kwargs):
     while True:
         try:
             raw = r.get(redis_key)
-        except Exception:
+        except (ConnectionError, TimeoutError, OSError):
             raw = None
 
         if raw:
@@ -132,7 +132,7 @@ def _update_status(token: str, status: str) -> None:
                 "UPDATE approvals SET status=%s, decided_at=NOW() WHERE token=%s AND status='pending'",
                 (status, token),
             )
-    except Exception as exc:
+    except (AttributeError, RuntimeError) as exc:
         log.warning("wait_for_approval: could not update status — %s", exc)
 
 
@@ -205,6 +205,6 @@ def _send_approval_email(
         if not ok:
             log.warning("wait_for_approval: email not sent (not configured?). "
                         "Approve: %s  Reject: %s", approve_url, reject_url)
-    except Exception as exc:
+    except (OSError, AttributeError) as exc:
         log.warning("wait_for_approval: email send failed — %s. "
                     "Approve: %s  Reject: %s", exc, approve_url, reject_url)
