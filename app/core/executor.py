@@ -248,7 +248,7 @@ def _exec_node(nid, nodes_map, edges, context, creds, logger, succ, _depth):
                 )
                 last_err = None
                 break
-            except (JSONDecodeError, OSError) as e:
+            except (JSONDecodeError, OSError, ValueError) as e:
                 last_err = e
                 logger(f"ERROR attempt {attempt+1} {ntype} [{nid}]: {e}")
 

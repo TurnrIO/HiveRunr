@@ -1,4 +1,5 @@
 """Schedules router."""
+from json import JSONDecodeError
 import json as _json
 import logging
 from fastapi import APIRouter, HTTPException, Query, Request
