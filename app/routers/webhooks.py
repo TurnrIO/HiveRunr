@@ -5,6 +5,7 @@ import json
 from json import JSONDecodeError
 import logging
 import psycopg2
+import redis
 import os
 
 log = logging.getLogger(__name__)
@@ -35,7 +36,7 @@ def _check_webhook_rate(token: str) -> tuple[bool, int, int]:
         pipe.expire(key, window)
         count, _ = pipe.execute()
         return count <= limit, limit, window
-    except (OSError, TimeoutError):  # Redis connection/network failures → fail closed
+    except (redis.exceptions.RedisError, OSError, TimeoutError):  # Redis connection/network failures → fail closed
         log.error(f"Redis unavailable for webhook rate limit check: {token} — fail closed, returning denied")
         return False, limit, window
 

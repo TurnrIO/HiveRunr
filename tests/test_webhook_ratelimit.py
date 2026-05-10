@@ -76,23 +76,20 @@ class TestCheckWebhookRate:
         result = self._invoke_with_mock(_make_redis(9999), rate_limit=0, count=9999)
         assert result is True
 
-    def test_redis_unavailable_fails_open(self):
-        """If Redis raises, _check_webhook_rate should return True (fail open)."""
+    def test_redis_unavailable_fails_closed(self):
+        """If Redis raises, _check_webhook_rate returns False (fail closed) — deny request."""
         import app.routers.webhooks as mod
         bad_redis = MagicMock()
-        bad_redis.pipeline.side_effect = Exception("connection refused")
+        bad_redis.pipeline.side_effect = redis.exceptions.ConnectionError("connection refused")
 
         policy = {"limit": 10, "window": 60}
         with patch("app.routers.webhooks.get_ratelimit_policy", return_value=policy):
-            try:
-                import redis as _redis_mod
-                with patch.object(_redis_mod, "from_url", return_value=bad_redis):
-                    allowed, _limit, _window = mod._check_webhook_rate("tok")
-                    result = allowed
-            except (redis.exceptions.RedisError, OSError, RuntimeError):
-                result = True  # the function returns True on exception
+            import redis as _redis_mod
+            with patch.object(_redis_mod, "from_url", return_value=bad_redis):
+                allowed, _limit, _window = mod._check_webhook_rate("tok")
+                result = allowed
 
-        assert result is True
+        assert result is False
 
     def test_return_tuple_contains_limit_and_window(self):
         """_check_webhook_rate returns (bool, limit, window) tuple."""
