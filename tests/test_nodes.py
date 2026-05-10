@@ -87,19 +87,23 @@ def test_http_request_get_success():
     from app.nodes.action_http_request import run
     log, _ = make_logger()
 
-    mock_response = mock.MagicMock()
-    mock_response.status_code = 200
-    mock_response.json.return_value = {"ok": True}
-    mock_response.raise_for_status.return_value = None
-    mock_response.headers = {}
-    mock_response.is_redirect = False
-    mock_response.content = None
-    mock_response.data = None
+    # Build a minimal response object the redirect loop can work with
+    # without triggering "Cannot mix str and non-str arguments" in urljoin
+    class FakeResponse:
+        status_code = 200
+        ok = True
+        def raise_for_status(self): pass
+        @property
+        def is_redirect(self): return False
+        @property
+        def headers(self): return {}
+        def json(self): return {"ok": True}
+
+    mock_response = FakeResponse()
 
     with mock.patch("app.nodes.action_http_request.httpx.Client") as MockClient:
         instance = MockClient.return_value.__enter__.return_value
         instance.request.return_value = mock_response
-        instance.request.return_value.is_redirect = False
         out = run({"url": "https://example.com/api", "method": "GET"}, {}, {}, log)
 
     assert out["status"] == 200
