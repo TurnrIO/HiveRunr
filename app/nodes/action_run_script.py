@@ -23,9 +23,11 @@ _audit = logging.getLogger("audit")
 
 def run(config, inp, context, logger, creds=None, **kwargs):
     """Execute arbitrary Python — requires ENABLE_RUN_SCRIPT=true."""
+    logger.info("action.run_script: starting")
     # ── feature flag ──────────────────────────────────────────────────────
     enabled = os.environ.get("ENABLE_RUN_SCRIPT", "false").strip().lower() == "true"
     if not enabled:
+        logger.info("action.run_script: disabled, rejecting")
         raise RuntimeError(
             "action.run_script is disabled. "
             "Set ENABLE_RUN_SCRIPT=true in your .env to enable it. "
@@ -38,6 +40,7 @@ def run(config, inp, context, logger, creds=None, **kwargs):
     # ── audit log (always, even before exec) ─────────────────────────────
     script_hash    = hashlib.sha256(script.encode()).hexdigest()[:12]
     script_preview = script[:120].replace('\n', ' ')
+    logger.info("action.run_script: script_hash=%s", script_hash)
     _audit.warning(
         "AUDIT run_script | hash=%s | preview=%s",
         script_hash,
@@ -63,5 +66,6 @@ def run(config, inp, context, logger, creds=None, **kwargs):
         "AUDIT run_script | hash=%s | completed_ok",
         script_hash,
     )
+    logger.info("action.run_script: completed_ok hash=%s", script_hash)
     r = ns.get('result', _UNSET)
     return inp if r is _UNSET else r
