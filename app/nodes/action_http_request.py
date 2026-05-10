@@ -136,7 +136,7 @@ def run(config, inp, context, logger, creds=None, **kwargs):
 
     # ── Timeout ───────────────────────────────────────────────────────────
     try:
-        timeout = float(config.get("timeout") or 30)
+        timeout = float(_render(str(config.get("timeout") or "30"), context, creds) or 30)
     except (ValueError, TypeError):
         timeout = 30
 
