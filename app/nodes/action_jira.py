@@ -38,9 +38,14 @@ Output shape (varies by operation)
 """
 from __future__ import annotations
 
+import base64
 import json
 import logging
+import urllib.error
+import urllib.parse
+import urllib.request
 from json import JSONDecodeError
+
 from ._utils import _render, _resolve_cred_raw
 
 log = logging.getLogger(__name__)
@@ -61,10 +66,6 @@ def _jira_request(
     params: dict | None = None,
 ) -> tuple[int, dict | list | None]:
     """Make an authenticated Jira REST v3 request. Returns (status_code, body)."""
-    import urllib.request
-    import urllib.parse
-    import base64
-
     url = base_url.rstrip("/") + path
     if params:
         url += "?" + urllib.parse.urlencode(params)
