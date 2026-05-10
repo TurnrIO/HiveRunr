@@ -161,7 +161,7 @@ def _load_aws() -> None:
     except ImportError:  # botocore missing
         log.error("botocore is not installed")
     except JSONDecodeError as exc:
-        log.error(f"AWS Secrets Manager: invalid JSON in secret %s: %s", secret_name, exc)
+        log.error("AWS Secrets Manager: invalid JSON in secret %s: %s", secret_name, exc)
     except Exception as exc:
         # Catch ClientError and everything else — never crash the app over this
         code = getattr(getattr(exc, "response", None), "__getitem__", lambda _: {})(
