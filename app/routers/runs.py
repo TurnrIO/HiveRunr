@@ -377,8 +377,6 @@ def api_replay_run(run_id: int, request: Request, body: _ReplayBody = None):
     else:
         payload = decode_json_value(initial_payload, {})
 
-    workspace_id = _resolve_workspace(request, user)
-
     task_id = None
     try:
         task = enqueue_graph.apply_async(
