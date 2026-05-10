@@ -1,4 +1,6 @@
-"""Loop action node."""
+"""Loop action node.
+"""
+from app.nodes._utils import _render
 
 NODE_TYPE = "action.loop"
 LABEL = "Loop"
@@ -7,7 +9,10 @@ LABEL = "Loop"
 def run(config, inp, context, logger, creds=None, **kwargs):
     """Prepare items for looping."""
     field = config.get('field', '')
-    max_items = int(config.get('max_items', 100))
+    try:
+        max_items = int(_render(config.get('max_items', '100'), context, creds) or 100)
+    except (ValueError, TypeError):
+        max_items = 100
     items = inp.get(field, inp) if field and isinstance(inp, dict) else inp
 
     if not isinstance(items, list):
