@@ -286,7 +286,7 @@ def run(config: dict, inp: dict, context: dict, logger, creds=None, **kwargs) ->
 
     operation = r("operation", "get-issue").strip().lower()
 
-    logger(f"[action.jira] operation={operation} base_url={base_url}")
+    logger.info("[action.jira] operation=%s base_url=%s", operation, base_url)
 
     if operation == "get-issue":
         return _get_issue(base_url, email, api_token,

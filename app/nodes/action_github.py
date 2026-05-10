@@ -60,13 +60,13 @@ def run(config, inp, context, logger, creds=None, **kwargs):
     if action == 'get_repo':
         if not repo:
             raise ValueError("GitHub get_repo: repo required")
-        logger(f"GitHub: get_repo {repo}")
+        logger.info("GitHub: get_repo repo=%s", repo)
         return gh('GET', f'{base}/repos/{repo}')
 
     elif action == 'list_issues':
         if not repo:
             raise ValueError("GitHub list_issues: repo required")
-        logger(f"GitHub: list_issues repo={repo} state={state}")
+        logger.info("GitHub: list_issues repo=%s state=%s", repo, state)
         params = {'state': state or 'open', 'per_page': 25}
         if labels:
             params['labels'] = labels
@@ -75,13 +75,13 @@ def run(config, inp, context, logger, creds=None, **kwargs):
     elif action == 'get_issue':
         if not repo or not number:
             raise ValueError("GitHub get_issue: repo and number required")
-        logger(f"GitHub: get_issue {repo}#{number}")
+        logger.info("GitHub: get_issue %s#%s", repo, number)
         return gh('GET', f'{base}/repos/{repo}/issues/{number}')
 
     elif action == 'create_issue':
         if not repo or not title:
             raise ValueError("GitHub create_issue: repo and title required")
-        logger(f"GitHub: create_issue repo={repo} title={title[:50]}")
+        logger.info("GitHub: create_issue repo=%s title=%s", repo, title[:50])
         payload = {'title': title, 'body': body}
         if labels:
             payload['labels'] = [l.strip() for l in labels.split(',')]

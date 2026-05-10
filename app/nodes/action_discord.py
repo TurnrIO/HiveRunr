@@ -98,5 +98,5 @@ def run(config, inp, context, logger, creds=None, **kwargs):
     r = httpx.post(webhook_url, json=body, timeout=10)
     r.raise_for_status()
 
-    logger(f"Discord: sent message ({len(message)} chars)")
+    logger.info("Discord: sent message (%s chars)", len(message))
     return {"sent": True, "message": message}

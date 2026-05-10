@@ -45,7 +45,7 @@ def run(config, inp, context, logger, creds=None, **kwargs):
     # ── get issue ─────────────────────────────────────────────────────────────
     if op == "get_issue":
         issue_id = _render(config.get("issue_id", ""), context, creds)
-        logger(f"Linear: get_issue {issue_id}")
+        logger.info("Linear: get_issue %s", issue_id)
         data = _gql(api_key, """
             query($id: String!) {
               issue(id: $id) {
@@ -66,7 +66,7 @@ def run(config, inp, context, logger, creds=None, **kwargs):
         priority_str = config.get("priority", "0")
         try:   priority = int(priority_str)
         except (ValueError, TypeError): priority = 0
-        logger(f"Linear: create_issue team={team_id} title={title[:50]}")
+        logger.info("Linear: create_issue team=%s title=%s", team_id, title[:50])
         data = _gql(api_key, """
             mutation($input: IssueCreateInput!) {
               issueCreate(input: $input) {
@@ -85,7 +85,7 @@ def run(config, inp, context, logger, creds=None, **kwargs):
         updates_raw = _render(config.get("updates", "{}"), context, creds)
         try:   updates = json.loads(updates_raw) if isinstance(updates_raw, str) else updates_raw
         except JSONDecodeError: raise ValueError("Linear update_issue: updates must be valid JSON")
-        logger(f"Linear: update_issue {issue_id}")
+        logger.info("Linear: update_issue %s", issue_id)
         data = _gql(api_key, """
             mutation($id: String!, $input: IssueUpdateInput!) {
               issueUpdate(id: $id, input: $input) {
@@ -101,7 +101,7 @@ def run(config, inp, context, logger, creds=None, **kwargs):
         query_str = _render(config.get("query", ""), context, creds)
         try: limit = int(_render(config.get("limit", "25"), context, creds))
         except (ValueError, TypeError): limit = 25
-        logger(f"Linear: search_issues query={query_str!r} limit={limit}")
+        logger.info("Linear: search_issues query=%r limit=%s", query_str, limit)
         data = _gql(api_key, """
             query($filter: IssueFilter, $first: Int) {
               issues(filter: $filter, first: $first) {

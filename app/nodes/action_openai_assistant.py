@@ -50,7 +50,7 @@ def run(config, inp, context, logger, creds=None, **kwargs):
 
     # ── create thread ─────────────────────────────────────────────────────────
     if op == "create_thread":
-        logger("OpenAI Assistant: create_thread")
+        logger.info("OpenAI Assistant: create_thread")
         thread = _req("POST", "/threads", api_key, {})
         return {"thread_id": thread["id"], "thread": thread}
 
@@ -59,7 +59,7 @@ def run(config, inp, context, logger, creds=None, **kwargs):
         thread_id = _render(config.get("thread_id", ""), context, creds)
         content   = _render(config.get("content", ""), context, creds)
         role      = _render(config.get("role", "user"), context, creds)
-        logger(f"OpenAI Assistant: add_message to thread={thread_id}")
+        logger.info("OpenAI Assistant: add_message to thread=%s", thread_id)
         msg = _req("POST", f"/threads/{thread_id}/messages", api_key,
                    {"role": role, "content": content})
         return {"message_id": msg["id"], "thread_id": thread_id}
@@ -73,7 +73,7 @@ def run(config, inp, context, logger, creds=None, **kwargs):
         body = {"assistant_id": assistant_id}
         if instructions:
             body["instructions"] = instructions
-        logger(f"OpenAI Assistant: run_thread thread={thread_id} assistant={assistant_id}")
+        logger.info("OpenAI Assistant: run_thread thread=%s assistant=%s", thread_id, assistant_id)
         run_obj = _req("POST", f"/threads/{thread_id}/runs", api_key, body)
         run_id  = run_obj["id"]
 
@@ -108,7 +108,7 @@ def run(config, inp, context, logger, creds=None, **kwargs):
     elif op == "get_run_status":
         thread_id = _render(config.get("thread_id", ""), context, creds)
         run_id    = _render(config.get("run_id", ""), context, creds)
-        logger(f"OpenAI Assistant: get_run_status thread={thread_id} run={run_id}")
+        logger.info("OpenAI Assistant: get_run_status thread=%s run=%s", thread_id, run_id)
         run_obj   = _req("GET", f"/threads/{thread_id}/runs/{run_id}", api_key)
         return {"run_id": run_id, "status": run_obj.get("status"), "run": run_obj}
 
@@ -117,7 +117,7 @@ def run(config, inp, context, logger, creds=None, **kwargs):
         thread_id = _render(config.get("thread_id", ""), context, creds)
         try: limit = int(_render(config.get("limit", "20"), context, creds))
         except (ValueError, TypeError): limit = 20
-        logger(f"OpenAI Assistant: list_messages thread={thread_id} limit={limit}")
+        logger.info("OpenAI Assistant: list_messages thread=%s limit=%s", thread_id, limit)
         msgs = _req("GET", f"/threads/{thread_id}/messages?limit={min(limit,100)}&order=asc", api_key)
         messages = msgs.get("data", [])
         # Flatten text content

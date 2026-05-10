@@ -147,7 +147,7 @@ def run(config, inp, context, logger, creds=None, **kwargs):
     _check_url_ssrf(url)
 
     # ── Execute with redirect validation ─────────────────────────────────
-    logger(f"HTTP {method} {url}")
+    logger.info("HTTP %s %s", method, url)
 
     client = httpx.Client(timeout=timeout, follow_redirects=False)
     current_url = url
@@ -172,7 +172,7 @@ def run(config, inp, context, logger, creds=None, **kwargs):
                 break  # 204 No Location is still a terminal response
 
             response_history.append(r)
-            logger(f"HTTP {current_url} → {r.status_code} → redirect to {location}")
+            logger.info("HTTP %s → %s → redirect to %s", current_url, r.status_code, location)
 
             # Resolve relative Location against current URL
             resolved = urllib.parse.urljoin(current_url, location)
@@ -193,7 +193,7 @@ def run(config, inp, context, logger, creds=None, **kwargs):
             rbody = r.text
 
         ok = 200 <= r.status_code < 300
-        logger(f"HTTP {method} {url} → {r.status_code}")
+        logger.info("HTTP %s %s → %s", method, url, r.status_code)
 
         return {
             "status":  r.status_code,
