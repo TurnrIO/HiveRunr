@@ -128,8 +128,8 @@ def run(config, inp, context, logger, creds=None, **kwargs):
     if sort_raw:
         try:
             sort = json.loads(sort_raw)
-        except JSONDecodeError:
-            pass
+        except JSONDecodeError as exc:
+            logger.warning("Airtable: sort_json is not valid JSON — %s; proceeding with no sort", exc)
 
     table_url  = f"{_BASE_URL}/{base_id}/{table}"
     headers    = _get_headers(api_key)
