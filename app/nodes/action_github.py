@@ -1,5 +1,5 @@
 """GitHub API action node."""
-import json
+import base64, json
 from json import JSONDecodeError
 from app.nodes._utils import _render, _resolve_cred_raw
 
@@ -60,11 +60,13 @@ def run(config, inp, context, logger, creds=None, **kwargs):
     if action == 'get_repo':
         if not repo:
             raise ValueError("GitHub get_repo: repo required")
+        logger(f"GitHub: get_repo {repo}")
         return gh('GET', f'{base}/repos/{repo}')
 
     elif action == 'list_issues':
         if not repo:
             raise ValueError("GitHub list_issues: repo required")
+        logger(f"GitHub: list_issues repo={repo} state={state}")
         params = {'state': state or 'open', 'per_page': 25}
         if labels:
             params['labels'] = labels
@@ -73,11 +75,13 @@ def run(config, inp, context, logger, creds=None, **kwargs):
     elif action == 'get_issue':
         if not repo or not number:
             raise ValueError("GitHub get_issue: repo and number required")
+        logger(f"GitHub: get_issue {repo}#{number}")
         return gh('GET', f'{base}/repos/{repo}/issues/{number}')
 
     elif action == 'create_issue':
         if not repo or not title:
             raise ValueError("GitHub create_issue: repo and title required")
+        logger(f"GitHub: create_issue repo={repo} title={title[:50]}")
         payload = {'title': title, 'body': body}
         if labels:
             payload['labels'] = [l.strip() for l in labels.split(',')]
@@ -86,35 +90,40 @@ def run(config, inp, context, logger, creds=None, **kwargs):
     elif action == 'close_issue':
         if not repo or not number:
             raise ValueError("GitHub close_issue: repo and number required")
+        logger(f"GitHub: close_issue {repo}#{number}")
         return gh('PATCH', f'{base}/repos/{repo}/issues/{number}', json={'state': 'closed'})
 
     elif action == 'add_comment':
         if not repo or not number or not body:
             raise ValueError("GitHub add_comment: repo, number, and body required")
+        logger(f"GitHub: add_comment {repo}#{number}")
         return gh('POST', f'{base}/repos/{repo}/issues/{number}/comments', json={'body': body})
 
     elif action == 'list_commits':
         if not repo:
             raise ValueError("GitHub list_commits: repo required")
+        logger(f"GitHub: list_commits repo={repo} branch={branch}")
         return {'commits': gh('GET', f'{base}/repos/{repo}/commits', params={'sha': branch, 'per_page': 20})}
 
     elif action == 'list_prs':
         if not repo:
             raise ValueError("GitHub list_prs: repo required")
+        logger(f"GitHub: list_prs repo={repo} state={state}")
         return {'pull_requests': gh('GET', f'{base}/repos/{repo}/pulls', params={'state': state or 'open', 'per_page': 20})}
 
     elif action == 'get_file':
         if not repo or not path:
             raise ValueError("GitHub get_file: repo and path required")
         _check_path_traversal(path, "get_file")
+        logger(f"GitHub: get_file repo={repo} path={path} branch={branch}")
         data = gh('GET', f'{base}/repos/{repo}/contents/{path}', params={'ref': branch})
-        import base64 as _b64
-        text = _b64.b64decode(data.get('content', '')).decode('utf-8', errors='replace') if data.get('encoding') == 'base64' else ''
+        text = base64.b64decode(data.get('content', '')).decode('utf-8', errors='replace') if data.get('encoding') == 'base64' else ''
         return {**data, 'decoded_content': text}
 
     elif action == 'create_release':
         if not repo or not title:
             raise ValueError("GitHub create_release: repo and title (tag name) required")
+        logger(f"GitHub: create_release repo={repo} tag={title}")
         return gh('POST', f'{base}/repos/{repo}/releases', json={'tag_name': title, 'name': title, 'body': body, 'draft': False})
 
     else:
