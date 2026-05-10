@@ -134,7 +134,8 @@ def run(config: dict, inp: dict, context: dict, logger, creds=None, **kwargs) ->
         raise ValueError("action.mysql: 'query' is required")
 
     params    = _normalize_params(config.get("params", ""), context, creds)
-    row_limit = int(_render(str(config.get("row_limit", "1000")), context, creds) or 1000)
+    try: row_limit = int(_render(str(config.get("row_limit", "1000")), context, creds))
+    except (ValueError, TypeError): row_limit = 1000
 
     logger(
         f"[action.mysql] host={connect_kw.get('host')} db={connect_kw.get('db')} "

@@ -67,7 +67,8 @@ def run(config, inp, context, logger, creds=None, **kwargs):
     elif op == "run_thread":
         thread_id    = _render(config.get("thread_id", ""), context, creds)
         instructions = _render(config.get("instructions", ""), context, creds)
-        timeout      = int(_render(config.get("timeout", "120"), context, creds) or 120)
+        try: timeout = int(_render(config.get("timeout", "120"), context, creds))
+        except (ValueError, TypeError): timeout = 120
         body = {"assistant_id": assistant_id}
         if instructions:
             body["instructions"] = instructions
@@ -111,7 +112,8 @@ def run(config, inp, context, logger, creds=None, **kwargs):
     # ── list messages ──────────────────────────────────────────────────────────
     elif op == "list_messages":
         thread_id = _render(config.get("thread_id", ""), context, creds)
-        limit     = int(_render(config.get("limit", "20"), context, creds) or 20)
+        try: limit = int(_render(config.get("limit", "20"), context, creds))
+        except (ValueError, TypeError): limit = 20
         msgs = _req("GET", f"/threads/{thread_id}/messages?limit={min(limit,100)}&order=asc", api_key)
         messages = msgs.get("data", [])
         # Flatten text content

@@ -187,7 +187,8 @@ def run(config: dict, inp: dict, context: dict, logger, creds=None, **kwargs) ->
         raise ValueError("action.postgres: 'query' is required")
 
     params      = _normalize_params(config.get("params", ""), context, creds)
-    row_limit   = int(_render(str(config.get("row_limit", "1000")), context, creds) or 1000)
+    try: row_limit = int(_render(str(config.get("row_limit", "1000")), context, creds))
+    except (ValueError, TypeError): row_limit = 1000
 
     logger(f"[action.postgres] driver={driver} query={query[:80]}{'…' if len(query)>80 else ''}")
 

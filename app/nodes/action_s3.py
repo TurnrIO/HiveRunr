@@ -129,7 +129,8 @@ def _op_put(s3, bucket: str, key: str, config: dict, context: dict, creds: dict)
 
 def _op_list(s3, bucket: str, key: str, config: dict, context: dict, creds: dict) -> dict:
     prefix     = _render(config.get("prefix", key or ""), context, creds)
-    max_keys   = int(_render(str(config.get("max_keys", "1000")), context, creds) or 1000)
+    try: max_keys = int(_render(str(config.get("max_keys", "1000")), context, creds))
+    except (ValueError, TypeError): max_keys = 1000
     delimiter  = _render(config.get("delimiter", ""),  context, creds)
 
     kwargs: dict = {"Bucket": bucket, "MaxKeys": max_keys}
@@ -164,7 +165,8 @@ def _op_delete(s3, bucket: str, key: str, config: dict, context: dict, creds: di
 
 
 def _op_presigned_url(s3, bucket: str, key: str, config: dict, context: dict, creds: dict) -> dict:
-    expires_in = int(_render(str(config.get("expires_in", "3600")), context, creds) or 3600)
+    try: expires_in = int(_render(str(config.get("expires_in", "3600")), context, creds))
+    except (ValueError, TypeError): expires_in = 3600
     url = s3.generate_presigned_url(
         "get_object",
         Params={"Bucket": bucket, "Key": key},

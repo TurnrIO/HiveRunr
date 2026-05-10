@@ -110,7 +110,8 @@ def run(config, inp, context, logger, creds=None, **kwargs):
     elif op == "list_messages":
         to_   = _render(config.get("to", ""), context, creds)
         from_ = _render(config.get("from", ""), context, creds)
-        limit = int(_render(config.get("limit", "20"), context, creds) or 20)
+        try: limit = int(_render(config.get("limit", "20"), context, creds))
+        except (ValueError, TypeError): limit = 20
         qs    = urllib.parse.urlencode({k: v for k, v in {"To": to_, "From": from_, "PageSize": limit}.items() if v})
         result = _req("GET", f"/Messages.json?{qs}", account_sid, auth_token)
         msgs  = result.get("messages", [])

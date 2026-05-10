@@ -120,7 +120,8 @@ def run(config, inp, context, logger, creds=None, **kwargs):
     query     = _render(config.get("query", ""), context, creds).strip()
     variables_raw = _render(config.get("variables_json", ""), context, creds).strip()
     op_name   = _render(config.get("operation_name", ""), context, creds).strip()
-    timeout   = float(_render(config.get("timeout", "30"), context, creds) or 30)
+    try: timeout = float(_render(config.get("timeout", "30"), context, creds))
+    except (ValueError, TypeError): timeout = 30.0
 
     if not query:
         raise ValueError("GraphQL: 'query' is required")

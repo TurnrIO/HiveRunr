@@ -152,9 +152,12 @@ def run(config: dict, inp: dict, context: dict, logger, creds=None, **kwargs) ->
     pattern   = _render(config.get("pattern", "*"), context, creds).strip() or "*"
     recursive = str(config.get("recursive", "false")).lower() in ("true", "1", "yes")
 
-    lookback_min  = float(_render(str(config.get("lookback_minutes", "60")),  context, creds) or 60)
-    min_age_sec   = float(_render(str(config.get("min_age_seconds",  "0")),   context, creds) or 0)
-    min_size      = int(_render(str(config.get("min_size_bytes", "0")),       context, creds) or 0)
+    try: lookback_min = float(_render(str(config.get("lookback_minutes", "60")), context, creds))
+    except (ValueError, TypeError): lookback_min = 60.0
+    try: min_age_sec = float(_render(str(config.get("min_age_seconds", "0")), context, creds))
+    except (ValueError, TypeError): min_age_sec = 0.0
+    try: min_size = int(_render(str(config.get("min_size_bytes", "0")), context, creds))
+    except (ValueError, TypeError): min_size = 0
     sftp_cred_name = _render(config.get("sftp_credential", ""), context, creds).strip()
 
     if not path:

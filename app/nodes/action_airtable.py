@@ -110,7 +110,8 @@ def run(config, inp, context, logger, creds=None, **kwargs):
     sort_raw   = _render(config.get("sort_json", ""), context, creds).strip()
     view       = _render(config.get("view", ""), context, creds).strip()
     max_raw    = _render(config.get("max_records", ""), context, creds).strip()
-    timeout    = float(_render(config.get("timeout", "30"), context, creds) or 30)
+    try: timeout = float(_render(config.get("timeout", "30"), context, creds))
+    except (ValueError, TypeError): timeout = 30.0
 
     if not table:
         raise ValueError("Airtable: 'table' is required")

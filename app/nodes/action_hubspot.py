@@ -82,7 +82,8 @@ def run(config, inp, context, logger, creds=None, **kwargs):
     elif op == "search":
         filters_raw  = _render(config.get("filters", "[]"), context, creds)
         props_str    = _render(config.get("properties", ""), context, creds)
-        limit        = int(_render(config.get("limit", "20"), context, creds) or 20)
+        try: limit = int(_render(config.get("limit", "20"), context, creds))
+        except (ValueError, TypeError): limit = 20
         after_cursor = _render(config.get("after", ""), context, creds)
         try:   filters = json.loads(filters_raw) if isinstance(filters_raw, str) else filters_raw
         except JSONDecodeError: filters = []

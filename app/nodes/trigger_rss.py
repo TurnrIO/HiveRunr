@@ -220,8 +220,10 @@ def run(config, inp, context, logger, creds=None, **kwargs):
 
     _validate_feed_url(url)  # SSRF guard — raises ValueError on blocked URLs
 
-    lookback_minutes = int(_render(config.get("lookback_minutes", "60"), context, creds) or 60)
-    max_entries      = int(_render(config.get("max_entries", "50"),       context, creds) or 50)
+    try: lookback_minutes = int(_render(config.get("lookback_minutes", "60"), context, creds))
+    except (ValueError, TypeError): lookback_minutes = 60
+    try: max_entries = int(_render(config.get("max_entries", "50"), context, creds))
+    except (ValueError, TypeError): max_entries = 50
     filter_expr      = _render(config.get("filter_expression", ""),       context, creds).strip()
 
     # ── Fetch feed ────────────────────────────────────────────────────────────

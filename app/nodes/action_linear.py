@@ -96,7 +96,8 @@ def run(config, inp, context, logger, creds=None, **kwargs):
     # ── search issues ─────────────────────────────────────────────────────────
     elif op == "search_issues":
         query_str = _render(config.get("query", ""), context, creds)
-        limit     = int(_render(config.get("limit", "25"), context, creds) or 25)
+        try: limit = int(_render(config.get("limit", "25"), context, creds))
+        except (ValueError, TypeError): limit = 25
         data = _gql(api_key, """
             query($filter: IssueFilter, $first: Int) {
               issues(filter: $filter, first: $first) {
