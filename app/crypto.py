@@ -29,6 +29,8 @@ import binascii
 import hashlib
 import logging
 
+from cryptography.fernet import InvalidToken
+
 log = logging.getLogger(__name__)
 
 # Fernet token prefix — all tokens produced by this library start with this
@@ -90,12 +92,17 @@ def decrypt(value: str) -> str:
     f = _get_fernet()
     try:
         return f.decrypt(value.encode()).decode()
-    except (binascii.Error, ValueError, TypeError):
+    except InvalidToken:
+        # Wrong key / tampered token — surface as ValueError so callers
+        # can distinguish this from structural errors (binascii etc.)
         log.error("Failed to decrypt credential value — SECRET_KEY may have changed")
         raise ValueError(
             "Credential decryption failed. If you changed SECRET_KEY after "
             "storing credentials you will need to re-enter them."
         )
+    except (binascii.Error, ValueError, TypeError):
+        log.error("Failed to decrypt credential value — data may be corrupted")
+        raise ValueError("Credential decryption failed. Data appears corrupted.")
 
 
 def encryption_configured() -> bool:

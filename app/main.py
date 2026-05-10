@@ -297,7 +297,7 @@ def health():
             with conn.cursor() as cur:
                 cur.execute("SELECT 1")
         checks["database"] = {"status": "ok"}
-    except (OSError, RuntimeError, AttributeError) as exc:
+    except (OSError, RuntimeError, AttributeError, Exception) as exc:
         checks["database"] = {
             "status": "error",
             "message": str(exc),
@@ -313,7 +313,7 @@ def health():
         r.ping()
         display_url = redis_url.split("@")[-1]  # strip credentials if present
         checks["redis"] = {"status": "ok", "url": display_url}
-    except (OSError, RuntimeError, AttributeError) as exc:
+    except (OSError, RuntimeError, AttributeError, Exception) as exc:
         checks["redis"] = {
             "status": "error",
             "message": str(exc),

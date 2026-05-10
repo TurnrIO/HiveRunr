@@ -24,7 +24,11 @@ def _login_redis():
         r = _redis.from_url(url, socket_connect_timeout=2, socket_timeout=2)
         r.ping()
         return r
-    except (OSError, RuntimeError, AttributeError):
+    except (OSError, RuntimeError, AttributeError, Exception):
+        # OSError/RuntimeError/AttributeError cover the original targets.
+        # The bare Exception branch catches redis.exceptions.ConnectionError
+        # (NOT a subclass of OSError — it extends redis.exceptions.RedisError).
+        # In test/CI environments without Redis, this is expected; return None.
         return None
 
 
