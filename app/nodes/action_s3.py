@@ -186,7 +186,7 @@ def _op_head(s3, bucket: str, key: str, config: dict, context: dict, creds: dict
             "key":           key,
             "bucket":        bucket,
         }
-    except Exception as exc:
+    except (AttributeError, KeyError, ValueError) as exc:
         code = getattr(getattr(exc, "response", None), "status_code", None) \
                or getattr(exc, "response", {}).get("Error", {}).get("Code", "")
         if str(code) in ("404", "NoSuchKey"):

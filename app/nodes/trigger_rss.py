@@ -263,8 +263,8 @@ def run(config, inp, context, logger, creds=None, **kwargs):
             try:
                 if eval(filter_expr, {"entry": e, "re": re, "__builtins__": {}}):  # noqa: S307
                     kept.append(e)
-            except Exception as exc:
-                logger.warning("trigger.rss: filter_expression error: %s", exc)
+            except (SyntaxError, ValueError, NameError, TypeError) as exc:
+                logger.warning("trigger.rss: filter_expression error for entry '%s': %s", e.get('title', '')[:50], exc)
         entries = kept
         logger.info("trigger.rss: %d entries after filter", len(entries))
 
