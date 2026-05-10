@@ -90,32 +90,32 @@ def run(config, inp, context, logger, creds=None, **kwargs):
     elif action == 'close_issue':
         if not repo or not number:
             raise ValueError("GitHub close_issue: repo and number required")
-        logger(f"GitHub: close_issue {repo}#{number}")
+        logger.info("GitHub: close_issue %s#%s", repo, number)
         return gh('PATCH', f'{base}/repos/{repo}/issues/{number}', json={'state': 'closed'})
 
     elif action == 'add_comment':
         if not repo or not number or not body:
             raise ValueError("GitHub add_comment: repo, number, and body required")
-        logger(f"GitHub: add_comment {repo}#{number}")
+        logger.info("GitHub: add_comment %s#%s", repo, number)
         return gh('POST', f'{base}/repos/{repo}/issues/{number}/comments', json={'body': body})
 
     elif action == 'list_commits':
         if not repo:
             raise ValueError("GitHub list_commits: repo required")
-        logger(f"GitHub: list_commits repo={repo} branch={branch}")
+        logger.info("GitHub: list_commits repo=%s branch=%s", repo, branch)
         return {'commits': gh('GET', f'{base}/repos/{repo}/commits', params={'sha': branch, 'per_page': 20})}
 
     elif action == 'list_prs':
         if not repo:
             raise ValueError("GitHub list_prs: repo required")
-        logger(f"GitHub: list_prs repo={repo} state={state}")
+        logger.info("GitHub: list_prs repo=%s state=%s", repo, state)
         return {'pull_requests': gh('GET', f'{base}/repos/{repo}/pulls', params={'state': state or 'open', 'per_page': 20})}
 
     elif action == 'get_file':
         if not repo or not path:
             raise ValueError("GitHub get_file: repo and path required")
         _check_path_traversal(path, "get_file")
-        logger(f"GitHub: get_file repo={repo} path={path} branch={branch}")
+        logger.info("GitHub: get_file repo=%s path=%s branch=%s", repo, path, branch)
         data = gh('GET', f'{base}/repos/{repo}/contents/{path}', params={'ref': branch})
         text = base64.b64decode(data.get('content', '')).decode('utf-8', errors='replace') if data.get('encoding') == 'base64' else ''
         return {**data, 'decoded_content': text}
@@ -123,7 +123,7 @@ def run(config, inp, context, logger, creds=None, **kwargs):
     elif action == 'create_release':
         if not repo or not title:
             raise ValueError("GitHub create_release: repo and title (tag name) required")
-        logger(f"GitHub: create_release repo={repo} tag={title}")
+        logger.info("GitHub: create_release repo=%s tag=%s", repo, title)
         return gh('POST', f'{base}/repos/{repo}/releases', json={'tag_name': title, 'name': title, 'body': body, 'draft': False})
 
     else:
