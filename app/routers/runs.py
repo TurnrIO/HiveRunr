@@ -377,7 +377,6 @@ def api_replay_run(run_id: int, request: Request, body: _ReplayBody = None):
     else:
         payload = decode_json_value(initial_payload, {})
 
-    from app.deps import _resolve_workspace
     workspace_id = _resolve_workspace(request, user)
 
     task_id = None

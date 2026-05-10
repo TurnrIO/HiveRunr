@@ -576,3 +576,4 @@ def api_invite_to_flow(graph_id: int, body: InviteBody, request: Request):
         "email_sent": sent,
         "expires_at": expires_at.isoformat(),
     }
+

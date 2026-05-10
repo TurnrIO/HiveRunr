@@ -95,7 +95,7 @@ def test_http_request_get_success():
 
     with mock.patch("httpx.Client") as MockClient:
         instance = MockClient.return_value.__enter__.return_value
-        instance.get.return_value = mock_response
+        instance.request.return_value = mock_response
         out = run({"url": "https://example.com/api", "method": "GET"}, {}, {}, log)
 
     assert out["status"] == 200
