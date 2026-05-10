@@ -18,6 +18,49 @@ from typing import Any
 
 log = logging.getLogger(__name__)
 
+
+
+class LoggingLoggerAdapter:
+    """"Wrap a bare callable or a Logger into a unified logger interface.
+
+    Supports BOTH call patterns that appear across the codebase:
+      - logger(msg)                 ← bare callable (print, messages.append, etc.)
+      - logger.info(msg, ...)       ← logging.Logger method style
+
+    When the wrapped target is a Logger, pass through all method calls directly.
+    When it's a bare callable, only allow .info() (used by action nodes) and .warning()
+    (used by some routers) — all other attributes raise AttributeError so misuse
+    is loudly visible rather than silently ignored.
+    """
+    def __init__(self, target):
+        self._target = target
+        self._is_logger = isinstance(target, logging.Logger)
+
+    def info(self, msg, *args, **kwargs):
+        if self._is_logger:
+            self._target.info(msg, *args, **kwargs)
+        else:
+            # Bare callable — format as single string like Logger does
+            msg_str = msg % args if args else msg
+            self._target(msg_str)
+
+    def warning(self, msg, *args, **kwargs):
+        if self._is_logger:
+            self._target.warning(msg, *args, **kwargs)
+        else:
+            msg_str = msg % args if args else msg
+            self._target(msg_str)
+
+    def error(self, msg, *args, **kwargs):
+        if self._is_logger:
+            self._target.error(msg, *args, **kwargs)
+        else:
+            msg_str = msg % args if args else msg
+            self._target(msg_str)
+
+    def __repr__(self):
+        return f"<LoggingLoggerAdapter({self._target!r})>"
+
 # ── re-export _render for backward compatibility (call_graph etc) ──────────
 from app.nodes._utils import _render  # noqa: F401
 
@@ -143,7 +186,7 @@ def run_one_node(node: dict, inp: Any, context: dict,
         {"output": ..., "duration_ms": ..., "error": None | str}
     """
     if logger is None:
-        logger = log  # supports both log(msg) and log.info(msg, ...)
+        logger = LoggingLoggerAdapter(log)
     if creds is None:
         creds = {}
     if edges is None:
@@ -351,7 +394,7 @@ def run_graph(graph_data: dict, initial_payload: dict = None, logger=None, _dept
     ('node_start' | 'node_done').  Safe to be None.
     """
     if logger is None:
-        logger = log  # supports both log(msg) and log.info(msg, ...)
+        logger = LoggingLoggerAdapter(log)
     if _depth > 5:
         raise RuntimeError("Call Graph: maximum sub-flow nesting depth (5) exceeded")
 
