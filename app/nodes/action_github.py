@@ -6,6 +6,16 @@ NODE_TYPE = "action.github"
 LABEL = "GitHub"
 
 
+def _check_path_traversal(path: str, label: str) -> None:
+    """Refuse paths that contain path traversal sequences."""
+    if not path:
+        return
+    # Reject any .. sequences or absolute paths
+    normalized = path.replace("\\", "/")
+    if ".." in normalized or normalized.startswith("/"):
+        raise ValueError(f"GitHub {label}: path '{path}' contains invalid traversal sequence")
+
+
 def run(config, inp, context, logger, creds=None, **kwargs):
     """Interact with GitHub REST API."""
     import httpx
@@ -95,6 +105,7 @@ def run(config, inp, context, logger, creds=None, **kwargs):
     elif action == 'get_file':
         if not repo or not path:
             raise ValueError("GitHub get_file: repo and path required")
+        _check_path_traversal(path, "get_file")
         data = gh('GET', f'{base}/repos/{repo}/contents/{path}', params={'ref': branch})
         import base64 as _b64
         text = _b64.b64decode(data.get('content', '')).decode('utf-8', errors='replace') if data.get('encoding') == 'base64' else ''
@@ -107,4 +118,3 @@ def run(config, inp, context, logger, creds=None, **kwargs):
 
     else:
         raise ValueError(f"GitHub: unknown action '{action}'")
-
