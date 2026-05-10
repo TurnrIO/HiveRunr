@@ -44,9 +44,17 @@ def _get_client(config, context, creds):
 
     # Fallback: use inline config fields
     host     = _render(config.get("host", "localhost"), context, creds) or "localhost"
-    port     = int(_render(config.get("port", "6379"), context, creds) or 6379)
+    port     = _render(config.get("port", "6379"), context, creds) or "6379"
     password = _render(config.get("password", ""), context, creds) or None
-    db       = int(_render(config.get("db", "0"), context, creds) or 0)
+    db       = _render(config.get("db", "0"), context, creds) or "0"
+    try:
+        port = int(port)
+    except (ValueError, TypeError):
+        port = 6379
+    try:
+        db = int(db)
+    except (ValueError, TypeError):
+        db = 0
     return _redis.Redis(host=host, port=port, password=password, db=db,
                         socket_timeout=10, decode_responses=True)
 
@@ -71,7 +79,10 @@ def run(config, inp, context, logger, creds=None, **kwargs):
             return {"value": result, "key": key, "exists": result is not None}
 
         elif operation == "set":
-            ttl = int(ttl_raw) if ttl_raw else None
+            ttl = None
+            if ttl_raw:
+                try:   ttl = int(ttl_raw)
+                except (ValueError, TypeError): ttl = None
             if ttl:
                 r.setex(key, ttl, value)
             else:
@@ -87,17 +98,20 @@ def run(config, inp, context, logger, creds=None, **kwargs):
             return {"exists": exists, "key": key}
 
         elif operation == "incr":
-            amount = int(count_raw) if count_raw else 1
+            try:   amount = int(count_raw) if count_raw else 1
+            except (ValueError, TypeError): amount = 1
             new_val = r.incrby(key, amount)
             return {"value": new_val, "key": key}
 
         elif operation == "decr":
-            amount = int(count_raw) if count_raw else 1
+            try:   amount = int(count_raw) if count_raw else 1
+            except (ValueError, TypeError): amount = 1
             new_val = r.decrby(key, amount)
             return {"value": new_val, "key": key}
 
         elif operation == "expire":
-            ttl = int(ttl_raw) if ttl_raw else 60
+            try:   ttl = int(ttl_raw) if ttl_raw else 60
+            except (ValueError, TypeError): ttl = 60
             ok = bool(r.expire(key, ttl))
             return {"ok": ok, "key": key, "ttl": ttl}
 
@@ -126,8 +140,12 @@ def run(config, inp, context, logger, creds=None, **kwargs):
             return {"length": length, "key": key}
 
         elif operation == "lrange":
-            start = int(_render(config.get("start", "0"), context, creds) or 0)
-            stop  = int(_render(config.get("stop", "-1"), context, creds) or -1)
+            start_raw = _render(config.get("start", "0"), context, creds) or "0"
+            stop_raw  = _render(config.get("stop", "-1"), context, creds) or "-1"
+            try:   start = int(start_raw)
+            except (ValueError, TypeError): start = 0
+            try:   stop  = int(stop_raw)
+            except (ValueError, TypeError): stop = -1
             items = r.lrange(key, start, stop)
             return {"items": items, "count": len(items), "key": key}
 
