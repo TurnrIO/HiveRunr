@@ -34,7 +34,7 @@ def _load_all() -> list[dict]:
             data = json.loads(path.read_text())
             slug = path.stem
             templates.append({
-                "id":          slug,   # alias used by admin Templates page
+                "id":          slug,
                 "slug":        slug,
                 "name":        data.get("name", slug),
                 "description": data.get("description", ""),
@@ -43,7 +43,7 @@ def _load_all() -> list[dict]:
                 "node_count":  len(data.get("graph_data", {}).get("nodes", [])),
                 "edge_count":  len(data.get("graph_data", {}).get("edges", [])),
             })
-        except Exception as exc:
+        except (json.JSONDecodeError, OSError) as exc:
             log.warning("Failed to load template %s: %s", path.name, exc)
     return templates
 

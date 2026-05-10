@@ -166,7 +166,7 @@ def run_one_node(node: dict, inp: Any, context: dict,
             "duration_ms": int((time.time() - t_start) * 1000),
             "error":       None,
         }
-    except Exception as exc:
+    except (JSONDecodeError, OSError, KeyError, TypeError) as exc:
         return {
             "output":      None,
             "duration_ms": int((time.time() - t_start) * 1000),
@@ -247,7 +247,7 @@ def _exec_node(nid, nodes_map, edges, context, creds, logger, succ, _depth):
                 )
                 last_err = None
                 break
-            except Exception as e:
+            except (JSONDecodeError, OSError) as e:
                 last_err = e
                 logger(f"ERROR attempt {attempt+1} {ntype} [{nid}]: {e}")
 
@@ -364,7 +364,7 @@ def run_graph(graph_data: dict, initial_payload: dict = None, logger=None, _dept
     try:
         from app.core.db import load_all_credentials
         creds = load_all_credentials(workspace_id=workspace_id)
-    except Exception as e:
+    except (OSError, TimeoutError) as e:
         log.warning(f"Could not load credentials: {e}")
         creds = {}
 
@@ -428,6 +428,9 @@ def run_graph(graph_data: dict, initial_payload: dict = None, logger=None, _dept
             _run_sequential(order, nodes_map, edges, context, results, traces,
                             creds, logger, succ, skip_nodes, _depth,
                             node_callback=node_callback, start_node_id=start_node_id)
+    except (OSError, TimeoutError) as exc:
+        _span.set_status(_SC.ERROR, str(exc))
+        raise
     except Exception as exc:
         _span.set_status(_SC.ERROR, str(exc))
         raise
