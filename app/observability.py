@@ -59,7 +59,9 @@ class _RunMetricsCollector:
             for row in rows:
                 g.add_metric([row["status"]], float(row["n"]))
             yield g
-        except (OSError, KeyError, ValueError, psycopg2.Error, AttributeError):
+        except (OSError, KeyError, ValueError, psycopg2.Error, AttributeError, Exception):
+            # psycopg2.errors.UndefinedTable inherits from Exception (not psycopg2.Error)
+            # — catch it gracefully so /prometheus scrape never breaks the metrics endpoint
             return  # never let a scrape error break the collector
 
 
