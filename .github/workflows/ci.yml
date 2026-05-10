@@ -143,6 +143,19 @@ jobs:
           python-version: "3.11"
           cache: pip
       - run: pip install pytest httpx
+      - name: Wait for Celery tasks to be registered
+        run: |
+          echo "Waiting for Celery task registration..."
+          for i in $(seq 1 30); do
+            if docker exec hiverunr-worker-1 celery -b redis://redis:6379/0 inspect registered 2>/dev/null | grep -q "enqueue_graph"; then
+              echo "Tasks registered after $((i*5))s"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "Tasks did not register in 150s — dumping logs"
+          docker compose logs --tail=50
+          exit 1
       - name: Run integration tests
         run: pytest tests/integration/ -v
         env:
