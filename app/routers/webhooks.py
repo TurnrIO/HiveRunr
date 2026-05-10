@@ -124,7 +124,10 @@ async def webhook_trigger(token: str, request: Request):
             from app.core.db import init_db as _init_db, update_run
             _init_db()
             update_run(task_id, "running")
-            graph_data = json.loads(g.get('graph_json') or '{}')
+            try:
+                graph_data = json.loads(g.get('graph_json') or '{}')
+            except JSONDecodeError:
+                graph_data = {}
             result = run_graph(
                 graph_data,
                 payload,

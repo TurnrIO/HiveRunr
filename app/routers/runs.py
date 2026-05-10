@@ -1,5 +1,6 @@
 """Runs router — list, delete, trim, replay, stream."""
 import json
+from json import JSONDecodeError
 import logging
 import os
 import time as _time
@@ -392,7 +393,10 @@ def api_replay_run(run_id: int, request: Request, body: _ReplayBody = None):
             from app.core.db import init_db as _init_db
             _init_db()
             update_run(task_id, "running")
-            graph_data = json.loads(g.get('graph_json') or '{}')
+            try:
+                graph_data = json.loads(g.get('graph_json') or '{}')
+            except JSONDecodeError:
+                graph_data = {}
             result = run_graph(
                 graph_data,
                 payload,

@@ -303,7 +303,10 @@ async def api_graph_run(graph_id: int, request: Request):
             from app.core.db import update_run, init_db
             init_db()
             update_run(task_id, "running")
-            graph_data = json.loads(g.get('graph_json') or '{}')
+            try:
+                graph_data = json.loads(g.get('graph_json') or '{}')
+            except JSONDecodeError:
+                graph_data = {}
             result = run_graph(
                 graph_data,
                 payload,
