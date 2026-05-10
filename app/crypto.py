@@ -54,7 +54,7 @@ def _get_fernet():
                 key = base64.urlsafe_b64encode(decoded)
             else:
                 raise ValueError("not 32 bytes")
-        except Exception:
+    except (binascii.Error, ValueError):
             # Derive a 32-byte key from whatever string was provided
             key = base64.urlsafe_b64encode(
                 hashlib.sha256(raw.encode()).digest()
@@ -89,7 +89,7 @@ def decrypt(value: str) -> str:
     f = _get_fernet()
     try:
         return f.decrypt(value.encode()).decode()
-    except Exception:
+    except (binascii.Error, ValueError, TypeError):
         log.error("Failed to decrypt credential value — SECRET_KEY may have changed")
         raise ValueError(
             "Credential decryption failed. If you changed SECRET_KEY after "

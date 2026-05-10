@@ -297,9 +297,7 @@ def health():
             with conn.cursor() as cur:
                 cur.execute("SELECT 1")
         checks["database"] = {"status": "ok"}
-    except Exception as exc:
-        checks["database"] = {
-            "status": "error",
+    except (OSError, RuntimeError, AttributeError) as exc:tatus": "error",
             "message": str(exc),
             "fix": "Check DATABASE_URL in .env and ensure the postgres container is running.",
         }
@@ -313,9 +311,7 @@ def health():
         r.ping()
         display_url = redis_url.split("@")[-1]  # strip credentials if present
         checks["redis"] = {"status": "ok", "url": display_url}
-    except Exception as exc:
-        checks["redis"] = {
-            "status": "error",
+    except (OSError, RuntimeError, AttributeError) as exc:us": "error",
             "message": str(exc),
             "fix": "Check REDIS_URL in .env and ensure the redis container is running.",
         }
@@ -501,8 +497,7 @@ async def api_run_workflow(name: str, request: Request):
         payload = await request.json()
         if not isinstance(payload, dict):
             payload = {}
-    except Exception:
-        payload = {}
+    except (ValueError, TypeError):oad = {}
     task_id      = str(_uuid.uuid4())
     workspace_id = _resolve_workspace(request, user)
     with get_conn() as conn:

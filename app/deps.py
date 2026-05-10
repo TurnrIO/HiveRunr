@@ -210,7 +210,7 @@ def _resolve_workspace(request: Request, user: dict) -> int | None:
             memberships = list_user_workspaces(uid)
             if memberships:
                 return memberships[0]["id"]
-        except Exception:
+        except (AttributeError, TypeError, KeyError, OSError):
             pass
 
     # 4. Global default workspace
@@ -218,8 +218,8 @@ def _resolve_workspace(request: Request, user: dict) -> int | None:
         default = get_default_workspace()
         if default:
             return default["id"]
-    except Exception:
-        pass
+    except (AttributeError, TypeError, KeyError, OSError):
+            pass
 
     return None
 
