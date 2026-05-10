@@ -177,8 +177,7 @@ class TestSkipPropagationSequential:
         result = run_graph(g)
         statuses = {t["node_id"]: t["status"] for t in result["traces"]}
         assert statuses["cond"]     == "ok"
-        assert statuses["true_a"]  == "ok"      # condition was False, true branch ran (wait — no, that's wrong)
-        # Actually: condition=False means condition_val=False → skip true_reach, keep false_reach
+        # condition=False → condition_val=False → skip true_reach, keep false_reach
         # So true_a and true_b should be SKIPPED
         assert statuses["true_a"]  == "skipped"
         assert statuses["true_b"]  == "skipped"

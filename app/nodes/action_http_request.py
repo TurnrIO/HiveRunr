@@ -2,6 +2,7 @@
 import json
 import socket
 import ipaddress
+import urllib.parse
 from app.nodes._utils import _render, _resolve_cred_raw
 
 NODE_TYPE = "action.http_request"

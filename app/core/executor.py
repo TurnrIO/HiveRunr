@@ -423,11 +423,11 @@ def run_graph(graph_data: dict, initial_payload: dict = None, logger=None, _dept
             levels = _compute_levels(nodes, succ)
             _run_parallel(levels, nodes_map, edges, context, results, traces,
                           creds, logger, succ, skip_nodes, _depth, max_workers,
-                          node_callback=node_callback)
+                          node_callback=node_callback, start_node_id=start_node_id)
         else:
             _run_sequential(order, nodes_map, edges, context, results, traces,
                             creds, logger, succ, skip_nodes, _depth,
-                            node_callback=node_callback)
+                            node_callback=node_callback, start_node_id=start_node_id)
     except Exception as exc:
         _span.set_status(_SC.ERROR, str(exc))
         raise
@@ -441,7 +441,8 @@ def run_graph(graph_data: dict, initial_payload: dict = None, logger=None, _dept
 
 # ── sequential execution path ─────────────────────────────────────────────
 def _run_sequential(order, nodes_map, edges, context, results, traces,
-                    creds, logger, succ, skip_nodes, _depth, node_callback=None):
+                    creds, logger, succ, skip_nodes, _depth, node_callback=None,
+                    start_node_id=None):
     for nid in order:
         node  = nodes_map.get(nid)
         if not node:
@@ -470,7 +471,7 @@ def _run_sequential(order, nodes_map, edges, context, results, traces,
             traces.append(trace)
             continue
 
-        if ndata.get('disabled', False):
+        if ndata.get('disabled', False) and nid != start_node_id:
             logger(f"SKIP (disabled) {ntype} [{nid}]")
             results[nid] = {'__disabled': True}
             traces.append(trace)
@@ -534,7 +535,7 @@ def _run_sequential(order, nodes_map, edges, context, results, traces,
 # ── parallel execution path ───────────────────────────────────────────────
 def _run_parallel(levels, nodes_map, edges, context, results, traces,
                   creds, logger, succ, skip_nodes, _depth, max_workers,
-                  node_callback=None):
+                  node_callback=None, start_node_id=None):
     """Level-based parallel execution.
 
     Nodes within the same level have no data dependencies between them —
@@ -560,7 +561,7 @@ def _run_parallel(levels, nodes_map, edges, context, results, traces,
                                 'input': None, 'output': None, 'error': None})
                 continue
 
-            if ndata.get('disabled', False):
+            if ndata.get('disabled', False) and nid != start_node_id:
                 logger(f"SKIP (disabled) {ntype} [{nid}]")
                 results[nid] = {'__disabled': True}
                 traces.append({'node_id': nid, 'type': ntype,

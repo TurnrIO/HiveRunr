@@ -39,6 +39,7 @@ def test_api_get_run_payload_uses_real_dict_cursor_and_decodes_payload():
     fake_conn.cursor.return_value = fake_cur
 
     with mock.patch.object(runs_mod, "_require_run_scope", return_value={"id": 1}), \
+         mock.patch("app.deps._resolve_workspace", return_value=1), \
          mock.patch("app.core.db.get_conn", return_value=fake_conn):
         result = runs_mod.api_get_run_payload(7, mock.MagicMock())
 
