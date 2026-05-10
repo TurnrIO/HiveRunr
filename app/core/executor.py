@@ -334,7 +334,7 @@ def _expand_loop(nid, loop_result, nodes_map, edges, context, creds, logger, suc
                     )
                 else:
                     loop_ctx[bid] = {'__error': f"Unknown node type in loop: {bn.get('type')}"}
-            except (AttributeError, TypeError, KeyError, ValueError) as e:
+            except (AttributeError, TypeError, KeyError, ValueError, ArithmeticError, OSError) as e:
                 loop_ctx[bid] = {'__error': str(e)}
         loop_results.append(loop_ctx.get(body_targets[0]) if body_targets else item)
     return {'loop_results': loop_results, 'count': len(loop_results)}
