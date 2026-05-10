@@ -231,11 +231,11 @@ def run(config: dict, inp: dict, context: dict, logger, creds=None, **kwargs) ->
     except Exception:
         try:
             db_conn.rollback()
-        except Exception:
+        except (AttributeError, TypeError, RuntimeError):
             pass
         raise
     finally:
         try:
             db_conn.close()
-        except Exception:
+        except (AttributeError, TypeError, RuntimeError):
             pass
