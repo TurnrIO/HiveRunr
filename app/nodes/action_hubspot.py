@@ -1,13 +1,16 @@
 """HubSpot CRM REST API v3 node."""
-import json, time
+import json
+import time
+import urllib.request
+import urllib.error
 from json import JSONDecodeError
-import urllib.request, urllib.error
 from app.nodes._utils import _render
 
 NODE_TYPE = "action.hubspot"
 LABEL     = "HubSpot"
 
 _BASE = "https://api.hubapi.com"
+
 
 def _req(method, path, token, body=None):
     url  = _BASE + path
@@ -25,6 +28,7 @@ def _req(method, path, token, body=None):
         except JSONDecodeError: detail = body_txt
         raise RuntimeError(f"HubSpot {e.code}: {detail}")
 
+
 def _flatten(obj):
     """Return {id, ...properties} for a HubSpot object dict."""
     if not obj:
@@ -32,6 +36,7 @@ def _flatten(obj):
     out = {"id": obj.get("id"), "created_at": obj.get("createdAt"), "updated_at": obj.get("updatedAt")}
     out.update(obj.get("properties", {}))
     return out
+
 
 def run(config, inp, context, logger, creds=None, **kwargs):
     cred_name = config.get("credential", "")
@@ -49,6 +54,7 @@ def run(config, inp, context, logger, creds=None, **kwargs):
 
     op          = _render(config.get("operation", "get_contact"), context, creds)
     object_type = _render(config.get("object_type", "contacts"), context, creds)
+    logger.info("HubSpot: op=%s object_type=%s", op, object_type)
 
     # ── get contact / company / deal ──────────────────────────────────────
     if op in ("get_contact", "get_object"):
@@ -61,6 +67,7 @@ def run(config, inp, context, logger, creds=None, **kwargs):
 
     # ── create contact / company / deal ───────────────────────────────────
     elif op in ("create_contact", "create_object"):
+        logger.info("HubSpot: creating %s", object_type)
         props_raw = _render(config.get("properties", "{}"), context, creds)
         try:   props = json.loads(props_raw) if isinstance(props_raw, str) else props_raw
         except JSONDecodeError: raise ValueError(f"HubSpot create: properties must be valid JSON, got: {props_raw!r}")
@@ -71,6 +78,7 @@ def run(config, inp, context, logger, creds=None, **kwargs):
     # ── update contact / company / deal ───────────────────────────────────
     elif op in ("update_contact", "update_object"):
         obj_id    = _render(config.get("object_id", ""), context, creds)
+        logger.info("HubSpot: updating %s id=%s", object_type, obj_id)
         props_raw = _render(config.get("properties", "{}"), context, creds)
         try:   props = json.loads(props_raw) if isinstance(props_raw, str) else props_raw
         except JSONDecodeError: raise ValueError(f"HubSpot update: properties must be valid JSON, got: {props_raw!r}")
@@ -80,6 +88,7 @@ def run(config, inp, context, logger, creds=None, **kwargs):
 
     # ── search contacts / companies / deals ───────────────────────────────
     elif op == "search":
+        logger.info("HubSpot: search %s", object_type)
         filters_raw  = _render(config.get("filters", "[]"), context, creds)
         props_str    = _render(config.get("properties", ""), context, creds)
         try: limit = int(_render(config.get("limit", "20"), context, creds))
@@ -107,12 +116,14 @@ def run(config, inp, context, logger, creds=None, **kwargs):
     # ── get deal ──────────────────────────────────────────────────────────
     elif op == "get_deal":
         deal_id = _render(config.get("deal_id", ""), context, creds)
+        logger.info("HubSpot: get_deal id=%s", deal_id)
         result  = _req("GET", f"/crm/v3/objects/deals/{deal_id}?properties=dealname,amount,dealstage,closedate,pipeline", token)
         flat    = _flatten(result)
         return {"object": flat, "id": flat.get("id"), "properties": result.get("properties", {}), "raw": result}
 
     # ── create deal ───────────────────────────────────────────────────────
     elif op == "create_deal":
+        logger.info("HubSpot: create_deal")
         props_raw = _render(config.get("properties", "{}"), context, creds)
         try:   props = json.loads(props_raw) if isinstance(props_raw, str) else props_raw
         except JSONDecodeError: raise ValueError("HubSpot create_deal: properties must be valid JSON")
@@ -127,6 +138,7 @@ def run(config, inp, context, logger, creds=None, **kwargs):
         to_type    = _render(config.get("to_type", "deals"), context, creds)
         to_id      = _render(config.get("to_id", ""), context, creds)
         assoc_type = _render(config.get("association_type", ""), context, creds)
+        logger.info("HubSpot: associate %s/%s -> %s/%s", from_type, from_id, to_type, to_id)
         # default association type labels
         if not assoc_type:
             assoc_type = f"{from_type.rstrip('s')}_to_{to_type.rstrip('s')}"

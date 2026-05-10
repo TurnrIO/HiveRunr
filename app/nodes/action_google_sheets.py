@@ -1,4 +1,5 @@
 """Google Sheets API action node."""
+import httpx
 import json
 from json import JSONDecodeError
 from app.nodes._utils import _render, _resolve_cred_raw
@@ -9,7 +10,8 @@ LABEL = "Google Sheets"
 
 def run(config, inp, context, logger, creds=None, **kwargs):
     """Interact with Google Sheets API via service account."""
-    import httpx
+    from google.oauth2 import service_account as _sa
+    from google.auth.transport.requests import Request as _GReq
 
     cred_name = _render(config.get('credential', ''), context, creds)
     service_account_json = ''
@@ -32,16 +34,15 @@ def run(config, inp, context, logger, creds=None, **kwargs):
     if not spreadsheet_id:
         raise ValueError("Google Sheets: spreadsheet_id required")
 
+    logger.info("Google Sheets: action=%s spreadsheet=%s", action, spreadsheet_id)
+
     # Get access token via service account JWT
     try:
-        from google.oauth2 import service_account as _sa
-        from google.auth.transport.requests import Request as _GReq
+        creds_dict = json.loads(service_account_json)
+    except JSONDecodeError as exc:
+        raise ValueError(f"Google Sheets: auth failed — invalid JSON in credential: {exc}") from exc
 
-        try:
-            creds_dict = json.loads(service_account_json)
-        except JSONDecodeError as exc:
-            raise ValueError(f"Google Sheets: auth failed — invalid JSON in credential: {exc}")
-
+    try:
         _creds = _sa.Credentials.from_service_account_info(
             creds_dict,
             scopes=['https://www.googleapis.com/auth/spreadsheets']
@@ -51,12 +52,13 @@ def run(config, inp, context, logger, creds=None, **kwargs):
     except ValueError:
         raise
     except (OSError, RuntimeError, TypeError) as e:
-        raise ValueError(f"Google Sheets: auth failed — {e}")
+        raise ValueError(f"Google Sheets: auth failed — {e}") from e
 
     headers = {'Authorization': f'Bearer {access_token}', 'Content-Type': 'application/json'}
     sheets_base = f'https://sheets.googleapis.com/v4/spreadsheets/{spreadsheet_id}'
 
     if action == 'read_range':
+        logger.info("Google Sheets: read_range %s", sheet_range)
         r = httpx.get(f'{sheets_base}/values/{sheet_range}', headers=headers, timeout=30)
         r.raise_for_status()
         data = r.json()
@@ -71,6 +73,7 @@ def run(config, inp, context, logger, creds=None, **kwargs):
         return {'rows': rows, 'count': len(rows), 'range': data.get('range')}
 
     elif action == 'write_range':
+        logger.info("Google Sheets: write_range %s", sheet_range)
         values_raw = _render(config.get('values_json', '[]'), context, creds)
         try:
             values = json.loads(values_raw)
@@ -84,6 +87,7 @@ def run(config, inp, context, logger, creds=None, **kwargs):
         return r.json()
 
     elif action == 'append_rows':
+        logger.info("Google Sheets: append_rows %s", sheet_range)
         values_raw = _render(config.get('values_json', '[]'), context, creds)
         try:
             values = json.loads(values_raw)
@@ -99,10 +103,10 @@ def run(config, inp, context, logger, creds=None, **kwargs):
         return r.json()
 
     elif action == 'clear_range':
+        logger.info("Google Sheets: clear_range %s", sheet_range)
         r = httpx.post(f'{sheets_base}/values/{sheet_range}:clear', headers=headers, timeout=30)
         r.raise_for_status()
         return r.json()
 
     else:
         raise ValueError(f"Google Sheets: unknown action '{action}'")
-

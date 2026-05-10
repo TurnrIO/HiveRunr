@@ -1,5 +1,6 @@
 """Notion API action node."""
 import json
+import httpx
 from json import JSONDecodeError
 from app.nodes._utils import _render, _resolve_cred_raw
 
@@ -9,7 +10,6 @@ LABEL = "Notion"
 
 def run(config, inp, context, logger, creds=None, **kwargs):
     """Interact with Notion API."""
-    import httpx
 
     token = _render(config.get('token', ''), context, creds)
     cred_name = _render(config.get('credential', ''), context, creds)
@@ -42,6 +42,7 @@ def run(config, inp, context, logger, creds=None, **kwargs):
         r.raise_for_status()
         return r.json()
 
+    logger.info("Notion: action=%s", action)
     if action == 'query_database':
         if not database_id:
             raise ValueError("Notion query_database: database_id required")
@@ -61,6 +62,7 @@ def run(config, inp, context, logger, creds=None, **kwargs):
         except (ValueError, TypeError): page_size = 50
         body['page_size'] = page_size
 
+        logger.info("Notion: query_database id=%s", database_id)
         data = notion('POST', f'{base}/databases/{database_id}/query', json=body)
 
         # Flatten page properties for easy downstream use
@@ -96,11 +98,13 @@ def run(config, inp, context, logger, creds=None, **kwargs):
         return {'pages': pages, 'count': len(pages), 'has_more': data.get('has_more', False)}
 
     elif action == 'get_page':
+        logger.info("Notion: get_page id=%s", page_id)
         if not page_id:
             raise ValueError("Notion get_page: page_id required")
         return notion('GET', f'{base}/pages/{page_id}')
 
     elif action == 'create_page':
+        logger.info("Notion: create_page in db=%s", database_id)
         if not database_id:
             raise ValueError("Notion create_page: database_id required")
 
@@ -129,6 +133,7 @@ def run(config, inp, context, logger, creds=None, **kwargs):
         return notion('POST', f'{base}/pages', json=body)
 
     elif action == 'update_page':
+        logger.info("Notion: update_page id=%s", page_id)
         if not page_id:
             raise ValueError("Notion update_page: page_id required")
 
@@ -141,6 +146,7 @@ def run(config, inp, context, logger, creds=None, **kwargs):
         return notion('PATCH', f'{base}/pages/{page_id}', json={'properties': props})
 
     elif action == 'search':
+        logger.info("Notion: search query=%r", query[:50] if query else '')
         try: page_size = int(_render(str(config.get('page_size', 20)), context, creds))
         except (ValueError, TypeError): page_size = 20
         body = {'page_size': page_size}
@@ -149,6 +155,7 @@ def run(config, inp, context, logger, creds=None, **kwargs):
         return notion('POST', f'{base}/search', json=body)
 
     elif action == 'append_blocks':
+        logger.info("Notion: append_blocks page_id=%s", page_id)
         if not page_id:
             raise ValueError("Notion append_blocks: page_id required")
 

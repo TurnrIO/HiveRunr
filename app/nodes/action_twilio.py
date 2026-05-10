@@ -1,7 +1,10 @@
 """Twilio SMS / WhatsApp / Voice REST API node."""
-import json, base64
+import json
+import base64
+import urllib.request
+import urllib.error
+import urllib.parse
 from json import JSONDecodeError
-import urllib.request, urllib.error, urllib.parse
 from app.nodes._utils import _render
 
 NODE_TYPE = "action.twilio"
@@ -27,6 +30,7 @@ def _req(method, path, account_sid, auth_token, body=None):
         raise RuntimeError(f"Twilio {e.code}: {detail}")
 
 def run(config, inp, context, logger, creds=None, **kwargs):
+    logger.info("Twilio: op=%s", op)
     # ── resolve credentials ────────────────────────────────────────────────
     cred_name   = config.get("credential", "")
     account_sid = ""
@@ -49,6 +53,7 @@ def run(config, inp, context, logger, creds=None, **kwargs):
 
     # ── send SMS ───────────────────────────────────────────────────────────
     if op in ("send_sms", "send_whatsapp"):
+        logger.info("Twilio: sending %s", op)
         to_   = _render(config.get("to", ""), context, creds)
         from_ = _render(config.get("from", ""), context, creds)
         body_ = _render(config.get("body", ""), context, creds)
@@ -70,6 +75,7 @@ def run(config, inp, context, logger, creds=None, **kwargs):
 
     # ── make call ──────────────────────────────────────────────────────────
     elif op == "make_call":
+        logger.info("Twilio: make_call to=%s", to_)
         to_    = _render(config.get("to", ""), context, creds)
         from_  = _render(config.get("from", ""), context, creds)
         url_   = _render(config.get("twiml_url", ""), context, creds)
@@ -92,6 +98,7 @@ def run(config, inp, context, logger, creds=None, **kwargs):
 
     # ── check status ───────────────────────────────────────────────────────
     elif op == "check_status":
+        logger.info("Twilio: check_status sid=%s", sid)
         sid    = _render(config.get("sid", ""), context, creds)
         kind   = _render(config.get("resource_type", "message"), context, creds).lower()
         suffix = "/Messages" if kind == "message" else "/Calls"
@@ -108,6 +115,7 @@ def run(config, inp, context, logger, creds=None, **kwargs):
 
     # ── list messages ──────────────────────────────────────────────────────
     elif op == "list_messages":
+        logger.info("Twilio: list_messages")
         to_   = _render(config.get("to", ""), context, creds)
         from_ = _render(config.get("from", ""), context, creds)
         try: limit = int(_render(config.get("limit", "20"), context, creds))
