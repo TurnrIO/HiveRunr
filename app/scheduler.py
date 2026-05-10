@@ -117,7 +117,7 @@ def _make_job(sched, scheduler_ref=None):
                 from app.core.db import get_graph as _get_graph
                 _g = _get_graph(sched["graph_id"])
                 _priority = int((_g or {}).get("priority", 5))
-            except Exception:
+            except (ValueError, TypeError, KeyError):
                 _priority = 5
 
             task_id = None
@@ -134,7 +134,7 @@ def _make_job(sched, scheduler_ref=None):
                     result = run_graph(_g_data, payload, workspace_id=sched.get("workspace_id"))
                     update_run(task_id, "succeeded", result=result,
                                traces=result.get('traces', []))
-                except Exception as inline_err:
+                except (JSONDecodeError, OSError, TimeoutError) as inline_err:
                     log.exception("Inline scheduled graph run failed")
                     update_run(task_id, "failed", result={"error": str(inline_err)})
                     return  # skip run record, graph failed inline
@@ -151,7 +151,7 @@ def _make_job(sched, scheduler_ref=None):
                             " ON CONFLICT (task_id) DO NOTHING",
                             (task_id, sched["graph_id"], _json.dumps(payload), workspace_id),
                         )
-                except Exception as exc:
+                except (OSError, RuntimeError, TypeError) as exc:
                     log.warning("Could not pre-create run record for schedule %s: %s", sid, exc)
         elif sched.get("workflow", "").startswith("script:"):
             script_name = sched["workflow"][len("script:"):]
