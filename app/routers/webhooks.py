@@ -4,6 +4,7 @@ import hmac
 import json
 from json import JSONDecodeError
 import logging
+import psycopg2
 import os
 
 log = logging.getLogger(__name__)
