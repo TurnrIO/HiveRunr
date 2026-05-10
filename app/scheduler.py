@@ -125,7 +125,7 @@ def _make_job(sched, scheduler_ref=None):
             try:
                 task = enqueue_graph.apply_async(args=[sched["graph_id"], payload], priority=_priority)
                 task_id = task.id
-            except Exception as exc:
+            except (OSError, RuntimeError, TypeError) as exc:
                 log.warning("Celery unavailable (%s) — running scheduled graph inline", exc)
                 import uuid
                 task_id = str(uuid.uuid4())
@@ -164,7 +164,7 @@ def _make_job(sched, scheduler_ref=None):
             try:
                 delete_schedule(sid)
                 log.info("One-shot schedule %s fired and removed", sid)
-            except Exception as exc:
+            except (AttributeError, KeyError, RuntimeError) as exc:
                 log.warning("Could not auto-delete one-shot schedule %s: %s", sid, exc)
     return job
 
@@ -180,7 +180,7 @@ def _sync_schedules(scheduler, known: dict):
         if sid not in current_ids:
             try:
                 scheduler.remove_job(str(sid))
-            except Exception:
+            except (AttributeError, KeyError, RuntimeError):
                 pass
             del known[sid]
 
@@ -211,7 +211,7 @@ def _sync_schedules(scheduler, known: dict):
                     replace_existing=True,
                 )
                 known[sid] = s
-            except Exception as e:
+            except (ValueError, TypeError, RuntimeError, OSError) as e:
                 log.error("Failed to schedule %s: %s", s["name"], e)
 
 
@@ -221,7 +221,7 @@ def _purge_sessions():
     try:
         purge_expired_sessions()
         log.info("Session purge complete")
-    except Exception as exc:
+    except (AttributeError, OSError) as exc:
         log.warning("Session purge failed: %s", exc)
 
 
@@ -238,7 +238,7 @@ def _auto_trim_runs():
         else:
             deleted = trim_runs_by_count(policy["count"])
             log.info("Auto-trim: deleted %d runs, kept %d most recent", deleted, policy["count"])
-    except Exception as exc:
+    except (AttributeError, OSError) as exc:
         log.warning("Auto-trim failed: %s", exc)
 
 
@@ -320,7 +320,7 @@ def main():
     try:
         r = _redis_client()
         r.ping()
-    except Exception as exc:
+    except (OSError, RuntimeError) as exc:
         log.warning(
             "Redis unavailable (%s) — running in standalone mode (no HA)", exc
         )
