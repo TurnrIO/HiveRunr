@@ -175,7 +175,7 @@ def run(config: dict, inp: dict, context: dict, logger, creds=None, **kwargs) ->
                     keep = eval(filter_expr, {"__builtins__": {}}, {"email": entry, "re": re})  # noqa: S307
                     if not keep:
                         continue
-                except Exception as exc:
+                except (SyntaxError, ValueError, NameError, TypeError) as exc:
                     logger(f"[trigger.email] Filter expression error: {exc} — skipping message")
                     continue
 
@@ -195,5 +195,5 @@ def run(config: dict, inp: dict, context: dict, logger, creds=None, **kwargs) ->
     finally:
         try:
             conn.logout()
-        except Exception:
+        except (AttributeError, TypeError, OSError):
             pass
