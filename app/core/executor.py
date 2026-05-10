@@ -185,8 +185,7 @@ def run_one_node(node: dict, inp: Any, context: dict,
     Returns:
         {"output": ..., "duration_ms": ..., "error": None | str}
     """
-    if logger is None:
-        logger = LoggingLoggerAdapter(log)
+    logger = LoggingLoggerAdapter(logger if logger is not None else log)
     if creds is None:
         creds = {}
     if edges is None:
@@ -393,8 +392,7 @@ def run_graph(graph_data: dict, initial_payload: dict = None, logger=None, _dept
     completes with a trace-compatible dict plus a 'type' key
     ('node_start' | 'node_done').  Safe to be None.
     """
-    if logger is None:
-        logger = LoggingLoggerAdapter(log)
+    logger = LoggingLoggerAdapter(logger if logger is not None else log)
     if _depth > 5:
         raise RuntimeError("Call Graph: maximum sub-flow nesting depth (5) exceeded")
 
