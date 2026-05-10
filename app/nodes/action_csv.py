@@ -50,7 +50,7 @@ def run(config, inp, context, logger, creds=None, **kwargs):
                 try:
                     import json as _json
                     items = _json.loads(items)
-                except json.JSONDecodeError:
+                except _json.JSONDecodeError:
                     items = inp
         else:
             items = inp
