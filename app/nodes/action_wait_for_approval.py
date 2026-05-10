@@ -67,7 +67,7 @@ def run(config, inp, context, logger, creds=None, **kwargs):
                 (token, task_id, graph_name, node_id,
                  approver_email, subject, message, timeout_hours),
             )
-    except (psycopg2.OperationalError, pymysql.OperationalError, sqlite3.OperationalError, OSError) as exc:
+    except (AttributeError, TypeError, RuntimeError) as exc:
         log.warning("wait_for_approval: could not persist record — %s", exc)
 
     # ── Send email ───────────────────────────────────────────────────────────
