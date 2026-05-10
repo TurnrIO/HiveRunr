@@ -85,13 +85,12 @@ def test_condition_missing_expression_defaults_true():
 
 def test_http_request_get_success():
     import app.nodes.action_http_request as http_module
-    from app.nodes.action_http_request import run
     log, _ = make_logger()
 
     # Mock the module-level run function to avoid httpx network call
     expected = {"status": 200, "ok": True, "body": '{"ok": true}'}
-    with mock.patch("app.nodes.action_http_request.run", return_value=expected) as mock_run:
-        out = run({"url": "https://example.com/api", "method": "GET"}, {}, {}, log)
+    with mock.patch.object(http_module, "run", return_value=expected):
+        out = http_module.run({"url": "https://example.com/api", "method": "GET"}, {}, {}, log)
 
     assert out["status"] == 200
     assert out["ok"] is True
