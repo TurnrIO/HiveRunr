@@ -334,7 +334,7 @@ def _expand_loop(nid, loop_result, nodes_map, edges, context, creds, logger, suc
                     )
                 else:
                     loop_ctx[bid] = {'__error': f"Unknown node type in loop: {bn.get('type')}"}
-            except Exception as e:
+            except (AttributeError, TypeError, KeyError, ValueError) as e:
                 loop_ctx[bid] = {'__error': str(e)}
         loop_results.append(loop_ctx.get(body_targets[0]) if body_targets else item)
     return {'loop_results': loop_results, 'count': len(loop_results)}
@@ -368,7 +368,7 @@ def run_graph(graph_data: dict, initial_payload: dict = None, logger=None, _dept
     except (OSError, TimeoutError, ImportError) as e:
         log.warning(f"Could not load credentials: {e}")
         creds = {}
-    except Exception:
+    except (AttributeError, KeyError, RuntimeError, TypeError, ValueError):
         # DB not available (no DB, network error, etc.) — degrade gracefully
         creds = {}
 
@@ -435,7 +435,7 @@ def run_graph(graph_data: dict, initial_payload: dict = None, logger=None, _dept
     except (OSError, TimeoutError) as exc:
         _span.set_status(_SC.ERROR, str(exc))
         raise
-    except Exception as exc:
+    except (AttributeError, KeyError, TypeError, ValueError) as exc:
         _span.set_status(_SC.ERROR, str(exc))
         raise
     finally:
@@ -498,8 +498,8 @@ def _run_sequential(order, nodes_map, edges, context, results, traces,
             try:
                 node_callback({'type': 'node_start', 'node_id': nid,
                                'label': ndata.get('label', ''), 'node_type': ntype})
-            except Exception:
-                pass
+            except (AttributeError, TypeError) as exc:
+                log.warning("node_callback(node_start) failed for %s: %s", nid, exc)
 
         result, trace, skip_delta, abort_or_loop = _exec_node(
             nid, nodes_map, edges, context, creds, logger, succ, _depth
@@ -515,8 +515,8 @@ def _run_sequential(order, nodes_map, edges, context, results, traces,
             if node_callback:
                 try:
                     node_callback({'type': 'node_done', **trace})
-                except Exception:
-                    pass
+                except (AttributeError, TypeError) as exc:
+                    log.warning("node_callback(node_done) failed for %s: %s", nid, exc)
             raise RuntimeError(
                 f"Node [{a_nid}] ({a_ntype}) failed after {attempts} attempt(s): {exc}"
             ) from exc
@@ -527,8 +527,8 @@ def _run_sequential(order, nodes_map, edges, context, results, traces,
         if node_callback:
             try:
                 node_callback({'type': 'node_done', **trace})
-            except Exception:
-                pass
+            except (AttributeError, TypeError) as exc:
+                log.warning("node_callback(node_done) failed for %s: %s", nid, exc)
 
         # Loop body expansion
         if abort_or_loop is not None and isinstance(abort_or_loop, dict) \
@@ -604,8 +604,8 @@ def _run_parallel(levels, nodes_map, edges, context, results, traces,
                     node_callback({'type': 'node_start', 'node_id': nid,
                                    'label': nd.get('data', {}).get('label', ''),
                                    'node_type': nd.get('type', '')})
-                except Exception:
-                    pass
+                except (AttributeError, TypeError) as exc:
+                    log.warning("node_callback(node_start) failed for level node %s: %s", nid, exc)
 
         if len(active) == 1:
             # Fast path: avoid threading overhead for single-node levels
@@ -634,8 +634,8 @@ def _run_parallel(levels, nodes_map, edges, context, results, traces,
                     nid = future_map[future]
                     try:
                         node_results[nid] = future.result()
-                    except Exception as exc:
-                        # Shouldn't happen (_exec_node never raises), but be safe
+                    except (AttributeError, TypeError) as exc:
+                        log.warning("_exec_node raised in parallel worker for %s: %s", nid, exc)
                         node_results[nid] = (
                             {'__error': str(exc)},
                             {'node_id': nid, 'status': 'error', 'error': str(exc),
@@ -668,8 +668,8 @@ def _apply_node_result(nid, result, trace, skip_delta, abort_or_loop,
         if node_callback:
             try:
                 node_callback({'type': 'node_done', **trace})
-            except Exception:
-                pass
+            except (AttributeError, TypeError) as exc:
+                log.warning("node_callback(node_done) failed for %s: %s", nid, exc)
         raise RuntimeError(
             f"Node [{a_nid}] ({a_ntype}) failed after {attempts} attempt(s): {exc}"
         ) from exc
@@ -680,8 +680,8 @@ def _apply_node_result(nid, result, trace, skip_delta, abort_or_loop,
     if node_callback:
         try:
             node_callback({'type': 'node_done', **trace})
-        except Exception:
-            pass
+        except (AttributeError, TypeError) as exc:
+            log.warning("node_callback(node_done) failed for %s: %s", nid, exc)
 
     if abort_or_loop is not None and isinstance(abort_or_loop, dict) \
             and abort_or_loop.get('__loop__'):
