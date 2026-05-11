@@ -1,5 +1,6 @@
 """GitHub API action node."""
 import base64, json
+import httpx
 from json import JSONDecodeError
 from app.nodes._utils import _render, _resolve_cred_raw
 
@@ -53,7 +54,7 @@ def run(config, inp, context, logger, creds=None, **kwargs):
     base = 'https://api.github.com'
 
     def gh(method, url, **kw):
-        r = httpx.request(method, url, headers=headers, timeout=30, **kw)
+        r = httpx.request(method, url, headers=headers, timeout=httpx.Timeout(30.0), **kw)
         r.raise_for_status()
         return r.json() if r.content else {}
 
