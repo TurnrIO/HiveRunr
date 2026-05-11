@@ -28,6 +28,7 @@ from __future__ import annotations
 import json
 from json import JSONDecodeError
 import logging
+logger = logging.getLogger(__name__)
 import re
 from ._utils import _render, _resolve_cred_raw
 

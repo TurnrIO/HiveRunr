@@ -29,6 +29,7 @@ import json
 from json import JSONDecodeError
 import psycopg2
 import logging
+logger = logging.getLogger(__name__)
 from ._utils import _render, _resolve_cred_raw
 
 log = logging.getLogger(__name__)

@@ -42,6 +42,7 @@ import base64
 import ipaddress
 import json
 import logging
+logger = logging.getLogger(__name__)
 import socket
 import urllib.error
 import urllib.parse
