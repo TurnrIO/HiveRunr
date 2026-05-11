@@ -1,9 +1,11 @@
 """Twilio SMS / WhatsApp / Voice REST API node."""
-import json
 import base64
+import ipaddress
+import json
+import socket
+import urllib.parse
 import urllib.request
 import urllib.error
-import urllib.parse
 from json import JSONDecodeError
 from app.nodes._utils import _render
 
@@ -11,6 +13,62 @@ NODE_TYPE = "action.twilio"
 LABEL     = "Twilio"
 
 _API_BASE = "https://api.twilio.com/2010-04-01"
+
+# ── SSRF protection ────────────────────────────────────────────────────────────
+
+_BLOCKED_NETWORKS = [
+    ipaddress.ip_network("127.0.0.0/8"),
+    ipaddress.ip_network("169.254.0.0/16"),
+    ipaddress.ip_network("10.0.0.0/8"),
+    ipaddress.ip_network("172.16.0.0/12"),
+    ipaddress.ip_network("192.168.0.0/16"),
+    ipaddress.ip_network("0.0.0.0/8"),
+    ipaddress.ip_network("224.0.0.0/4"),
+    ipaddress.ip_network("::1/128"),
+    ipaddress.ip_network("fe80::/10"),
+    ipaddress.ip_network("ff00::/8"),
+]
+_IMDS_IP = ipaddress.ip_address("169.254.169.254")
+
+
+def _blocked_ip(ip_str: str) -> bool:
+    try:
+        ip = ipaddress.ip_address(ip_str)
+        if ip == _IMDS_IP:
+            return True
+        for net in _BLOCKED_NETWORKS:
+            if ip in net:
+                return True
+    except ValueError:
+        pass
+    return False
+
+
+def _check_url_ssrf(url: str) -> None:
+    """Validate URL scheme and resolve hostname for SSRF check.
+    Raises ValueError if URL is unsafe (non-HTTPS or resolves to blocked IP).
+    """
+    parsed = urllib.parse.urlparse(url)
+    scheme = parsed.scheme.lower()
+    if scheme != "https":
+        raise ValueError(
+            f"Twilio: only https:// URLs are allowed for twiml_url. "
+            f"Got scheme '{scheme}' in URL: {url[:100]}"
+        )
+    host = parsed.hostname
+    if not host:
+        raise ValueError(f"Twilio: could not determine hostname from twiml_url: {url[:100]}")
+    try:
+        addr_info = socket.getaddrinfo(host, None)
+    except socket.gaierror:
+        raise ValueError(f"Twilio: could not resolve hostname: {host}")
+    for family, _, _, _, sockaddr in addr_info:
+        ip_str = sockaddr[0]
+        if _blocked_ip(ip_str):
+            raise ValueError(
+                f"Twilio: twiml_url resolves to blocked IP {ip_str}. "
+                f"URL: {url[:100]}"
+            )
 
 def _req(method, path, account_sid, auth_token, body=None):
     url   = f"{_API_BASE}/Accounts/{account_sid}{path}"
@@ -84,6 +142,7 @@ def run(config, inp, context, logger, creds=None, **kwargs):
             raise ValueError("Twilio make_call: twiml_url or twiml is required")
         params = {"To": to_, "From": from_}
         if url_:
+            _check_url_ssrf(url_)
             params["Url"] = url_
         else:
             params["Twiml"] = twiml_
