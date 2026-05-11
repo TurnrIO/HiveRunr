@@ -102,7 +102,7 @@ def _flatten(obj):
 
 
 def run(config, inp, context, logger, creds=None, **kwargs):
-    cred_name = config.get("credential", "")
+
     token     = ""
     if creds:
         raw = creds.get("access_token", "") or creds.get("token", "")
