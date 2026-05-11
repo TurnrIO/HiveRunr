@@ -1,9 +1,12 @@
 """SFTP/FTP file transfer action node."""
 import io
+import logging
 import stat as _stat
 import json
 from json import JSONDecodeError
 from app.nodes._utils import _render, _resolve_cred_raw
+
+logger = logging.getLogger(__name__)
 
 NODE_TYPE = "action.sftp"
 LABEL = "SFTP / FTP"
