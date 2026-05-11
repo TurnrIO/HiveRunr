@@ -20,7 +20,6 @@ def _check_path_traversal(path: str, label: str) -> None:
 
 def run(config, inp, context, logger, creds=None, **kwargs):
     """Interact with GitHub REST API."""
-    import httpx
 
     token = _render(config.get('token', ''), context, creds)
     cred_name = _render(config.get('credential', ''), context, creds)
