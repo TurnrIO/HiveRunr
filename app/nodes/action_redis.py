@@ -69,9 +69,10 @@ def _get_client(config, context, creds):
                                        socket_timeout=10, decode_responses=True)
             except (JSONDecodeError, AttributeError, ValueError):
                 url = raw.strip()
+        return _redis.from_url(url, socket_timeout=10, decode_responses=True)
 
     if url:
-        # Extract host from URL for SSRF check
+        # SSRF check for URLs from credentials or direct config
         import urllib.parse
         parsed = urllib.parse.urlparse(url)
         host = parsed.hostname or ""
