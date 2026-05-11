@@ -242,11 +242,11 @@ def _make_run_publisher(task_id: str):
         def _publish(event: dict):
             try:
                 r.publish(channel, json.dumps(event, default=str))
-            except Exception:
+            except (OSError, RuntimeError):
                 pass  # non-fatal — fall back to DB polling on the client
 
         return _publish
-    except Exception:
+    except (OSError, ConnectionError, TimeoutError):
         return None
 
 
