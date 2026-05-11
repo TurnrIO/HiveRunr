@@ -12,6 +12,8 @@ import os
 import json
 import time
 import logging
+import psycopg2
+import redis.exceptions
 from json import JSONDecodeError
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any
@@ -419,11 +421,11 @@ def run_graph(graph_data: dict, initial_payload: dict = None, logger=None, _dept
         # Corrupt data in DB credential store — skip credentials for this run
         log.warning("Corrupt credential data in DB")
         creds = {}
-    except psycopg2.Error:
+    except psycopg2.Error as e:
         # psycopg2.OperationalError and subclasses (DB unavailable, connection refused)
         log.warning(f"Could not load credentials (DB): {e}")
         creds = {}
-    except redis.exceptions.ConnectionError:
+    except redis.exceptions.ConnectionError as e:
         # Redis unavailable — degrade gracefully instead of crashing the whole run
         log.warning(f"Could not load credentials (Redis): {e}")
         creds = {}
