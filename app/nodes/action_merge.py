@@ -1,4 +1,8 @@
-"""Merge / join action node."""
+"""Merge / join action node.
+"""
+import logging
+
+logger = logging.getLogger(__name__)
 
 NODE_TYPE = "action.merge"
 LABEL = "Merge / Join"
@@ -33,4 +37,3 @@ def run(config, inp, context, logger, creds=None, **kwargs):
 
     else:
         return inp
-
