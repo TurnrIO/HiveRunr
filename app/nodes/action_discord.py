@@ -1,6 +1,7 @@
 """Discord webhook action node."""
 import json
 import ipaddress
+import logging
 import socket
 import urllib.parse
 from json import JSONDecodeError
@@ -24,6 +25,8 @@ _BLOCKED_NETWORKS = [
     ipaddress.ip_network("ff00::/8"),
 ]
 _IMDS_IP = ipaddress.ip_address("169.254.169.254")
+
+logger = logging.getLogger(__name__)
 
 
 def _blocked_ip(ip_str: str) -> bool:

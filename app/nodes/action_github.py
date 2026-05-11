@@ -1,11 +1,14 @@
 """GitHub API action node."""
 import base64, json
+import logging
 import httpx
 from json import JSONDecodeError
 from app.nodes._utils import _render, _resolve_cred_raw
 
 NODE_TYPE = "action.github"
 LABEL = "GitHub"
+
+logger = logging.getLogger(__name__)
 
 
 def _check_path_traversal(path: str, label: str) -> None:
