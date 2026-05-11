@@ -1,4 +1,7 @@
 """Condition / branching action node."""
+import logging
+
+logger = logging.getLogger(__name__)
 from app.nodes._utils import _render
 
 NODE_TYPE = "action.condition"

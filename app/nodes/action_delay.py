@@ -1,6 +1,9 @@
 """Delay action node.
 """
 import time
+import logging
+
+logger = logging.getLogger(__name__)
 from app.nodes._utils import _render
 
 NODE_TYPE = "action.delay"
