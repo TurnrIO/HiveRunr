@@ -8,6 +8,8 @@ import psycopg2
 import redis
 import os
 
+GRAPH_IMPORT_MAX_BYTES = 10 * 1024 * 1024  # 10 MB — matches graphs.py limit
+
 log = logging.getLogger(__name__)
 
 from fastapi import APIRouter, HTTPException, Request
@@ -92,6 +94,10 @@ async def webhook_trigger(token: str, request: Request):
 
     # ── Read raw body (needed for HMAC verification before parsing JSON) ───
     body = await request.body()
+
+    # ── Size guard ─────────────────────────────────────────────────────────
+    if len(body) > GRAPH_IMPORT_MAX_BYTES:
+        raise HTTPException(413, f"Payload too large — maximum {GRAPH_IMPORT_MAX_BYTES // (1024*1024)} MB")
 
     # ── HMAC-SHA256 signature verification ────────────────────────────────
     secret = cfg.get("secret", "").strip()
