@@ -8,11 +8,41 @@ Credential JSON fields:
   host, port, password, db — individual fields (url takes precedence).
 """
 import json
+import socket
 from json import JSONDecodeError
 from app.nodes._utils import _render, _resolve_cred_raw
 
 NODE_TYPE = "action.redis"
 LABEL = "Redis"
+
+# ── SSRF protection ────────────────────────────────────────────────────────────
+# Blocked IP ranges (same pattern as action_airtable / action_graphql)
+_BLOCKED_IP_PREFIXES = (
+    "127.",   # loopback
+    "10.",    # RFC1918
+    "172.16", "172.17", "172.18", "172.19", "172.20", "172.21",
+    "172.22", "172.23", "172.24", "172.25", "172.26", "172.27",
+    "172.28", "172.29", "172.30", "172.31",  # RFC1918 (partial)
+    "192.168",  # RFC1918
+    "169.254",  # AWS IMDS / link-local
+)
+
+
+def _check_ssrf(host: str) -> None:
+    """Validate resolved IP addresses of host against blocked ranges."""
+    if not host:
+        return
+    try:
+        infos = socket.getaddrinfo(host, 0, socket.SOCK_STREAM, socket.IPPROTO_TCP)
+        for (family, socktype, proto, _, sockaddr) in infos:
+            ip = sockaddr[0]
+            if any(ip.startswith(prefix) for prefix in _BLOCKED_IP_PREFIXES):
+                raise ValueError(
+                    f"Redis: host '{host}' resolved to blocked IP {ip} — SSRF risk"
+                )
+    except socket.gaierror:
+        # DNS resolution failure — let Redis client fail naturally
+        pass
 
 
 def _get_client(config, context, creds):
@@ -34,25 +64,35 @@ def _get_client(config, context, creds):
                     port     = int(c.get("port", 6379))
                     password = c.get("password") or None
                     db       = int(c.get("db", 0))
+                    _check_ssrf(host)
                     return _redis.Redis(host=host, port=port, password=password, db=db,
                                        socket_timeout=10, decode_responses=True)
             except (JSONDecodeError, AttributeError, ValueError):
                 url = raw.strip()
 
     if url:
+        # Extract host from URL for SSRF check
+        import urllib.parse
+        parsed = urllib.parse.urlparse(url)
+        host = parsed.hostname or ""
+        if host:
+            _check_ssrf(host)
         return _redis.from_url(url, socket_timeout=10, decode_responses=True)
 
     # Fallback: use inline config fields
     host     = _render(config.get("host", "localhost"), context, creds) or "localhost"
-    port     = _render(config.get("port", "6379"), context, creds) or "6379"
+    port_raw = _render(config.get("port", "6379"), context, creds) or "6379"
     password = _render(config.get("password", ""), context, creds) or None
-    db       = _render(config.get("db", "0"), context, creds) or "0"
+    db_raw   = _render(config.get("db", "0"), context, creds) or "0"
+
+    _check_ssrf(host)
+
     try:
-        port = int(port)
+        port = int(port_raw)
     except (ValueError, TypeError):
         port = 6379
     try:
-        db = int(db)
+        db = int(db_raw)
     except (ValueError, TypeError):
         db = 0
     return _redis.Redis(host=host, port=port, password=password, db=db,
