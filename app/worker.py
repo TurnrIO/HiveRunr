@@ -202,7 +202,7 @@ def enqueue_script(self, script_name: str, payload: dict):
         }]
         update_run(task_id, "succeeded", result={"output": output, "script": script_name},
                    traces=traces)
-    except Exception as e:
+    except (Exception, SystemExit) as e:
         sys.stdout, sys.stderr = old_stdout, old_stderr
         log.exception(f"Script {script_name} failed")
         _notify_failure(script_name, str(e), task_id)
