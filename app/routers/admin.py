@@ -14,6 +14,7 @@ from app._version import __version__
 
 SCRIPTS_DIR   = Path(__file__).parent.parent / 'workflows'
 TEMPLATES_DIR = Path(__file__).parent.parent / 'templates'
+MAX_SCRIPT_SIZE_BYTES = 1 * 1024 * 1024  # 1 MB max script content
 
 router = APIRouter()
 
@@ -484,7 +485,13 @@ def api_get_script(name: str, request: Request):
 @router.post("/api/scripts")
 async def api_create_script(request: Request):
     _check_admin(request)
+    content_length = request.headers.get("content-length")
+    if content_length and int(content_length) > MAX_SCRIPT_SIZE_BYTES:
+        raise HTTPException(413, f"Script content too large — maximum {MAX_SCRIPT_SIZE_BYTES // 1024} KB")
     body = await request.json()
+    # Reject suspiciously large bodies even if Content-Length was not set
+    if len(json.dumps(body)) > MAX_SCRIPT_SIZE_BYTES:
+        raise HTTPException(413, f"Script content too large — maximum {MAX_SCRIPT_SIZE_BYTES // 1024} KB")
     name = _safe_script_name(body.get("name", ""))
     content = body.get("content", "# New script\n")
     p = SCRIPTS_DIR / f"{name}.py"
@@ -498,7 +505,13 @@ async def api_create_script(request: Request):
 async def api_update_script(name: str, request: Request):
     _check_admin(request)
     _safe_script_name(name)
+    content_length = request.headers.get("content-length")
+    if content_length and int(content_length) > MAX_SCRIPT_SIZE_BYTES:
+        raise HTTPException(413, f"Script content too large — maximum {MAX_SCRIPT_SIZE_BYTES // 1024} KB")
     body = await request.json()
+    # Reject suspiciously large bodies even if Content-Length was not set
+    if len(json.dumps(body)) > MAX_SCRIPT_SIZE_BYTES:
+        raise HTTPException(413, f"Script content too large — maximum {MAX_SCRIPT_SIZE_BYTES // 1024} KB")
     content = body.get("content", "")
     p = SCRIPTS_DIR / f"{name}.py"
     if not p.exists():
