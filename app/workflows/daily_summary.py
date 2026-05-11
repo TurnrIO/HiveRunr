@@ -120,5 +120,5 @@ finally:
         cur.close()
         conn.close()
         logger.info("Database connection closed")
-    except Exception:
+    except (AttributeError, OSError):
         pass
