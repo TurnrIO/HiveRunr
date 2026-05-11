@@ -1,6 +1,6 @@
 """SSH command action node."""
 import logging
-import json, logging, socket
+import json, socket
 from json import JSONDecodeError
 from app.nodes._utils import _render, _resolve_cred_raw
 
