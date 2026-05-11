@@ -9,16 +9,18 @@ Credential JSON fields (store as a generic/API Key credential):
 
 All config fields support {{template}} rendering.
 """
+import logging
 import json
-from json import JSONDecodeError
 import socket
-import ipaddress
 import urllib.parse
+from json import JSONDecodeError
 
 from app.nodes._utils import _render, _resolve_cred_raw
 
 NODE_TYPE = "action.graphql"
 LABEL = "GraphQL"
+
+logger = logging.getLogger(__name__)
 
 # ── SSRF protection (same pattern as action_http_request) ─────────────────────
 

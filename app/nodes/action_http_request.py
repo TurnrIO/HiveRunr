@@ -1,14 +1,17 @@
 """HTTP request action node."""
+import logging
 import json
-from json import JSONDecodeError
 import socket
-import ipaddress
 import urllib.parse
+from json import JSONDecodeError
+
 import httpx
 from app.nodes._utils import _render, _resolve_cred_raw
 
 NODE_TYPE = "action.http_request"
 LABEL = "HTTP Request"
+
+logger = logging.getLogger(__name__)
 
 # ── SSRF protection ────────────────────────────────────────────────────────────
 
