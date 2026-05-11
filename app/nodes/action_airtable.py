@@ -32,6 +32,9 @@ Output
     { id, deleted: true }
 """
 import json
+import ipaddress
+import socket
+import urllib.parse
 from json import JSONDecodeError
 from app.nodes._utils import _render, _resolve_cred_raw
 
@@ -39,6 +42,64 @@ NODE_TYPE = "action.airtable"
 LABEL = "Airtable"
 
 _BASE_URL = "https://api.airtable.com/v0"
+
+# ── SSRF protection (same pattern as action_graphql) ─────────────────────────
+
+_BLOCKED_NETWORKS = [
+    ipaddress.ip_network("127.0.0.0/8"),
+    ipaddress.ip_network("169.254.0.0/16"),
+    ipaddress.ip_network("10.0.0.0/8"),
+    ipaddress.ip_network("172.16.0.0/12"),
+    ipaddress.ip_network("192.168.0.0/16"),
+    ipaddress.ip_network("0.0.0.0/8"),
+    ipaddress.ip_network("224.0.0.0/4"),
+    ipaddress.ip_network("::1/128"),
+    ipaddress.ip_network("fe80::/10"),
+    ipaddress.ip_network("ff00::/8"),
+]
+_IMDS_IP = ipaddress.ip_address("169.254.169.254")
+_ALLOWED_SCHEME = "https"
+
+
+def _blocked_ip(ip_str: str) -> bool:
+    try:
+        ip = ipaddress.ip_address(ip_str)
+        if ip == _IMDS_IP:
+            return True
+        for net in _BLOCKED_NETWORKS:
+            if ip in net:
+                return True
+    except ValueError:
+        pass
+    return False
+
+
+def _check_ssrf(url: str) -> None:
+    """Validate URL scheme and resolve hostname for SSRF check.
+    Raises ValueError if URL is unsafe (non-HTTPS or resolves to blocked IP).
+    """
+    parsed = urllib.parse.urlparse(url)
+    scheme = parsed.scheme.lower()
+    if scheme != _ALLOWED_SCHEME:
+        raise ValueError(
+            f"Airtable: only {_ALLOWED_SCHEME} URLs are allowed. "
+            f"Got scheme '{scheme}' in URL: {url[:100]}"
+        )
+    host = parsed.hostname
+    if not host:
+        raise ValueError(f"Airtable: URL has no valid hostname: {url[:100]}")
+    try:
+        infos = socket.getaddrinfo(host, 443, socket.AF_UNSPEC, socket.SOCK_STREAM)
+    except socket.gaierror:
+        raise ValueError(f"Airtable: could not resolve hostname '{host}' in URL: {url[:100]}")
+    for (family, _, _, _, sockaddr) in infos:
+        if family in (socket.AF_INET, socket.AF_INET6):
+            ip_str = sockaddr[0]
+            if _blocked_ip(ip_str):
+                raise ValueError(
+                    f"Airtable: URL resolves to blocked IP {ip_str}. "
+                    f"Hostname '{host}' is not allowed. URL: {url[:100]}"
+                )
 
 
 def _get_headers(api_key: str) -> dict:
@@ -68,6 +129,11 @@ def _resolve_creds(config, context, creds):
         raise ValueError("Airtable: 'api_key' is required (set in credential or config)")
     if not base_id:
         raise ValueError("Airtable: 'base_id' is required (set in credential or config)")
+    # Validate base_id has valid structure and SSRF-check the base URL
+    if not base_id.startswith("app"):
+        raise ValueError(f"Airtable: base_id '{base_id}' does not look like a valid Airtable base ID")
+    base_url = f"https://api.airtable.com/v0/{base_id}"
+    _check_ssrf(base_url)
     return api_key, base_id
 
 
