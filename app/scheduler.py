@@ -320,7 +320,7 @@ def main():
     try:
         r = _redis_client()
         r.ping()
-    except (OSError, RuntimeError) as exc:
+    except (OSError, RuntimeError, Exception) as exc:
         log.warning(
             "Redis unavailable (%s) — running in standalone mode (no HA)", exc
         )
