@@ -116,7 +116,7 @@ def run(config, inp, context, logger, creds=None, **kwargs):
     try:
         choices = data['choices']
         if not isinstance(choices, list) or not choices:
-            raise ValueError(f"LLM Call: API returned empty or non-list 'choices' field")
+            raise ValueError("LLM Call: API returned empty or non-list 'choices' field")
         reply = choices[0]['message']['content']
     except (KeyError, IndexError, TypeError) as exc:
         raise ValueError(f"LLM Call: unexpected API response shape — {exc}") from exc
