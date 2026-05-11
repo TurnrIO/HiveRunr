@@ -1,5 +1,6 @@
 """Linear.app issue tracker node (GraphQL API)."""
 import json, os
+import socket
 from json import JSONDecodeError
 import urllib.request
 import urllib.error
@@ -9,6 +10,31 @@ NODE_TYPE = "action.linear"
 LABEL     = "Linear"
 
 _ENDPOINT = "https://api.linear.app/graphql"
+
+# ── SSRF protection ───────────────────────────────────────────────────────────
+_BLOCKED = (
+    "127.", "10.", "172.16.", "172.17.", "172.18.", "172.19.",
+    "172.20.", "172.21.", "172.22.", "172.23.", "172.24.", "172.25.",
+    "172.26.", "172.27.", "172.28.", "172.29.", "172.30.", "172.31.",
+    "192.168.", "::1", "fe80:", "fc00:", "fd00:",
+    "169.254.",  # AWS / Azure metadata
+)
+
+
+def _check_ssrf(host: str) -> None:
+    """Resolve hostname and check it doesn't point to a blocked network."""
+    try:
+        infos = socket.getaddrinfo(host, 443, socket.AF_UNSPEC, socket.SOCK_STREAM)
+    except socket.gaierror:
+        raise ValueError(f"Linear: could not resolve hostname '{host}'")
+    for (family, _, _, _, sockaddr) in infos:
+        if family in (socket.AF_INET, socket.AF_INET6):
+            ip_str = sockaddr[0]
+            for prefix in _BLOCKED:
+                if ip_str.startswith(prefix) or ip_str.startswith("[" + prefix):
+                    raise ValueError(
+                        f"Linear: host '{host}' resolves to blocked IP {ip_str}"
+                    )
 
 
 def _gql(api_key: str, query: str, variables: dict = None):
@@ -41,6 +67,9 @@ def run(config, inp, context, logger, creds=None, **kwargs):
         raise ValueError("Linear: api_key is required (set via credential or api_key field)")
 
     op = _render(config.get("operation", "get_issue"), context, creds)
+
+    # ── SSRF check on fixed endpoint hostname ─────────────────────────────────
+    _check_ssrf("api.linear.app")
 
     # ── get issue ─────────────────────────────────────────────────────────────
     if op == "get_issue":
