@@ -30,7 +30,7 @@ def _fire_webhook(webhook_url: str, payload: dict) -> None:
     try:
         import httpx
         httpx.post(webhook_url, json=payload, timeout=10)
-    except Exception as exc:
+    except (httpx.HTTPError, OSError) as exc:
         log.warning("webhook alert failed (%s): %s", webhook_url[:60], exc)
 
 
@@ -88,7 +88,7 @@ def _send_run_alert(
                     graph_id, streak, alert_min_failures,
                 )
                 return
-        except Exception as exc:
+        except (AttributeError, TypeError, KeyError, ValueError) as exc:
             log.warning("Could not check failure streak for graph %s: %s", graph_id, exc)
 
     webhook_payload = {
@@ -172,7 +172,7 @@ def enqueue_script(self, script_name: str, payload: dict):
     try:
         from app.core.db import init_db
         init_db()
-    except Exception:
+    except (OSError, ImportError):
         pass
     buf = io.StringIO()
     old_stdout, old_stderr = sys.stdout, sys.stderr
@@ -223,7 +223,7 @@ def enqueue_script(self, script_name: str, payload: dict):
             update_run(task_id, "failed",
                        result={"error": str(e), "script": script_name, "output": output},
                        traces=traces)
-        except Exception:
+        except (OSError, KeyError, ValueError, RuntimeError):
             pass  # best-effort — don't let a DB error create a second FAILURE
 
 
@@ -285,7 +285,7 @@ def enqueue_graph(self, graph_id: int, payload: dict,
     try:
         from app.core.db import init_db
         init_db()
-    except Exception:
+    except (OSError, ImportError):
         pass
     update_run(task_id, "running", retry_count=retry_attempt)
     traces = []
