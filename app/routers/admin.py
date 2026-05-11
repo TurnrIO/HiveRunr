@@ -486,8 +486,11 @@ def api_get_script(name: str, request: Request):
 async def api_create_script(request: Request):
     _check_admin(request)
     content_length = request.headers.get("content-length")
-    if content_length and int(content_length) > MAX_SCRIPT_SIZE_BYTES:
-        raise HTTPException(413, f"Script content too large — maximum {MAX_SCRIPT_SIZE_BYTES // 1024} KB")
+    try:
+        if content_length and int(content_length) > MAX_SCRIPT_SIZE_BYTES:
+            raise HTTPException(413, f"Script content too large — maximum {MAX_SCRIPT_SIZE_BYTES // 1024} KB")
+    except ValueError:
+        raise HTTPException(400, "Invalid Content-Length header")
     body = await request.json()
     # Reject suspiciously large bodies even if Content-Length was not set
     if len(json.dumps(body)) > MAX_SCRIPT_SIZE_BYTES:
@@ -506,8 +509,11 @@ async def api_update_script(name: str, request: Request):
     _check_admin(request)
     _safe_script_name(name)
     content_length = request.headers.get("content-length")
-    if content_length and int(content_length) > MAX_SCRIPT_SIZE_BYTES:
-        raise HTTPException(413, f"Script content too large — maximum {MAX_SCRIPT_SIZE_BYTES // 1024} KB")
+    try:
+        if content_length and int(content_length) > MAX_SCRIPT_SIZE_BYTES:
+            raise HTTPException(413, f"Script content too large — maximum {MAX_SCRIPT_SIZE_BYTES // 1024} KB")
+    except ValueError:
+        raise HTTPException(400, "Invalid Content-Length header")
     body = await request.json()
     # Reject suspiciously large bodies even if Content-Length was not set
     if len(json.dumps(body)) > MAX_SCRIPT_SIZE_BYTES:

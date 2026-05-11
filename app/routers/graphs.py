@@ -107,8 +107,11 @@ async def api_graph_import(request: Request):
         raise HTTPException(403, "Importing flows requires admin or owner role")
     workspace_id = _resolve_workspace(request, user)
     content_length = request.headers.get("content-length")
-    if content_length and int(content_length) > GRAPH_IMPORT_MAX_BYTES:
-        raise HTTPException(413, f"Payload too large — maximum {GRAPH_IMPORT_MAX_BYTES // (1024*1024)} MB")
+    try:
+        if content_length and int(content_length) > GRAPH_IMPORT_MAX_BYTES:
+            raise HTTPException(413, f"Payload too large — maximum {GRAPH_IMPORT_MAX_BYTES // (1024*1024)} MB")
+    except ValueError:
+        raise HTTPException(400, "Invalid Content-Length header")
     try:
         body = await request.json()
     except JSONDecodeError:
