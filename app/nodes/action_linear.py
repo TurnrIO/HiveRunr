@@ -1,5 +1,5 @@
 """Linear.app issue tracker node (GraphQL API)."""
-import json, os
+import json, logging, os
 import socket
 from json import JSONDecodeError
 import urllib.request
@@ -8,6 +8,8 @@ from app.nodes._utils import _render
 
 NODE_TYPE = "action.linear"
 LABEL     = "Linear"
+
+logger = logging.getLogger(__name__)
 
 _ENDPOINT = "https://api.linear.app/graphql"
 
