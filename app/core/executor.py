@@ -419,9 +419,18 @@ def run_graph(graph_data: dict, initial_payload: dict = None, logger=None, _dept
         # Corrupt data in DB credential store — skip credentials for this run
         log.warning("Corrupt credential data in DB")
         creds = {}
+    except psycopg2.Error:
+        # psycopg2.OperationalError and subclasses (DB unavailable, connection refused)
+        log.warning(f"Could not load credentials (DB): {e}")
+        creds = {}
+    except redis.exceptions.ConnectionError:
+        # Redis unavailable — degrade gracefully instead of crashing the whole run
+        log.warning(f"Could not load credentials (Redis): {e}")
+        creds = {}
     except Exception:
-        # psycopg2.OperationalError, redis.exceptions.ConnectionError, and any other
-        # DB-unavailable error — degrade gracefully instead of crashing the whole run
+        # Any other unexpected error that is not one of the above — still degrade
+        # gracefully but log at error level so it shows up in monitoring
+        log.error(f"Unexpected error loading credentials: {e}")
         creds = {}
 
     nodes_map    = {n['id']: n for n in nodes}
