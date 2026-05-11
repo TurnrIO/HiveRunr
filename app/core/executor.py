@@ -429,7 +429,7 @@ def run_graph(graph_data: dict, initial_payload: dict = None, logger=None, _dept
         # Redis unavailable — degrade gracefully instead of crashing the whole run
         log.warning(f"Could not load credentials (Redis): {e}")
         creds = {}
-    except Exception:
+    except Exception as e:
         # Any other unexpected error that is not one of the above — still degrade
         # gracefully but log at error level so it shows up in monitoring
         log.error(f"Unexpected error loading credentials: {e}")
