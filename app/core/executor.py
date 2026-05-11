@@ -415,6 +415,10 @@ def run_graph(graph_data: dict, initial_payload: dict = None, logger=None, _dept
     except (AttributeError, KeyError, RuntimeError, TypeError, ValueError):
         # DB not available (no DB, network error, etc.) — degrade gracefully
         creds = {}
+    except JSONDecodeError:
+        # Corrupt data in DB credential store — skip credentials for this run
+        log.warning("Corrupt credential data in DB")
+        creds = {}
     except Exception:
         # psycopg2.OperationalError, redis.exceptions.ConnectionError, and any other
         # DB-unavailable error — degrade gracefully instead of crashing the whole run
