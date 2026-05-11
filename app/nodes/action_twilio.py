@@ -1,4 +1,5 @@
 """Twilio SMS / WhatsApp / Voice REST API node."""
+import logging
 import base64
 import ipaddress
 import json
@@ -9,6 +10,7 @@ import urllib.error
 from json import JSONDecodeError
 from app.nodes._utils import _render
 
+logger = logging.getLogger(__name__)
 NODE_TYPE = "action.twilio"
 LABEL     = "Twilio"
 

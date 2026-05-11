@@ -1,8 +1,10 @@
 """SSH command action node."""
+import logging
 import json, logging, socket
 from json import JSONDecodeError
 from app.nodes._utils import _render, _resolve_cred_raw
 
+logger = logging.getLogger(__name__)
 log = logging.getLogger(__name__)
 
 NODE_TYPE = "action.ssh"

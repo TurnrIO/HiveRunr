@@ -1,4 +1,5 @@
 """Send email action node."""
+import logging
 import os
 import json
 from json import JSONDecodeError
@@ -8,6 +9,7 @@ import smtplib
 from app.nodes._utils import _render, _resolve_cred_raw
 from app.core.smtp import send_message
 
+logger = logging.getLogger(__name__)
 NODE_TYPE = "action.send_email"
 LABEL = "Send Email"
 

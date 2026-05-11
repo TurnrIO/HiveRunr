@@ -1,4 +1,5 @@
 """OpenAI Assistants API node."""
+import logging
 import json, os
 from json import JSONDecodeError
 import time
@@ -6,6 +7,7 @@ import urllib.request
 import urllib.error
 from app.nodes._utils import _render
 
+logger = logging.getLogger(__name__)
 NODE_TYPE = "action.openai_assistant"
 LABEL     = "OpenAI Assistant"
 

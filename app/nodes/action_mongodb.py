@@ -1,8 +1,10 @@
 """MongoDB node — uses pymongo (optional dep)."""
+import logging
 import json
 from json import JSONDecodeError
 from app.nodes._utils import _render
 
+logger = logging.getLogger(__name__)
 NODE_TYPE = "action.mongodb"
 LABEL     = "MongoDB"
 

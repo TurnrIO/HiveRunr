@@ -1,9 +1,11 @@
 """Google Sheets API action node."""
+import logging
 import httpx
 import json
 from json import JSONDecodeError
 from app.nodes._utils import _render, _resolve_cred_raw
 
+logger = logging.getLogger(__name__)
 NODE_TYPE = "action.google_sheets"
 LABEL = "Google Sheets"
 

@@ -7,6 +7,9 @@ Credential JSON fields:
          OR set host/port/password/db individually.
   host, port, password, db — individual fields (url takes precedence).
 """
+import logging
+
+logger = logging.getLogger(__name__)
 import json
 import socket
 from json import JSONDecodeError

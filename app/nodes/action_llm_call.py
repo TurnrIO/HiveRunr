@@ -14,6 +14,9 @@ Config fields:
 All config fields support {{template}} rendering.
 """
 import json
+import logging
+
+logger = logging.getLogger(__name__)
 import socket
 import ipaddress
 import urllib.parse

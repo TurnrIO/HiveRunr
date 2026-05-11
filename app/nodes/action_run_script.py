@@ -7,6 +7,9 @@ Set ENABLE_RUN_SCRIPT=true in your environment to allow execution.
 Every execution is written to the 'audit' logger at WARNING level so it is
 always visible in Docker / system logs regardless of the application log level.
 """
+import logging
+
+logger = logging.getLogger(__name__)
 import os
 import time
 import json

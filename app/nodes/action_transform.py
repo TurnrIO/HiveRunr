@@ -1,7 +1,9 @@
 """Transform / evaluate expression action node."""
+import logging
 import json
 from app.nodes._utils import _render
 
+logger = logging.getLogger(__name__)
 NODE_TYPE = "action.transform"
 LABEL = "Transform"
 

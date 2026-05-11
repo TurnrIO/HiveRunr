@@ -18,6 +18,7 @@ Output:
   size_bytes   — byte count of the raw PDF
   filename     — echoed filename
   ok           — True
+
 """
 import base64
 import io
@@ -56,6 +57,9 @@ _HTML_WRAPPER = """\
 </html>
 """
 
+import logging
+
+logger = logging.getLogger(__name__)
 
 def run(config, inp, context, logger, creds=None, **kwargs):
     """Render HTML to PDF and return base64-encoded bytes."""

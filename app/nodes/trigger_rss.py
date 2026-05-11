@@ -10,6 +10,7 @@ periodically and picks up new items since the last run.
 Configuration
 -------------
   url               — RSS or Atom feed URL (required)
+
   lookback_minutes  — return entries published/updated within the last N
                       minutes (default: 60; set 0 to return all entries)
   filter_expression — optional Python expression evaluated per entry; the
@@ -41,6 +42,9 @@ Output shape
   "published":entries[0].published,
 }
 """
+import logging
+
+logger = logging.getLogger(__name__)
 import ipaddress
 import re
 import socket

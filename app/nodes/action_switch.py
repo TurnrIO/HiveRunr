@@ -12,6 +12,9 @@ Canvas wiring:
 Output:
   { value, matched_case, matched_index, no_match: bool }
 """
+import logging
+
+logger = logging.getLogger(__name__)
 import json
 from json import JSONDecodeError
 from app.nodes._utils import _render

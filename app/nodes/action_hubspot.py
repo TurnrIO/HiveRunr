@@ -1,4 +1,5 @@
 """HubSpot CRM REST API v3 node."""
+import logging
 import json
 import time
 import urllib.request
@@ -6,6 +7,7 @@ import urllib.error
 from json import JSONDecodeError
 from app.nodes._utils import _render
 
+logger = logging.getLogger(__name__)
 NODE_TYPE = "action.hubspot"
 LABEL     = "HubSpot"
 

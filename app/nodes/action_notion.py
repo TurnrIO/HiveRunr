@@ -1,9 +1,11 @@
 """Notion API action node."""
+import logging
 import json
 import httpx
 from json import JSONDecodeError
 from app.nodes._utils import _render, _resolve_cred_raw
 
+logger = logging.getLogger(__name__)
 NODE_TYPE = "action.notion"
 LABEL = "Notion"
 

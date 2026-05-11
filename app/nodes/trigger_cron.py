@@ -1,6 +1,7 @@
 """Cron schedule trigger node."""
 import logging
 
+logger = logging.getLogger(__name__)
 log = logging.getLogger(__name__)
 
 NODE_TYPE = "trigger.cron"
