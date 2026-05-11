@@ -1,5 +1,8 @@
 """Filter / map action node."""
+import logging
 from app.nodes._utils import _render
+
+logger = logging.getLogger(__name__)
 
 NODE_TYPE = "action.filter"
 LABEL = "Filter"
