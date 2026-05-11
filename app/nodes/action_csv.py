@@ -9,8 +9,11 @@ Output (generate): { csv: "...", count: N }
 """
 import csv
 import io
+import logging
 from json import JSONDecodeError
 from app.nodes._utils import _render
+
+logger = logging.getLogger(__name__)
 
 NODE_TYPE = "action.csv"
 LABEL = "CSV"
