@@ -4,6 +4,7 @@ import json
 from json import JSONDecodeError
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+import smtplib
 from app.nodes._utils import _render, _resolve_cred_raw
 from app.core.smtp import send_message
 
@@ -58,5 +59,10 @@ def run(config, inp, context, logger, creds=None, **kwargs):
     msg['Subject'] = subject
     msg.attach(MIMEText(body, 'plain'))
 
-    send_message(host, smtp_port, user, pwd, from_addr, to, msg.as_string())
+    try:
+        send_message(host, smtp_port, user, pwd, from_addr, to, msg.as_string())
+    except smtplib.SMTPException as e:
+        logger.error("Send Email: SMTP error sending to %s — %s", to, e)
+        raise ValueError(f"Send Email: SMTP failure — {e}") from e
+
     return {'sent': True, 'to': to, 'subject': subject}
