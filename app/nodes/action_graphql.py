@@ -7,8 +7,10 @@ Credential JSON fields (store as a generic/API Key credential):
   token     — Bearer token (added as Authorization: Bearer <token>)
   headers   — JSON string of extra headers (optional)
 
+
 All config fields support {{template}} rendering.
 """
+import ipaddress
 import logging
 import json
 import socket

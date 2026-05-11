@@ -1,4 +1,5 @@
 """HTTP request action node."""
+import ipaddress
 import logging
 import json
 import socket
