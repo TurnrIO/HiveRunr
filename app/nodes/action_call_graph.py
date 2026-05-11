@@ -1,7 +1,10 @@
 """Call subgraph action node."""
 import json
+import logging
 from json import JSONDecodeError
 from app.nodes._utils import _render
+
+logger = logging.getLogger(__name__)
 
 NODE_TYPE = "action.call_graph"
 LABEL = "Call Graph"
@@ -45,4 +48,3 @@ def run(config, inp, context, logger, creds=None, **kwargs):
 
     logger.info("Call Graph: completed graph_id=%s", target_id)
     return sub.get('context', {})
-
