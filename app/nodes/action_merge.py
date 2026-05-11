@@ -28,6 +28,7 @@ def run(config, inp, context, logger, creds=None, **kwargs):
         for out in upstream_outputs:
             if isinstance(out, dict):
                 result.update(out)
+        logger.info("Merge: mode=dict, merged %s outputs", len(upstream_outputs))
         return result
 
     else:
