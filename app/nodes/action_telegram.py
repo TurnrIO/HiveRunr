@@ -1,6 +1,10 @@
 """Telegram message action node."""
+import logging
 import os
+
 from app.nodes._utils import _render
+
+logger = logging.getLogger(__name__)
 
 NODE_TYPE = "action.telegram"
 LABEL = "Telegram"
@@ -23,4 +27,3 @@ def run(config, inp, context, logger, creds=None, **kwargs):
     r.raise_for_status()
 
     return {'sent': True, 'chat_id': chat}
-
