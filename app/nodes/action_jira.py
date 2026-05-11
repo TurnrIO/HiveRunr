@@ -39,8 +39,10 @@ Output shape (varies by operation)
 from __future__ import annotations
 
 import base64
+import ipaddress
 import json
 import logging
+import socket
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -53,8 +55,61 @@ log = logging.getLogger(__name__)
 NODE_TYPE = "action.jira"
 LABEL     = "Jira"
 
+# ── SSRF protection ────────────────────────────────────────────────────────────
 
-# ── HTTP helper ───────────────────────────────────────────────────────────────
+_BLOCKED_NETWORKS = [
+    ipaddress.ip_network("127.0.0.0/8"),
+    ipaddress.ip_network("169.254.0.0/16"),
+    ipaddress.ip_network("10.0.0.0/8"),
+    ipaddress.ip_network("172.16.0.0/12"),
+    ipaddress.ip_network("192.168.0.0/16"),
+    ipaddress.ip_network("0.0.0.0/8"),
+    ipaddress.ip_network("224.0.0.0/4"),
+    ipaddress.ip_network("::1/128"),
+    ipaddress.ip_network("fe80::/10"),
+    ipaddress.ip_network("ff00::/8"),
+]
+_IMDS_IP = ipaddress.ip_address("169.254.169.254")
+
+
+def _blocked_ip(ip_str: str) -> bool:
+    try:
+        ip = ipaddress.ip_address(ip_str)
+        if ip == _IMDS_IP:
+            return True
+        for net in _BLOCKED_NETWORKS:
+            if ip in net:
+                return True
+    except ValueError:
+        pass
+    return False
+
+
+def _check_url_ssrf(url: str) -> None:
+    parsed = urllib.parse.urlparse(url)
+    scheme = parsed.scheme.lower()
+    if scheme not in ("http", "https"):
+        raise ValueError(
+            f"Jira: only http/https URLs are allowed. "
+            f"Got scheme '{scheme}' in URL: {url[:100]}"
+        )
+    host = parsed.hostname
+    if not host:
+        raise ValueError(f"Jira: could not determine hostname from URL: {url[:100]}")
+    try:
+        addr_info = socket.getaddrinfo(host, None)
+    except socket.gaierror:
+        raise ValueError(f"Jira: could not resolve hostname '{host}' in URL: {url[:100]}")
+    for (family, _, _, _, sockaddr) in addr_info:
+        ip_str = sockaddr[0]
+        if _blocked_ip(ip_str):
+            raise ValueError(
+                f"Jira: URL resolves to blocked address {ip_str}. "
+                f"URL: {url[:100]}"
+            )
+
+
+# ── HTTP helper ────────────────────────────────────────────────────────────────
 
 def _jira_request(
     base_url: str,
@@ -281,6 +336,9 @@ def run(config: dict, inp: dict, context: dict, logger, creds=None, **kwargs) ->
         raise ValueError(
             "action.jira credential must contain: base_url, email, api_token"
         )
+
+    # SSRF: validate base_url before making any HTTP request
+    _check_url_ssrf(base_url)
 
     def r(key, default=""):
         return _render(str(config.get(key, default) or default), context, creds)
