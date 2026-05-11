@@ -1,9 +1,12 @@
 """HubSpot CRM REST API v3 node."""
+import ipaddress
 import logging
 import json
+import socket
 import time
-import urllib.request
 import urllib.error
+import urllib.parse
+import urllib.request
 from json import JSONDecodeError
 from app.nodes._utils import _render
 
@@ -13,9 +16,67 @@ LABEL     = "HubSpot"
 
 _BASE = "https://api.hubapi.com"
 
+# ── SSRF protection ────────────────────────────────────────────────────────────
+
+_BLOCKED_NETWORKS = [
+    ipaddress.ip_network("127.0.0.0/8"),
+    ipaddress.ip_network("169.254.0.0/16"),
+    ipaddress.ip_network("10.0.0.0/8"),
+    ipaddress.ip_network("172.16.0.0/12"),
+    ipaddress.ip_network("192.168.0.0/16"),
+    ipaddress.ip_network("0.0.0.0/8"),
+    ipaddress.ip_network("224.0.0.0/4"),
+    ipaddress.ip_network("::1/128"),
+    ipaddress.ip_network("fe80::/10"),
+    ipaddress.ip_network("ff00::/8"),
+]
+_IMDS_IP = ipaddress.ip_address("169.254.169.254")
+
+
+def _blocked_ip(ip_str: str) -> bool:
+    try:
+        ip = ipaddress.ip_address(ip_str)
+        if ip == _IMDS_IP:
+            return True
+        for net in _BLOCKED_NETWORKS:
+            if ip in net:
+                return True
+    except ValueError:
+        pass
+    return False
+
+
+def _check_url_ssrf(url: str) -> None:
+    parsed = urllib.parse.urlparse(url)
+    scheme = parsed.scheme.lower()
+    if scheme not in ("http", "https"):
+        raise ValueError(
+            f"HubSpot: only http/https URLs are allowed. "
+            f"Got scheme '{scheme}' in URL: {url[:100]}"
+        )
+    host = parsed.hostname
+    if not host:
+        raise ValueError(f"HubSpot: could not determine hostname from URL: {url[:100]}")
+    try:
+        addr_info = socket.getaddrinfo(host, None)
+    except socket.gaierror:
+        raise ValueError(f"HubSpot: could not resolve hostname '{host}' in URL: {url[:100]}")
+    for (family, _, _, _, sockaddr) in addr_info:
+        ip_str = sockaddr[0]
+        if _blocked_ip(ip_str):
+            raise ValueError(
+                f"HubSpot: URL resolves to blocked address {ip_str}. "
+                f"URL: {url[:100]}"
+            )
+
+
+# ── HTTP helper ────────────────────────────────────────────────────────────────
 
 def _req(method, path, token, body=None):
     url  = _BASE + path
+    # SSRF: validate that _BASE (api.hubapi.com) is not being redirected to a blocked IP
+    # The path is appended to _BASE so we validate the resolved IP of _BASE's hostname
+    _check_url_ssrf(url)
     data = json.dumps(body).encode() if body is not None else None
     req  = urllib.request.Request(url, data=data, method=method)
     req.add_header("Authorization", f"Bearer {token}")
@@ -43,12 +104,11 @@ def _flatten(obj):
 def run(config, inp, context, logger, creds=None, **kwargs):
     cred_name = config.get("credential", "")
     token     = ""
-    if cred_name and creds:
-        raw = creds.get(cred_name, {})
-        if isinstance(raw, str):
-            try:   raw = json.loads(raw)
-            except JSONDecodeError: raw = {}
-        token = raw.get("access_token", raw.get("token", ""))
+    if creds:
+        raw = creds.get("access_token", "") or creds.get("token", "")
+        if raw:
+            try:   token = json.loads(raw).get("access_token", raw)
+            except JSONDecodeError: token = raw
     if not token:
         token = _render(config.get("access_token", ""), context, creds)
     if not token:
@@ -118,35 +178,31 @@ def run(config, inp, context, logger, creds=None, **kwargs):
     # ── get deal ──────────────────────────────────────────────────────────
     elif op == "get_deal":
         deal_id = _render(config.get("deal_id", ""), context, creds)
-        logger.info("HubSpot: get_deal id=%s", deal_id)
         result  = _req("GET", f"/crm/v3/objects/deals/{deal_id}?properties=dealname,amount,dealstage,closedate,pipeline", token)
         flat    = _flatten(result)
         return {"object": flat, "id": flat.get("id"), "properties": result.get("properties", {}), "raw": result}
 
     # ── create deal ───────────────────────────────────────────────────────
     elif op == "create_deal":
-        logger.info("HubSpot: create_deal")
+        logger.info("HubSpot: creating deal")
         props_raw = _render(config.get("properties", "{}"), context, creds)
         try:   props = json.loads(props_raw) if isinstance(props_raw, str) else props_raw
-        except JSONDecodeError: raise ValueError("HubSpot create_deal: properties must be valid JSON")
+        except JSONDecodeError: raise ValueError(f"HubSpot create_deal: properties must be valid JSON, got: {props_raw!r}")
         result = _req("POST", "/crm/v3/objects/deals", token, {"properties": props})
         flat   = _flatten(result)
         return {"object": flat, "id": flat.get("id"), "properties": result.get("properties", {}), "raw": result}
 
-    # ── associate objects (e.g. contact ↔ deal) ───────────────────────────
+    # ── associate ─────────────────────────────────────────────────────────
     elif op == "associate":
-        from_type  = _render(config.get("from_type", "contacts"), context, creds)
-        from_id    = _render(config.get("from_id", ""), context, creds)
-        to_type    = _render(config.get("to_type", "deals"), context, creds)
-        to_id      = _render(config.get("to_id", ""), context, creds)
-        assoc_type = _render(config.get("association_type", ""), context, creds)
-        logger.info("HubSpot: associate %s/%s -> %s/%s", from_type, from_id, to_type, to_id)
-        # default association type labels
-        if not assoc_type:
-            assoc_type = f"{from_type.rstrip('s')}_to_{to_type.rstrip('s')}"
-        body = [{"associationCategory": "HUBSPOT_DEFINED", "associationTypeId": assoc_type}]
+        from_type = _render(config.get("from_object_type", ""), context, creds)
+        from_id   = _render(config.get("from_object_id", ""), context, creds)
+        to_type   = _render(config.get("to_object_type", ""), context, creds)
+        to_id     = _render(config.get("to_object_id", ""), context, creds)
+        assoc_type= _render(config.get("association_type", ""), context, creds)
+        body      = [{"associationCategory": assoc_type}]
         _req("PUT", f"/crm/v4/objects/{from_type}/{from_id}/associations/{to_type}/{to_id}", token, body)
-        return {"ok": True, "from_id": from_id, "to_id": to_id, "from_type": from_type, "to_type": to_type}
+        return {"ok": True}
 
     else:
-        raise ValueError(f"HubSpot: unknown operation {op!r}")
+        raise ValueError(f"HubSpot: unknown operation '{op}'")
+
