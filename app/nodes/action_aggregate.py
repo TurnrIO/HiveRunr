@@ -13,6 +13,10 @@ Output (mode=dict):    { result: {...}, count: N }  (dicts merged, last wins)
 Output (mode=concat):  { result: "...", count: N }
 """
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 NODE_TYPE = "action.aggregate"
 LABEL = "Aggregate"
 
