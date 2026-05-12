@@ -37,7 +37,7 @@ import os
 import time
 from ._utils import _render, _resolve_cred_raw
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 NODE_TYPE = "trigger.file_watch"
 LABEL     = "File Watch"

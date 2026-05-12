@@ -23,7 +23,7 @@ import re
 import logging
 from ._utils import _render
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 NODE_TYPE = "trigger.email"
 LABEL     = "Email Trigger (IMAP)"
