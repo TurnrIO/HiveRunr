@@ -9,10 +9,14 @@ LABEL = "Condition"
 
 
 def run(config, inp, context, logger, creds=None, **kwargs):
-    """Evaluate a boolean expression and return {result, input}."""
+    """"Evaluate a boolean expression and return {result, input}."""
     expr = _render(config.get('expression') or 'True', context, creds)
     safe_builtins = {'len': len, 'str': str, 'int': int, 'float': float, 'bool': bool, 'list': list, 'dict': dict, 'tuple': tuple}
-    result = eval(expr, {'__builtins__': safe_builtins}, {'input': inp, 'context': context})
+    try:
+        result = eval(expr, {'__builtins__': safe_builtins}, {'input': inp, 'context': context})
+    except (SyntaxError, NameError, TypeError, ArithmeticError):
+        logger.warning("Condition: invalid expression=%s", expr)
+        return {'result': False, 'input': inp, '__error': 'invalid_expression'}
     logger.info("Condition: expression=%s -> %s", expr, result)
     return {'result': bool(result), 'input': inp}
 
