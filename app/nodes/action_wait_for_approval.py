@@ -21,7 +21,19 @@ Output
   "reject_url":  "<url>",
 }
 """
-_POLL_INTERVAL
+import uuid
+import time
+import os
+import logging
+
+from app.nodes._utils import _render
+
+logger = logging.getLogger(__name__)
+
+NODE_TYPE = "action.wait_for_approval"
+LABEL     = "Wait for Approval"
+
+_POLL_INTERVAL = 10   # seconds between Redis checks
 _MAX_HOURS     = 168  # 7 days hard cap
 
 
