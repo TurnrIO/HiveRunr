@@ -20,10 +20,12 @@ def run(config, inp, context, logger, creds=None, **kwargs):
             notation = f"[:{s.stop}]" if s.start is None and s.step is None else repr(s)
             keys = list(inp.keys()) if isinstance(inp, dict) else None
             hint = f" Available keys: {keys}. Try input['key']{notation} instead." if keys else ""
-            raise KeyError(
-                f"Cannot slice a dict with {notation} — 'input' is a dict, not a list.{hint}"
-            ) from None
-        raise
+            return {
+                '__error': f"Cannot slice a dict with {notation} — 'input' is a dict, not a list.{hint}"
+            }
+        return {
+            '__error': f"Transform expression error: {type(e).__name__}: {e}"
+        }
     logger.info("Transform: evaluated expression")
     return result
 
