@@ -4,6 +4,7 @@ import json
 import ipaddress
 import socket
 import urllib.parse
+import httpx
 from json import JSONDecodeError
 from app.nodes._utils import _render, _resolve_cred_raw
 
@@ -67,8 +68,6 @@ def _check_url_ssrf(url: str) -> None:
 
 def run(config, inp, context, logger, creds=None, **kwargs):
     """Send message to Slack webhook."""
-    import httpx
-
     webhook_url = _render(config.get('webhook_url', ''), context, creds)
     message = _render(config.get('message', ''), context, creds)
     channel = _render(config.get('channel', ''), context, creds)
@@ -95,8 +94,17 @@ def run(config, inp, context, logger, creds=None, **kwargs):
     if channel:
         body['channel'] = channel
 
-    r = httpx.post(webhook_url, json=body, timeout=10)
-    r.raise_for_status()
+    try:
+        r = httpx.post(webhook_url, json=body, timeout=10)
+        r.raise_for_status()
+    except httpx.HTTPError as exc:
+        logger.warning("Slack: HTTP error — %s", exc)
+        return {"__error": f"Slack API call failed: HTTP error — {exc}", "sent": False}
+    except OSError as exc:
+        logger.warning("Slack: connection error — %s", exc)
+        return {"__error": f"Slack API call failed: connection error — {exc}", "sent": False}
+    except Exception as exc:
+        logger.warning("Slack: unexpected error — %s", exc)
+        return {"__error": f"Slack API call failed: {exc}", "sent": False}
 
-    return {'sent': True, 'message': message}
-
+    return {"sent": True, "message": message}
