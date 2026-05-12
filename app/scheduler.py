@@ -28,6 +28,7 @@ in single-instance mode (no HA, same behaviour as before this change).
 import os
 import time
 import logging
+import psycopg2
 from json import JSONDecodeError
 import json
 import secrets as _secrets
@@ -135,7 +136,7 @@ def _make_job(sched, scheduler_ref=None):
                     result = run_graph(_g_data, payload, workspace_id=sched.get("workspace_id"))
                     update_run(task_id, "succeeded", result=result,
                                traces=result.get('traces', []))
-                except (JSONDecodeError, OSError, TimeoutError) as inline_err:
+                except (OSError, RuntimeError, ValueError, TypeError, psycopg2.Error, AttributeError) as inline_err:
                     log.exception("Inline scheduled graph run failed")
                     update_run(task_id, "failed", result={"error": str(inline_err)})
                     return  # skip run record, graph failed inline
