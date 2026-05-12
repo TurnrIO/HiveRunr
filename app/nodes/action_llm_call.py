@@ -102,19 +102,30 @@ def run(config, inp, context, logger, creds=None, **kwargs):
     # ── SSRF check on api_base ───────────────────────────────────────────
     _check_ssrf(api_base)
 
-    resp = httpx.post(
-        f"{api_base.rstrip('/')}/chat/completions",
-        headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-        json={
-            "model": model,
-            "messages": [
-                {"role": "system", "content": system},
-                {"role": "user", "content": prompt}
-            ]
-        },
-        timeout=60
-    )
-    resp.raise_for_status()
+    try:
+        resp = httpx.post(
+            f"{api_base.rstrip('/')}/chat/completions",
+            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+            json={
+                "model": model,
+                "messages": [
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": prompt}
+                ]
+            },
+            timeout=60
+        )
+        resp.raise_for_status()
+    except httpx.HTTPError as exc:
+        logger.warning("LLM Call: HTTP error calling %s — %s", api_base, exc)
+        return {"__error": f"LLM call failed: HTTP error — {exc}", "model": model}
+    except OSError as exc:
+        logger.warning("LLM Call: connection error calling %s — %s", api_base, exc)
+        return {"__error": f"LLM call failed: connection error — {exc}", "model": model}
+    except Exception as exc:
+        logger.warning("LLM Call: unexpected error calling %s — %s", api_base, exc)
+        return {"__error": f"LLM call failed: {exc}", "model": model}
+
     data = resp.json()
     try:
         choices = data['choices']
