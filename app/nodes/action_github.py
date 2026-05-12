@@ -1,5 +1,5 @@
 """GitHub API action node."""
-import base64, json
+import base64, json, ipaddress, socket
 import logging
 import httpx
 from json import JSONDecodeError
@@ -10,12 +10,45 @@ LABEL = "GitHub"
 
 logger = logging.getLogger(__name__)
 
+_BLOCKED_NETWORKS = [
+    ipaddress.ip_network("127.0.0.0/8"),
+    ipaddress.ip_network("10.0.0.0/8"),
+    ipaddress.ip_network("172.16.0.0/12"),
+    ipaddress.ip_network("192.168.0.0/16"),
+    ipaddress.ip_network("169.254.0.0/16"),
+    ipaddress.ip_network("0.0.0.0/8"),
+]
+
+
+def _is_internal_ip(ip_str: str) -> bool:
+    try:
+        ip = ipaddress.ip_address(ip_str)
+        return any(ip in net for net in _BLOCKED_NETWORKS)
+    except ValueError:
+        return True
+
+
+def _check_url_ssrf(url: str) -> None:
+    parsed = httpx.URL(url)
+    if parsed.scheme not in ("http", "https"):
+        raise ValueError(f"SSRF blocked: invalid scheme '{parsed.scheme}'")
+    hostname = parsed.host
+    if not hostname:
+        raise ValueError("SSRF blocked: no hostname in URL")
+    try:
+        infos = socket.getaddrinfo(hostname, None)
+        for (_, _, _, _, sockaddr) in infos:
+            ip_str = sockaddr[0]
+            if _is_internal_ip(ip_str):
+                raise ValueError(f"SSRF blocked: resolved to internal IP {ip_str}")
+    except socket.gaierror:
+        raise ValueError(f"SSRF blocked: could not resolve hostname '{hostname}'")
+
 
 def _check_path_traversal(path: str, label: str) -> None:
     """Refuse paths that contain path traversal sequences."""
     if not path:
         return
-    # Reject any .. sequences or absolute paths
     normalized = path.replace("\\", "/")
     if ".." in normalized or normalized.startswith("/"):
         raise ValueError(f"GitHub {label}: path '{path}' contains invalid traversal sequence")
@@ -54,20 +87,33 @@ def run(config, inp, context, logger, creds=None, **kwargs):
         'X-GitHub-Api-Version': '2022-11-28'
     }
     base = 'https://api.github.com'
+    _check_url_ssrf(base)
 
     def gh(method, url, **kw):
-        try:
-            r = httpx.request(method, url, headers=headers, timeout=httpx.Timeout(30.0), **kw)
-            r.raise_for_status()
-            return r.json() if r.content else {}
-        except httpx.HTTPStatusError as exc:
-            logger.error("GitHub API HTTP error action=%s url=%s status=%s response=%s",
-                         action, url, exc.response.status_code, exc.response.text[:200])
-            raise
-        except httpx.HTTPError as exc:
-            logger.error("GitHub API network error action=%s url=%s error=%s", action, url, exc)
-            raise
-
+        _check_url_ssrf(url)
+        max_redirects = 10
+        while max_redirects > 0:
+            r = httpx.request(method, url, headers=headers, timeout=httpx.Timeout(30.0), follow_redirects=False, **kw)
+            location = r.headers.get("location") or r.headers.get("Location")
+            if not location:
+                try:
+                    r.raise_for_status()
+                except httpx.HTTPStatusError as exc:
+                    logger.error("GitHub API HTTP error action=%s url=%s status=%s response=%s",
+                                 action, url, exc.response.status_code, exc.response.text[:200])
+                    raise
+                except httpx.HTTPError as exc:
+                    logger.error("GitHub API network error action=%s url=%s error=%s", action, url, exc)
+                    raise
+                return r.json() if r.content else {}
+            max_redirects -= 1
+            if max_redirects == 0:
+                raise ValueError("GitHub: too many redirects")
+            _check_url_ssrf(location)
+            url = location
+            logger.info("GitHub: following redirect to %s", url)
+        raise ValueError("GitHub: redirect loop exceeded")
+    
     if action == 'get_repo':
         if not repo:
             raise ValueError("GitHub get_repo: repo required")
