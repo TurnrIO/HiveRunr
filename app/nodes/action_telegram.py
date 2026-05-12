@@ -1,6 +1,7 @@
 """Telegram message action node."""
 import logging
 import os
+from json import JSONDecodeError
 
 from app.nodes._utils import _render
 
