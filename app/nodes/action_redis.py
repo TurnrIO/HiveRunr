@@ -105,6 +105,8 @@ def _get_client(config, context, creds):
 
 def run(config, inp, context, logger, creds=None, **kwargs):
     """Execute a Redis command."""
+    import redis
+
     operation = _render(config.get("operation", "get"), context, creds).strip().lower()
     key       = _render(config.get("key", ""), context, creds).strip()
     value     = _render(config.get("value", ""), context, creds)
@@ -225,5 +227,14 @@ def run(config, inp, context, logger, creds=None, **kwargs):
         else:
             raise ValueError(f"Redis: unknown operation '{operation}'")
 
+    except (redis.exceptions.ConnectionError, redis.exceptions.TimeoutError,
+            redis.exceptions.RedisError, OSError, ValueError, TypeError) as exc:
+        logger.warning("Redis operation '%s' failed: %s", operation, exc)
+        return {"error": str(exc), "ok": False, "operation": operation}
+
     finally:
-        r.close()
+        if r is not None:
+            try:
+                r.close()
+            except Exception:
+                pass
