@@ -1,6 +1,7 @@
 """Send email action node."""
 import logging
 import os
+import socket
 import json
 from json import JSONDecodeError
 from email.mime.text import MIMEText
@@ -66,5 +67,11 @@ def run(config, inp, context, logger, creds=None, **kwargs):
     except smtplib.SMTPException as e:
         logger.error("Send Email: SMTP error sending to %s — %s", to, e)
         raise ValueError(f"Send Email: SMTP failure — {e}") from e
+    except socket.gaierror as e:
+        logger.error("Send Email: DNS resolution failed for host %s — %s", host, e)
+        raise ValueError(f"Send Email: DNS resolution failed for {host} — {e}") from e
+    except OSError as e:
+        logger.error("Send Email: connection error to %s:%s — %s", host, smtp_port, e)
+        raise ValueError(f"Send Email: connection error to {host}:{smtp_port} — {e}") from e
 
     return {'sent': True, 'to': to, 'subject': subject}
