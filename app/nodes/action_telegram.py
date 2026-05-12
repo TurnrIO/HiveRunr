@@ -22,8 +22,18 @@ def run(config, inp, context, logger, creds=None, **kwargs):
         raise ValueError("Telegram: missing bot_token or chat_id")
 
     logger.info("Telegram: sending message to chat=%s len=%d", chat, len(text))
-    r = httpx.post(f"https://api.telegram.org/bot{token}/sendMessage",
-                   json={'chat_id': chat, 'text': text}, timeout=10)
-    r.raise_for_status()
+    try:
+        r = httpx.post(f"https://api.telegram.org/bot{token}/sendMessage",
+                       json={'chat_id': chat, 'text': text}, timeout=10)
+        r.raise_for_status()
+    except httpx.HTTPError as exc:
+        logger.warning("Telegram: HTTP error — %s", exc)
+        return {"__error": f"Telegram HTTP error: {exc}", "sent": False, "chat_id": chat}
+    except OSError as exc:
+        logger.warning("Telegram: connection error — %s", exc)
+        return {"__error": f"Telegram connection error: {exc}", "sent": False, "chat_id": chat}
+    except Exception as exc:
+        logger.warning("Telegram: unexpected error — %s", exc)
+        return {"__error": f"Telegram error: {exc}", "sent": False, "chat_id": chat}
 
     return {'sent': True, 'chat_id': chat}
