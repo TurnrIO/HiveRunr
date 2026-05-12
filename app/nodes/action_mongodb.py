@@ -15,8 +15,11 @@ def _get_client(uri):
         raise RuntimeError("pymongo is required: pip install pymongo")
     try:
         return MongoClient(uri, serverSelectionTimeoutMS=10000)
-    except Exception as exc:
+    except (OSError, RuntimeError, ValueError, ImportError) as exc:
         logger.warning("MongoDB: connection failed — %s", exc)
+        raise
+    except Exception as exc:
+        logger.warning("MongoDB: unexpected error during client creation — %s", exc)
         raise
 
 
