@@ -116,8 +116,18 @@ def run(config, inp, context, logger, creds=None, **kwargs):
 
     if action == 'read_range':
         logger.info("Google Sheets: read_range %s", sheet_range)
-        r = httpx.get(f'{sheets_base}/values/{sheet_range}', headers=headers, timeout=30)
-        r.raise_for_status()
+        try:
+            r = httpx.get(f'{sheets_base}/values/{sheet_range}', headers=headers, timeout=30)
+            r.raise_for_status()
+        except httpx.HTTPError as exc:
+            logger.warning("Google Sheets: HTTP error on read_range — %s", exc)
+            return {"__error": f"Google Sheets read_range failed: HTTP error — {exc}"}
+        except OSError as exc:
+            logger.warning("Google Sheets: connection error on read_range — %s", exc)
+            return {"__error": f"Google Sheets read_range failed: connection error — {exc}"}
+        except Exception as exc:
+            logger.warning("Google Sheets: unexpected error on read_range — %s", exc)
+            return {"__error": f"Google Sheets read_range failed: {exc}"}
         data = r.json()
         rows = data.get('values', [])
 
@@ -138,9 +148,19 @@ def run(config, inp, context, logger, creds=None, **kwargs):
             raise ValueError("Google Sheets write_range: values_json must be valid JSON array")
 
         body = {'values': values, 'majorDimension': 'ROWS'}
-        r = httpx.put(f'{sheets_base}/values/{sheet_range}',
-                      headers=headers, json={**body, 'valueInputOption': 'USER_ENTERED'}, timeout=30)
-        r.raise_for_status()
+        try:
+            r = httpx.put(f'{sheets_base}/values/{sheet_range}',
+                          headers=headers, json={**body, 'valueInputOption': 'USER_ENTERED'}, timeout=30)
+            r.raise_for_status()
+        except httpx.HTTPError as exc:
+            logger.warning("Google Sheets: HTTP error on write_range — %s", exc)
+            return {"__error": f"Google Sheets write_range failed: HTTP error — {exc}"}
+        except OSError as exc:
+            logger.warning("Google Sheets: connection error on write_range — %s", exc)
+            return {"__error": f"Google Sheets write_range failed: connection error — {exc}"}
+        except Exception as exc:
+            logger.warning("Google Sheets: unexpected error on write_range — %s", exc)
+            return {"__error": f"Google Sheets write_range failed: {exc}"}
         return r.json()
 
     elif action == 'append_rows':
@@ -151,18 +171,38 @@ def run(config, inp, context, logger, creds=None, **kwargs):
         except (JSONDecodeError, ValueError):
             raise ValueError("Google Sheets append_rows: values_json must be valid JSON array")
 
-        r = httpx.post(f'{sheets_base}/values/{sheet_range}:append',
-                       headers=headers,
-                       json={'values': values, 'majorDimension': 'ROWS'},
-                       params={'valueInputOption': 'USER_ENTERED', 'insertDataOption': 'INSERT_ROWS'},
-                       timeout=30)
-        r.raise_for_status()
+        try:
+            r = httpx.post(f'{sheets_base}/values/{sheet_range}:append',
+                           headers=headers,
+                           json={'values': values, 'majorDimension': 'ROWS'},
+                           params={'valueInputOption': 'USER_ENTERED', 'insertDataOption': 'INSERT_ROWS'},
+                           timeout=30)
+            r.raise_for_status()
+        except httpx.HTTPError as exc:
+            logger.warning("Google Sheets: HTTP error on append_rows — %s", exc)
+            return {"__error": f"Google Sheets append_rows failed: HTTP error — {exc}"}
+        except OSError as exc:
+            logger.warning("Google Sheets: connection error on append_rows — %s", exc)
+            return {"__error": f"Google Sheets append_rows failed: connection error — {exc}"}
+        except Exception as exc:
+            logger.warning("Google Sheets: unexpected error on append_rows — %s", exc)
+            return {"__error": f"Google Sheets append_rows failed: {exc}"}
         return r.json()
 
     elif action == 'clear_range':
         logger.info("Google Sheets: clear_range %s", sheet_range)
-        r = httpx.post(f'{sheets_base}/values/{sheet_range}:clear', headers=headers, timeout=30)
-        r.raise_for_status()
+        try:
+            r = httpx.post(f'{sheets_base}/values/{sheet_range}:clear', headers=headers, timeout=30)
+            r.raise_for_status()
+        except httpx.HTTPError as exc:
+            logger.warning("Google Sheets: HTTP error on clear_range — %s", exc)
+            return {"__error": f"Google Sheets clear_range failed: HTTP error — {exc}"}
+        except OSError as exc:
+            logger.warning("Google Sheets: connection error on clear_range — %s", exc)
+            return {"__error": f"Google Sheets clear_range failed: connection error — {exc}"}
+        except Exception as exc:
+            logger.warning("Google Sheets: unexpected error on clear_range — %s", exc)
+            return {"__error": f"Google Sheets clear_range failed: {exc}"}
         return r.json()
 
     else:
