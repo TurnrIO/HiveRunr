@@ -7,14 +7,11 @@ Set ENABLE_RUN_SCRIPT=true in your environment to allow execution.
 Every execution is written to the 'audit' logger at WARNING level so it is
 always visible in Docker / system logs regardless of the application log level.
 """
-import logging
 
-logger = logging.getLogger(__name__)
-import os
+import logging
 import time
 import json
 import hashlib
-import logging
 
 from app.nodes._utils import _render
 
@@ -62,7 +59,7 @@ def run(config, inp, context, logger, creds=None, **kwargs):
     }
     try:
         exec(script, ns)  # noqa: S102
-    except (ValueError, RuntimeError, TypeError, ArithmeticError) as exc:
+    except (ValueError, RuntimeError, TypeError, ArithmeticError, SyntaxError) as exc:
         raise RuntimeError(f"run_script raised {type(exc).__name__}: {exc}") from exc
 
     _audit.warning(
