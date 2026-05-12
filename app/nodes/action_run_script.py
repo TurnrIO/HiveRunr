@@ -9,6 +9,7 @@ always visible in Docker / system logs regardless of the application log level.
 """
 
 import logging
+import os
 import time
 import json
 import hashlib
