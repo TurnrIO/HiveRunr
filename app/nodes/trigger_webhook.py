@@ -7,7 +7,7 @@ webhook router reads it at dispatch time.
 """
 import logging
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 NODE_TYPE = "trigger.webhook"
 LABEL = "Webhook Trigger"
@@ -15,5 +15,5 @@ LABEL = "Webhook Trigger"
 
 def run(config, inp, context, logger, creds=None, **kwargs):
     """Pass through input as-is (the payload arrives via the webhook endpoint)."""
-    log.info("trigger.webhook pass-through")
+    logger.info("trigger.webhook pass-through")
     return inp
