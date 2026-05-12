@@ -32,8 +32,6 @@ import logging
 logger = logging.getLogger(__name__)
 from ._utils import _render, _resolve_cred_raw
 
-log = logging.getLogger(__name__)
-
 NODE_TYPE = "action.postgres"
 LABEL     = "SQL Query"
 

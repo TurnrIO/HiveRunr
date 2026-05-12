@@ -26,13 +26,13 @@ Output shape
 from __future__ import annotations
 
 import json
-from json import JSONDecodeError
 import logging
-logger = logging.getLogger(__name__)
 import re
+from json import JSONDecodeError
+
 from ._utils import _render, _resolve_cred_raw
 
-log = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 NODE_TYPE = "action.mysql"
 LABEL     = "MySQL Query"
