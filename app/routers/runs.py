@@ -4,6 +4,7 @@ from json import JSONDecodeError
 import logging
 import os
 import time as _time
+import redis as _redis
 from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -195,7 +196,6 @@ def api_get_ratelimit(request: Request):
     # Attach live per-token counters from Redis
     counters = []
     try:
-        import redis as _redis
         r = _redis.from_url(os.environ.get("REDIS_URL", "redis://redis:6379/0"))
         keys = r.keys("wh_rate:*")
         for k in sorted(keys)[:50]:  # cap at 50 entries
@@ -203,8 +203,10 @@ def api_get_ratelimit(request: Request):
             count = int(r.get(k) or 0)
             ttl   = r.ttl(k)
             counters.append({"token": token, "count": count, "ttl_seconds": ttl})
-    except (AttributeError, KeyError, OSError, RuntimeError):
-        pass
+    except (AttributeError, KeyError, OSError, RuntimeError) as exc:
+        log.warning("Redis unavailable for rate-limit counters: %s", exc)
+    except _redis.exceptions.RedisError as exc:
+        log.warning("Redis unavailable for rate-limit counters: %s", exc)
     return {**policy, "counters": counters}
 
 
