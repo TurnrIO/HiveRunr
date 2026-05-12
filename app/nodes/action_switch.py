@@ -58,8 +58,11 @@ def run(config, inp, context, logger, creds=None, **kwargs):
                 f"{repr(value)} == {repr(match_val)}",
                 {"__builtins__": safe_builtins}, {}
             )
-        except (SyntaxError, ValueError):
+        except (SyntaxError, ValueError, ZeroDivisionError) as e:
             case_result = str(value) == str(match_val)
+            if case_result is False:
+                logger.warning("Switch case %d: expression eval failed (%s), fell back to string compare", i, e)
+            # If still False after fallback, keep False — don't match
 
         if case_result:
             matched_case = case.get("label") or match_val
