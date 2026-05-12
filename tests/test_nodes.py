@@ -44,8 +44,9 @@ def test_transform_context_access():
 def test_transform_invalid_expression_raises():
     from app.nodes.action_transform import run
     log, _ = make_logger()
-    with pytest.raises(Exception):
-        run({"expression": "this is not python &&"}, {}, {}, log)
+    out = run({"expression": "this is not python &&"}, {}, {}, log)
+    assert isinstance(out, dict)
+    assert "__error" in out
 
 
 def test_transform_missing_expression_returns_empty():
