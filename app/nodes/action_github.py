@@ -56,9 +56,17 @@ def run(config, inp, context, logger, creds=None, **kwargs):
     base = 'https://api.github.com'
 
     def gh(method, url, **kw):
-        r = httpx.request(method, url, headers=headers, timeout=httpx.Timeout(30.0), **kw)
-        r.raise_for_status()
-        return r.json() if r.content else {}
+        try:
+            r = httpx.request(method, url, headers=headers, timeout=httpx.Timeout(30.0), **kw)
+            r.raise_for_status()
+            return r.json() if r.content else {}
+        except httpx.HTTPStatusError as exc:
+            logger.error("GitHub API HTTP error action=%s url=%s status=%s response=%s",
+                         action, url, exc.response.status_code, exc.response.text[:200])
+            raise
+        except httpx.HTTPError as exc:
+            logger.error("GitHub API network error action=%s url=%s error=%s", action, url, exc)
+            raise
 
     if action == 'get_repo':
         if not repo:
