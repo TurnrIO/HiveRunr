@@ -98,8 +98,18 @@ def run(config, inp, context, logger, creds=None, **kwargs):
     if avatar_url:
         body["avatar_url"] = avatar_url
 
-    r = httpx.post(webhook_url, json=body, timeout=10)
-    r.raise_for_status()
+    try:
+        r = httpx.post(webhook_url, json=body, timeout=10)
+        r.raise_for_status()
+    except httpx.HTTPError as exc:
+        logger.warning("Discord: HTTP error — %s", exc)
+        return {"__error": f"Discord HTTP error: {exc}", "sent": False}
+    except OSError as exc:
+        logger.warning("Discord: connection error — %s", exc)
+        return {"__error": f"Discord connection error: {exc}", "sent": False}
+    except Exception as exc:
+        logger.warning("Discord: unexpected error — %s", exc)
+        return {"__error": f"Discord error: {exc}", "sent": False}
 
     logger.info("Discord: sent message (%s chars)", len(message))
     return {"sent": True, "message": message}
