@@ -14,8 +14,8 @@ def run(config, inp, context, logger, creds=None, **kwargs):
     safe_builtins = {'len': len, 'str': str, 'int': int, 'float': float, 'bool': bool, 'list': list, 'dict': dict, 'tuple': tuple}
     try:
         result = eval(expr, {'__builtins__': safe_builtins}, {'input': inp, 'context': context, 'json': json})
-    except KeyError as e:
-        if e.args and isinstance(e.args[0], slice):
+    except (KeyError, SyntaxError, NameError, TypeError, ZeroDivisionError) as e:
+        if isinstance(e, KeyError) and e.args and isinstance(e.args[0], slice):
             s = e.args[0]
             notation = f"[:{s.stop}]" if s.start is None and s.step is None else repr(s)
             keys = list(inp.keys()) if isinstance(inp, dict) else None
