@@ -13,7 +13,12 @@ def _get_client(uri):
         from pymongo import MongoClient
     except ImportError:
         raise RuntimeError("pymongo is required: pip install pymongo")
-    return MongoClient(uri, serverSelectionTimeoutMS=10000)
+    try:
+        return MongoClient(uri, serverSelectionTimeoutMS=10000)
+    except Exception as exc:
+        logger.warning("MongoDB: connection failed — %s", exc)
+        raise
+
 
 def _parse_json(raw, label):
     if not raw or raw.strip() in ("", "{}"):
@@ -124,7 +129,8 @@ def run(config, inp, context, logger, creds=None, **kwargs):
         else:
             raise ValueError(f"MongoDB: unknown operation {op!r}")
     finally:
-        client.close()
+        if "client" in locals():
+            client.close()
 
 def _bson_to_dict(doc):
     """Convert ObjectId + other BSON types to plain strings for JSON serialisation."""
