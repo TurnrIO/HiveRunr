@@ -113,7 +113,7 @@ def run(config, inp, context, logger, creds=None, **kwargs):
             url = location
             logger.info("GitHub: following redirect to %s", url)
         raise ValueError("GitHub: redirect loop exceeded")
-    
+
     if action == 'get_repo':
         if not repo:
             raise ValueError("GitHub get_repo: repo required")
