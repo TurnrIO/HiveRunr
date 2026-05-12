@@ -53,33 +53,73 @@ def api_create_schedule(body: ScheduleCreate, request: Request):
 
 @router.put("/api/schedules/{sid}")
 def api_update_schedule(sid: int, body: ScheduleUpdate, request: Request):
-    _check_admin(request)
+    user = _check_admin(request)
+    workspace_id = _resolve_workspace(request, user)
     row = update_schedule(
         sid, body.name, body.workflow, body.graph_id,
-        body.cron, body.payload, body.timezone, body.run_at
+        body.cron, body.payload, body.timezone, body.run_at,
+        workspace_id=workspace_id
     )
     if not row:
         raise HTTPException(status_code=404, detail="Schedule not found")
+    if workspace_id is not None and row.get("workspace_id") != workspace_id:
+        raise HTTPException(status_code=403, detail="Forbidden")
     return row
 
 
 @router.post("/api/schedules/{sid}/toggle")
 def api_toggle_schedule(sid: int, request: Request):
-    _check_admin(request); return toggle_schedule(sid) or {"id": sid}
+    user = _check_admin(request)
+    workspace_id = _resolve_workspace(request, user)
+    from app.core.db import get_conn
+    try:
+        with get_conn() as conn:
+            cur = conn.cursor()
+            cur.execute("SELECT workspace_id FROM schedules WHERE id=%s", (sid,))
+            row = cur.fetchone()
+    except (AttributeError, RuntimeError):
+        row = None
+    if not row:
+        raise HTTPException(status_code=404, detail="Schedule not found")
+    if workspace_id is not None and row.get("workspace_id") != workspace_id:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    result = toggle_schedule(sid)
+    if not result:
+        raise HTTPException(status_code=404, detail="Schedule not found")
+    return {"id": sid}
+
 
 
 @router.delete("/api/schedules/{sid}")
 def api_delete_schedule(sid: int, request: Request):
-    _check_admin(request); delete_schedule(sid); return {"deleted": True}
+    user = _check_admin(request)
+    workspace_id = _resolve_workspace(request, user)
+    from app.core.db import get_conn
+    try:
+        with get_conn() as conn:
+            cur = conn.cursor()
+            cur.execute("SELECT workspace_id FROM schedules WHERE id=%s", (sid,))
+            row = cur.fetchone()
+    except (AttributeError, RuntimeError):
+        row = None
+    if not row:
+        raise HTTPException(status_code=404, detail="Schedule not found")
+    if workspace_id is not None and row.get("workspace_id") != workspace_id:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    delete_schedule(sid)
+    return {"deleted": True}
 
 
 @router.post("/api/schedules/{sid}/run-now")
 def api_run_schedule_now(sid: int, request: Request):
-    """Manually trigger a schedule immediately, using its stored payload."""
-    _check_admin(request)
+    """"Manually trigger a schedule immediately, using its stored payload."""
+    user = _check_admin(request)
+    workspace_id = _resolve_workspace(request, user)
     s = get_schedule(sid)
     if not s:
         raise HTTPException(status_code=404, detail="Schedule not found")
+    if workspace_id is not None and s.get("workspace_id") != workspace_id:
+        raise HTTPException(status_code=403, detail="Forbidden")
     if not s.get("graph_id"):
         raise HTTPException(status_code=400, detail="Schedule has no graph_id — cannot trigger manually")
 
