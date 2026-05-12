@@ -21,20 +21,7 @@ Output
   "reject_url":  "<url>",
 }
 """
-import uuid
-import time
-import os
-import logging
-logger = logging.getLogger(__name__)
-
-from app.nodes._utils import _render
-
-NODE_TYPE = "action.wait_for_approval"
-LABEL     = "Wait for Approval"
-
-log = logging.getLogger(__name__)
-
-_POLL_INTERVAL = 10   # seconds between Redis checks
+_POLL_INTERVAL
 _MAX_HOURS     = 168  # 7 days hard cap
 
 
@@ -71,7 +58,7 @@ def run(config, inp, context, logger, creds=None, **kwargs):
                  approver_email, subject, message, timeout_hours),
             )
     except (AttributeError, TypeError, RuntimeError) as exc:
-        log.warning("wait_for_approval: could not persist record — %s", exc)
+        logger.warning("wait_for_approval: could not persist record — %s", exc)
 
     # ── Send email ───────────────────────────────────────────────────────────
     _send_approval_email(approver_email, subject, message, approve_url, reject_url,
@@ -136,7 +123,7 @@ def _update_status(token: str, status: str) -> None:
                 (status, token),
             )
     except (AttributeError, RuntimeError) as exc:
-        log.warning("wait_for_approval: could not update status — %s", exc)
+        logger.warning("wait_for_approval: could not update status — %s", exc)
 
 
 def _send_approval_email(
@@ -206,8 +193,8 @@ def _send_approval_email(
         from app.email import send_email
         ok = send_email(to, subject, html)
         if not ok:
-            log.warning("wait_for_approval: email not sent (not configured?). "
+            logger.warning("wait_for_approval: email not sent (not configured?). "
                         "Approve: %s  Reject: %s", approve_url, reject_url)
     except (OSError, AttributeError) as exc:
-        log.warning("wait_for_approval: email send failed — %s. "
+        logger.warning("wait_for_approval: email send failed — %s. "
                     "Approve: %s  Reject: %s", exc, approve_url, reject_url)
