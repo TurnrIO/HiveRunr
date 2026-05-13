@@ -236,5 +236,5 @@ def run(config, inp, context, logger, creds=None, **kwargs):
         if r is not None:
             try:
                 r.close()
-            except (AttributeError, ValueError, RuntimeError):
+            except (AttributeError, RuntimeError):
                 pass
