@@ -2,7 +2,6 @@
 import logging
 
 logger = logging.getLogger(__name__)
-log = logging.getLogger(__name__)
 
 NODE_TYPE = "trigger.cron"
 LABEL = "Cron Schedule"
@@ -10,5 +9,5 @@ LABEL = "Cron Schedule"
 
 def run(config, inp, context, logger, creds=None, **kwargs):
     """Pass through input as-is."""
-    log.info("trigger.cron pass-through")
+    logger.info("trigger.cron pass-through")
     return inp
