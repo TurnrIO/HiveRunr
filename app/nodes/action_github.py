@@ -101,7 +101,7 @@ def run(config, inp, context, logger, creds=None, **kwargs):
             except (OSError, httpx.ConnectError, httpx.Timeout) as exc:
                 logger.error("GitHub API socket error action=%s url=%s error=%s", action, url, exc)
                 raise
-            except Exception as exc:
+            except (AttributeError, KeyError, TypeError, ValueError) as exc:
                 logger.error("GitHub API unexpected error action=%s url=%s error=%s", action, url, exc)
                 raise
             location = r.headers.get("location") or r.headers.get("Location")

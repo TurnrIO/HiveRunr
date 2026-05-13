@@ -111,7 +111,7 @@ def run(config, inp, context, logger, creds=None, **kwargs):
         except OSError as exc:
             logger.warning("Notion: connection error — %s", exc)
             return {"__error": f"Notion connection error: {exc}"}
-        except Exception as exc:
+        except (AttributeError, KeyError, TypeError, ValueError) as exc:
             logger.warning("Notion: unexpected error — %s", exc)
             return {"__error": f"Notion request failed: {exc}"}
 
