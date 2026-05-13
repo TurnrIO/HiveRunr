@@ -49,7 +49,7 @@ def _check_login_allowed(ip: str) -> None:
         rounded_minutes = ((ttl + 59) // 60 + 1) * 5
         raise HTTPException(
             429,
-            f"Too many failed login attempts. Try again in {rounded_minutes} minutes.",
+            "Too many failed login attempts. Please try again later.",
         )
 
 
