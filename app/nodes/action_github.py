@@ -98,7 +98,7 @@ def run(config, inp, context, logger, creds=None, **kwargs):
             except httpx.HTTPError as exc:
                 logger.error("GitHub API request error action=%s url=%s error=%s", action, url, exc)
                 raise
-            except OSError as exc:
+            except (OSError, httpx.ConnectError, httpx.Timeout) as exc:
                 logger.error("GitHub API socket error action=%s url=%s error=%s", action, url, exc)
                 raise
             except Exception as exc:
