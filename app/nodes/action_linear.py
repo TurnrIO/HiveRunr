@@ -49,6 +49,10 @@ def _gql(api_key: str, query: str, variables: dict = None):
             data = json.loads(r.read().decode())
     except urllib.error.HTTPError as e:
         raise RuntimeError(f"Linear {e.code}: {e.read().decode()[:300]}")
+    except urllib.error.URLError as e:
+        raise RuntimeError(f"Linear connection error: {e.reason}")
+    except OSError as e:
+        raise RuntimeError(f"Linear socket error: {e}")
     if data.get("errors"):
         raise RuntimeError(f"Linear GraphQL error: {data['errors'][0]['message']}")
     return data.get("data", {})
