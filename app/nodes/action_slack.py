@@ -97,13 +97,10 @@ def run(config, inp, context, logger, creds=None, **kwargs):
     try:
         r = httpx.post(webhook_url, json=body, timeout=10)
         r.raise_for_status()
-    except httpx.HTTPError as exc:
+    except (httpx.HTTPError, OSError) as exc:
         logger.warning("Slack: HTTP error — %s", exc)
         return {"__error": f"Slack API call failed: HTTP error — {exc}", "sent": False}
-    except OSError as exc:
-        logger.warning("Slack: connection error — %s", exc)
-        return {"__error": f"Slack API call failed: connection error — {exc}", "sent": False}
-    except Exception as exc:
+    except (KeyError, IndexError, TypeError, ValueError) as exc:
         logger.warning("Slack: unexpected error — %s", exc)
         return {"__error": f"Slack API call failed: {exc}", "sent": False}
 

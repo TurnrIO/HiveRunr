@@ -116,13 +116,10 @@ def run(config, inp, context, logger, creds=None, **kwargs):
             timeout=60
         )
         resp.raise_for_status()
-    except httpx.HTTPError as exc:
+    except (httpx.HTTPError, OSError) as exc:
         logger.warning("LLM Call: HTTP error calling %s — %s", api_base, exc)
         return {"__error": f"LLM call failed: HTTP error — {exc}", "model": model}
-    except OSError as exc:
-        logger.warning("LLM Call: connection error calling %s — %s", api_base, exc)
-        return {"__error": f"LLM call failed: connection error — {exc}", "model": model}
-    except Exception as exc:
+    except (KeyError, IndexError, TypeError, ValueError) as exc:
         logger.warning("LLM Call: unexpected error calling %s — %s", api_base, exc)
         return {"__error": f"LLM call failed: {exc}", "model": model}
 
