@@ -42,12 +42,13 @@ import base64
 import ipaddress
 import json
 import logging
-logger = logging.getLogger(__name__)
 import socket
 import urllib.error
 import urllib.parse
 import urllib.request
 from json import JSONDecodeError
+
+logger = logging.getLogger(__name__)
 
 from ._utils import _render, _resolve_cred_raw
 
