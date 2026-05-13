@@ -21,9 +21,6 @@ def _get_client(uri):
     except (TypeError, AttributeError) as exc:
         logger.warning("MongoDB: unexpected error during client creation — %s", exc)
         raise
-    except Exception as exc:
-        logger.warning("MongoDB: unexpected error during client creation — %s", exc)
-        raise
 
 
 def _parse_json(raw, label):
