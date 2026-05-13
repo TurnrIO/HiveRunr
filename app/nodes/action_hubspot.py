@@ -97,9 +97,9 @@ def _req(method, path, token, body=None):
     except OSError as e:
         logger.warning("HubSpot: OS/socket error — %s", e)
         return {"__error": f"HubSpot socket error: {e}"}
-    except Exception as e:
-        logger.warning("HubSpot: unexpected error — %s", e)
-        return {"__error": f"HubSpot request failed: {e}"}
+    except (KeyError, IndexError, TypeError, ValueError, AttributeError) as exc:
+        logger.warning("HubSpot: unexpected error — %s", exc)
+        return {"__error": f"HubSpot request failed: {exc}"}
 
 
 def _flatten(obj):
