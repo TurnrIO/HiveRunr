@@ -164,7 +164,7 @@ def enqueue_workflow(self, workflow_name: str, payload: dict):
         log.error(f"Workflow {workflow_name} failed permanently: {e}")
         update_run(task_id, "dead", result={"error": str(e)})
         _notify_failure(workflow_name, str(e), task_id)
-    except Exception as e:
+    except Exception as _:
         # Transient failures — logged by outer retry handler in Celery task
         raise
 
