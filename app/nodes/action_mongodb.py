@@ -22,10 +22,6 @@ def _get_client(uri):
         logger.warning("MongoDB: unexpected error during client creation — %s", exc)
         raise
     except Exception as exc:
-        # Catch-all for any other unexpected exception from MongoClient.
-        # KeyboardInterrupt/SystemExit should propagate; re-raise those.
-        if isinstance(exc, KeyboardInterrupt) or isinstance(exc, SystemExit):
-            raise
         logger.warning("MongoDB: unexpected error during client creation — %s", exc)
         raise
 
