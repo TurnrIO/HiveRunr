@@ -78,6 +78,25 @@ async def webhook_trigger(token: str, request: Request):
     if not g.get("enabled"):
         raise HTTPException(403, "Graph is disabled")
 
+    # ── Workspace ownership guard ────────────────────────────────────────────
+    # External callers (GitHub, Zapier, etc.) have no workspace context — they
+    # only prove they hold the webhook token.  Internal API clients that DO have
+    # a workspace identity (via X-Workspace-Id header) must match the graph's
+    # workspace so a token for Graph-A in Workspace-1 cannot be used to trigger
+    # a graph whose workspace is a different one.
+    caller_ws = request.headers.get("X-Workspace-Id", "").strip()
+    if caller_ws:
+        try:
+            caller_ws_int = int(caller_ws)
+            graph_ws = g.get("workspace_id")
+            if graph_ws is not None and caller_ws_int != graph_ws:
+                raise HTTPException(
+                    403,
+                    f"Webhook token is not valid for workspace {caller_ws_int}",
+                )
+        except ValueError:
+            raise HTTPException(400, "X-Workspace-Id must be an integer")
+
     allowed, limit, window = _check_webhook_rate(token)
     if not allowed:
         raise HTTPException(429, f"Rate limit exceeded — max {limit} calls per {window}s")
