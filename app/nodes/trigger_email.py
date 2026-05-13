@@ -132,10 +132,24 @@ def run(config: dict, inp: dict, context: dict, logger, creds=None, **kwargs) ->
         username,
     )
 
-    conn = imaplib.IMAP4_SSL(host, port) if use_ssl else imaplib.IMAP4(host, port)
+    try:
+        conn = imaplib.IMAP4_SSL(host, port) if use_ssl else imaplib.IMAP4(host, port)
+    except OSError as exc:
+        logger.warning("[trigger.email] Connection failed — %s:%s — %s", host, port, exc)
+        return {"__error": f"Email trigger: could not connect to {host}:{port} — {exc}", "emails": [], "count": 0}
 
     try:
         conn.login(username, password)
+    except imaplib.IMAP4.error as exc:
+        logger.warning("[trigger.email] Login failed for %s@%s — %s", username, host, exc)
+        try:
+            conn.logout()
+        except (AttributeError, TypeError, OSError):
+            pass
+        return {"__error": f"Email trigger: login failed for {username} — {exc}", "emails": [], "count": 0}
+    except OSError as exc:
+        logger.warning("[trigger.email] Connection error during login — %s:%s — %s", host, port, exc)
+        return {"__error": f"Email trigger: connection error — {exc}", "emails": [], "count": 0}
         # readonly=True when we're not marking messages read (avoids write perm requirement)
         conn.select(folder, readonly=not mark_read)
 
