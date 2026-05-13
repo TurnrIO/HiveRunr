@@ -101,9 +101,19 @@ def run(config, inp, context, logger, creds=None, **kwargs):
     def notion(method, url, **kw):
         # SSRF: validate resolved URL before making request
         _check_url_ssrf(url)
-        r = httpx.request(method, url, headers=headers, timeout=30, **kw)
-        r.raise_for_status()
-        return r.json()
+        try:
+            r = httpx.request(method, url, headers=headers, timeout=30, **kw)
+            r.raise_for_status()
+            return r.json()
+        except httpx.HTTPError as exc:
+            logger.warning("Notion: HTTP error — %s", exc)
+            return {"__error": f"Notion HTTP error: {exc}"}
+        except OSError as exc:
+            logger.warning("Notion: connection error — %s", exc)
+            return {"__error": f"Notion connection error: {exc}"}
+        except Exception as exc:
+            logger.warning("Notion: unexpected error — %s", exc)
+            return {"__error": f"Notion request failed: {exc}"}
 
     logger.info("Notion: action=%s", action)
     if action == 'query_database':
