@@ -29,6 +29,10 @@ def _req(method, path, api_key, body=None):
         try:   detail = json.loads(body_txt).get("error", {}).get("message", body_txt)
         except JSONDecodeError: detail = body_txt
         raise RuntimeError(f"OpenAI {e.code}: {detail}")
+    except urllib.error.URLError as e:
+        raise RuntimeError(f"OpenAI connection error: {e.reason}")
+    except OSError as e:
+        raise RuntimeError(f"OpenAI network error: {e}")
 
 
 def run(config, inp, context, logger, creds=None, **kwargs):
