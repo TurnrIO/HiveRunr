@@ -88,6 +88,12 @@ def _req(method, path, account_sid, auth_token, body=None):
         try:    detail = json.loads(body_txt).get("message", body_txt)
         except JSONDecodeError: detail = body_txt
         raise RuntimeError(f"Twilio {e.code}: {detail}")
+    except OSError as exc:
+        logger.warning("Twilio: connection error — %s", exc)
+        return {"__error": f"Twilio connection error: {exc}"}
+    except Exception as exc:
+        logger.warning("Twilio: unexpected error — %s", exc)
+        return {"__error": f"Twilio request failed: {exc}"}
 
 def run(config, inp, context, logger, creds=None, **kwargs):
     # ── resolve credentials ────────────────────────────────────────────────
