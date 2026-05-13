@@ -214,7 +214,7 @@ def run_one_node(node: dict, inp: Any, context: dict,
             "duration_ms": int((time.time() - t_start) * 1000),
             "error":       None,
         }
-    except (JSONDecodeError, OSError, KeyError, TypeError) as exc:
+    except (JSONDecodeError, OSError, ValueError, TypeError, RuntimeError, AttributeError, ArithmeticError) as exc:
         return {
             "output":      None,
             "duration_ms": int((time.time() - t_start) * 1000),
