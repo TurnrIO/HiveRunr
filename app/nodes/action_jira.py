@@ -358,10 +358,13 @@ def run(config: dict, inp: dict, context: dict, logger, creds=None, **kwargs) ->
     logger.info("[action.jira] operation=%s base_url=%s", operation, base_url)
 
     if operation == "get-issue":
+        logger.info("action.jira: get-issue key=%s", r("issue_key"))
         return _get_issue(base_url, email, api_token,
                           r("issue_key"), r("expand"))
 
     if operation == "create-issue":
+        logger.info("action.jira: create-issue project=%s type=%s summary=%r",
+                    r("project_key"), r("issue_type", "Task"), r("summary")[:50])
         extra_raw = r("extra_fields")
         try:
             extra = json.loads(extra_raw) if extra_raw.strip() else {}
@@ -382,14 +385,17 @@ def run(config: dict, inp: dict, context: dict, logger, creds=None, **kwargs) ->
         )
 
     if operation == "update-issue":
+        logger.info("action.jira: update-issue key=%s", r("issue_key"))
         return _update_issue(base_url, email, api_token,
                              r("issue_key"), r("fields"))
 
     if operation == "add-comment":
+        logger.info("action.jira: add-comment key=%s", r("issue_key"))
         return _add_comment(base_url, email, api_token,
                             r("issue_key"), r("comment"))
 
     if operation == "search":
+        logger.info("action.jira: search jql=%r", r("jql")[:60])
         return _search(
             base_url, email, api_token,
             jql         = r("jql"),
@@ -399,13 +405,17 @@ def run(config: dict, inp: dict, context: dict, logger, creds=None, **kwargs) ->
         )
 
     if operation == "get-transitions":
+        logger.info("action.jira: get-transitions key=%s", r("issue_key"))
         return _get_transitions(base_url, email, api_token, r("issue_key"))
 
     if operation == "transition-issue":
+        logger.info("action.jira: transition-issue key=%s transition=%s",
+                    r("issue_key"), r("transition_id"))
         return _transition_issue(base_url, email, api_token,
                                  r("issue_key"), r("transition_id"), r("comment"))
 
     if operation == "delete-issue":
+        logger.info("action.jira: delete-issue key=%s", r("issue_key"))
         return _delete_issue(base_url, email, api_token,
                              r("issue_key"), r("delete_subtasks", "false"))
 
