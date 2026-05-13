@@ -35,6 +35,8 @@ from json import JSONDecodeError
 import logging
 import os
 import time
+import paramiko
+from paramiko import SSHException, AuthenticationException
 from ._utils import _render, _resolve_cred_raw
 
 logger = logging.getLogger(__name__)
@@ -184,21 +186,25 @@ def run(config: dict, inp: dict, context: dict, logger, creds=None, **kwargs) ->
         if not host:
             raise ValueError("trigger.file_watch: SFTP credential must include 'host'")
 
-        import paramiko
         transport = paramiko.Transport((host, port))
         transport.banner_timeout   = timeout
         transport.handshake_timeout = timeout
         try:
             transport.connect(username=username or None, password=password or None)
-            sftp = paramiko.SFTPClient.from_transport(transport)
-            try:
-                logger.info("[trigger.file_watch] SFTP %s:%s path=%s pattern=%s", host, port, path, pattern)
-                files = _scan_sftp(sftp, path, pattern, recursive,
-                                   newer_than, older_than, min_size)
-            finally:
-                sftp.close()
+        except (OSError, SSHException, AuthenticationException) as exc:
+            logger.warning("[trigger.file_watch] SFTP connect failed: %s:%s — %s", host, port, exc)
+            return {'__error': f'SFTP connect failed: {exc}', 'host': host, 'port': port}
+        sftp = paramiko.SFTPClient.from_transport(transport)
+        try:
+            logger.info("[trigger.file_watch] SFTP %s:%s path=%s pattern=%s", host, port, path, pattern)
+            files = _scan_sftp(sftp, path, pattern, recursive,
+                               newer_than, older_than, min_size)
         finally:
+            sftp.close()
+        try:
             transport.close()
+        except (OSError, SSHException):
+            pass
 
     # ── Local filesystem branch ───────────────────────────────────────────────
     else:

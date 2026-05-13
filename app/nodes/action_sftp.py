@@ -4,6 +4,8 @@ import logging
 import stat as _stat
 import json
 from json import JSONDecodeError
+import paramiko
+from paramiko import SSHException, AuthenticationException
 from app.nodes._utils import _render, _resolve_cred_raw
 
 logger = logging.getLogger(__name__)
@@ -183,8 +185,11 @@ def run(config, inp, context, logger, creds=None, **kwargs):
         transport.handshake_timeout = timeout
         try:
             transport.connect(username=username or None, password=password or None)
-            sftp = paramiko.SFTPClient.from_transport(transport)
-            try:
+        except (OSError, SSHException, AuthenticationException) as exc:
+            logger.warning("SFTP connect failed: host=%s port=%s — %s", host, port, exc)
+            return {'__error': f'SFTP connect failed: {exc}', 'host': host, 'port': port}
+        sftp = paramiko.SFTPClient.from_transport(transport)
+        try:
 
                 # ── list ──────────────────────────────────────────────────
                 if operation == 'list':
@@ -281,9 +286,16 @@ def run(config, inp, context, logger, creds=None, **kwargs):
         import ftplib
 
         ftp = ftplib.FTP()
-        ftp.connect(host, port, timeout=timeout)
         try:
-            ftp.login(username or '', password or '')
+            ftp.connect(host, port, timeout=timeout)
+            try:
+                ftp.login(username or '', password or '')
+            except (ftplib.error_perm, OSError) as exc:
+                logger.warning("FTP login failed: host=%s port=%s — %s", host, port, exc)
+                return {'__error': f'FTP login failed: {exc}', 'host': host, 'port': port}
+        except OSError as exc:
+            logger.warning("FTP connect failed: host=%s port=%s — %s", host, port, exc)
+            return {'__error': f'FTP connect failed: {exc}', 'host': host, 'port': port}
 
             # ── list ──────────────────────────────────────────────────────
             if operation == 'list':
