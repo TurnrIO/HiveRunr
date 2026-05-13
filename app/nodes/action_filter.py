@@ -21,7 +21,7 @@ def run(config, inp, context, logger, creds=None, **kwargs):
         safe_builtins = {'len': len, 'str': str, 'int': int, 'float': float, 'bool': bool, 'list': list, 'dict': dict, 'tuple': tuple}
         kept = [item for item in items
                 if eval(expr, {'__builtins__': safe_builtins}, {'item': item, 'context': context, 'input': inp})]
-    except (SyntaxError, ValueError, TypeError, Exception) as e:
+    except (SyntaxError, ValueError, TypeError, NameError, ZeroDivisionError) as e:
         logger.warning("Filter expression evaluation failed: %s — returning all items", e)
         kept = items
 
