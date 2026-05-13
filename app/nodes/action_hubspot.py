@@ -89,7 +89,17 @@ def _req(method, path, token, body=None):
         body_txt = e.read().decode()
         try:    detail = json.loads(body_txt).get("message", body_txt)
         except JSONDecodeError: detail = body_txt
-        raise RuntimeError(f"HubSpot {e.code}: {detail}")
+        logger.warning("HubSpot: HTTP error — %s %s", e.code, detail)
+        return {"__error": f"HubSpot HTTP {e.code}: {detail}"}
+    except urllib.error.URLError as e:
+        logger.warning("HubSpot: URL error (connection/DNS) — %s", e.reason)
+        return {"__error": f"HubSpot connection error: {e.reason}"}
+    except OSError as e:
+        logger.warning("HubSpot: OS/socket error — %s", e)
+        return {"__error": f"HubSpot socket error: {e}"}
+    except Exception as e:
+        logger.warning("HubSpot: unexpected error — %s", e)
+        return {"__error": f"HubSpot request failed: {e}"}
 
 
 def _flatten(obj):
