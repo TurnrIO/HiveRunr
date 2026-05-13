@@ -125,7 +125,7 @@ def run(config, inp, context, logger, creds=None, **kwargs):
         except OSError as exc:
             logger.warning("Google Sheets: connection error on read_range — %s", exc)
             return {"__error": f"Google Sheets read_range failed: connection error — {exc}"}
-        except Exception as exc:
+        except (KeyError, IndexError, TypeError, ValueError) as exc:
             logger.warning("Google Sheets: unexpected error on read_range — %s", exc)
             return {"__error": f"Google Sheets read_range failed: {exc}"}
         data = r.json()
@@ -158,7 +158,7 @@ def run(config, inp, context, logger, creds=None, **kwargs):
         except OSError as exc:
             logger.warning("Google Sheets: connection error on write_range — %s", exc)
             return {"__error": f"Google Sheets write_range failed: connection error — {exc}"}
-        except Exception as exc:
+        except (KeyError, IndexError, TypeError, ValueError) as exc:
             logger.warning("Google Sheets: unexpected error on write_range — %s", exc)
             return {"__error": f"Google Sheets write_range failed: {exc}"}
         return r.json()
@@ -184,7 +184,7 @@ def run(config, inp, context, logger, creds=None, **kwargs):
         except OSError as exc:
             logger.warning("Google Sheets: connection error on append_rows — %s", exc)
             return {"__error": f"Google Sheets append_rows failed: connection error — {exc}"}
-        except Exception as exc:
+        except (KeyError, IndexError, TypeError, ValueError) as exc:
             logger.warning("Google Sheets: unexpected error on append_rows — %s", exc)
             return {"__error": f"Google Sheets append_rows failed: {exc}"}
         return r.json()
@@ -200,7 +200,7 @@ def run(config, inp, context, logger, creds=None, **kwargs):
         except OSError as exc:
             logger.warning("Google Sheets: connection error on clear_range — %s", exc)
             return {"__error": f"Google Sheets clear_range failed: connection error — {exc}"}
-        except Exception as exc:
+        except (KeyError, IndexError, TypeError, ValueError) as exc:
             logger.warning("Google Sheets: unexpected error on clear_range — %s", exc)
             return {"__error": f"Google Sheets clear_range failed: {exc}"}
         return r.json()
