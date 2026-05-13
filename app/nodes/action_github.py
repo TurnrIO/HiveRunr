@@ -93,7 +93,17 @@ def run(config, inp, context, logger, creds=None, **kwargs):
         _check_url_ssrf(url)
         max_redirects = 10
         while max_redirects > 0:
-            r = httpx.request(method, url, headers=headers, timeout=httpx.Timeout(30.0), follow_redirects=False, **kw)
+            try:
+                r = httpx.request(method, url, headers=headers, timeout=httpx.Timeout(30.0), follow_redirects=False, **kw)
+            except httpx.HTTPError as exc:
+                logger.error("GitHub API request error action=%s url=%s error=%s", action, url, exc)
+                raise
+            except OSError as exc:
+                logger.error("GitHub API socket error action=%s url=%s error=%s", action, url, exc)
+                raise
+            except Exception as exc:
+                logger.error("GitHub API unexpected error action=%s url=%s error=%s", action, url, exc)
+                raise
             location = r.headers.get("location") or r.headers.get("Location")
             if not location:
                 try:
@@ -104,9 +114,6 @@ def run(config, inp, context, logger, creds=None, **kwargs):
                     raise
                 except httpx.HTTPError as exc:
                     logger.error("GitHub API network error action=%s url=%s error=%s", action, url, exc)
-                    raise
-                except OSError as exc:
-                    logger.error("GitHub API socket error action=%s url=%s error=%s", action, url, exc)
                     raise
                 return r.json() if r.content else {}
             max_redirects -= 1
