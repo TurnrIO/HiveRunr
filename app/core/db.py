@@ -396,7 +396,17 @@ def list_runs(page: int = 1, page_size: int = 50,
 def get_run_by_task(task_id):
     with get_conn() as conn:
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-        cur.execute("SELECT * FROM runs WHERE task_id=%s", (task_id,))
+        cur.execute(
+            """SELECT r.*,
+                    COALESCE(
+                        g.name,
+                        INITCAP(REPLACE(REPLACE(r.workflow, '_', ' '), '.py', ''))
+                    ) AS flow_name
+               FROM runs r
+               LEFT JOIN graph_workflows g ON r.graph_id = g.id
+               WHERE r.task_id=%s""",
+            (task_id,)
+        )
         row = cur.fetchone()
         if not row:
             return None
