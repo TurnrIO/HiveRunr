@@ -409,7 +409,7 @@ def api_reset(request: Request):
             for t in ["runs", "schedules", "graph_versions", "graph_workflows", "workflows"]:
                 cur.execute(f"DELETE FROM {t}")
             conn.commit()
-        except (AttributeError, RuntimeError, OSError):
+        except (AttributeError, RuntimeError, OSError, TypeError):
             conn.rollback()
             raise
     log_audit(user["username"], "admin.reset", None, None, {"tables": "runs,schedules,graph_versions,graph_workflows,workflows"},
