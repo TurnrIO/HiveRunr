@@ -44,9 +44,6 @@ def _check_login_allowed(ip: str) -> None:
         raise HTTPException(503, "Login service temporarily unavailable")
     lockout_key = f"hiverunr:login:lockout:{ip}"
     if r.exists(lockout_key):
-        ttl = r.ttl(lockout_key)
-        # Round to nearest 5-minute window to avoid leaking precise TTL
-        rounded_minutes = ((ttl + 59) // 60 + 1) * 5
         raise HTTPException(
             429,
             "Too many failed login attempts. Please try again later.",
