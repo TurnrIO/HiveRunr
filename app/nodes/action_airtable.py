@@ -36,6 +36,7 @@ import json
 import ipaddress
 import socket
 import urllib.parse
+import httpx
 from json import JSONDecodeError
 from app.nodes._utils import _render, _resolve_cred_raw
 
