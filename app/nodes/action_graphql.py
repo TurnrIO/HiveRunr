@@ -160,7 +160,7 @@ def run(config, inp, context, logger, creds=None, **kwargs):
     except OSError as exc:
         logger.warning("GraphQL: connection error — %s", exc)
         return {"__error": f"GraphQL connection error: {exc}", "endpoint": endpoint}
-    except Exception as exc:
+    except (KeyError, IndexError, TypeError, ValueError) as exc:
         logger.warning("GraphQL: unexpected error — %s", exc)
         return {"__error": f"GraphQL request failed: {exc}", "endpoint": endpoint}
 
