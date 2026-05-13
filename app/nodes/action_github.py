@@ -111,10 +111,10 @@ def run(config, inp, context, logger, creds=None, **kwargs):
                 except httpx.HTTPStatusError as exc:
                     logger.error("GitHub API HTTP error action=%s url=%s status=%s response=%s",
                                  action, url, exc.response.status_code, exc.response.text[:200])
-                    raise
+                    raise exc
                 except httpx.HTTPError as exc:
                     logger.error("GitHub API network error action=%s url=%s error=%s", action, url, exc)
-                    raise
+                    raise exc
                 return r.json() if r.content else {}
             max_redirects -= 1
             if max_redirects == 0:
