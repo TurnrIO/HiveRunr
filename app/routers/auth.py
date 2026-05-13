@@ -1,5 +1,6 @@
 """Auth, user management, and API token routers."""
 import logging
+import redis
 import secrets as _sec
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse, Response, RedirectResponse
@@ -18,16 +19,15 @@ _ATTEMPT_TTL_S = 3600   # sliding window for attempt counter (1 hour)
 def _login_redis():
     """Return a Redis client, or None if Redis is unavailable."""
     try:
-        import redis as _redis
         import os
         url = os.environ.get("REDIS_URL", "redis://redis:6379/0")
-        r = _redis.from_url(url, socket_connect_timeout=2, socket_timeout=2)
+        r = redis.from_url(url, socket_connect_timeout=2, socket_timeout=2)
         r.ping()
         return r
-    except (OSError, RuntimeError, AttributeError, Exception):
+    except (OSError, RuntimeError, AttributeError, redis.exceptions.RedisError):
         # OSError/RuntimeError/AttributeError cover the original targets.
-        # The bare Exception branch catches redis.exceptions.ConnectionError
-        # (NOT a subclass of OSError — it extends redis.exceptions.RedisError).
+        # redis.exceptions.RedisError catches ConnectionError/TimeoutError/etc.
+        # (NOT subclasses of OSError — they extend RedisError).
         # In test/CI environments without Redis, this is expected; return None.
         return None
 
