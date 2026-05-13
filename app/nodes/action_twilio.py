@@ -91,7 +91,7 @@ def _req(method, path, account_sid, auth_token, body=None):
     except OSError as exc:
         logger.warning("Twilio: connection error — %s", exc)
         return {"__error": f"Twilio connection error: {exc}"}
-    except Exception as exc:
+    except (ValueError, TypeError) as exc:
         logger.warning("Twilio: unexpected error — %s", exc)
         return {"__error": f"Twilio request failed: {exc}"}
 
