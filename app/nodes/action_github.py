@@ -105,6 +105,9 @@ def run(config, inp, context, logger, creds=None, **kwargs):
                 except httpx.HTTPError as exc:
                     logger.error("GitHub API network error action=%s url=%s error=%s", action, url, exc)
                     raise
+                except OSError as exc:
+                    logger.error("GitHub API socket error action=%s url=%s error=%s", action, url, exc)
+                    raise
                 return r.json() if r.content else {}
             max_redirects -= 1
             if max_redirects == 0:
