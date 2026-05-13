@@ -486,6 +486,8 @@ def run_graph(graph_data: dict, initial_payload: dict = None, logger=None, _dept
     _token = _otel_ctx.attach(_otel_trace.set_span_in_context(_span))
 
     try:
+        log.info("Graph starting: %s nodes, %s edges, parallel=%s, depth=%d",
+                    len(nodes), len(edges), parallel, _depth)
         if parallel and max_workers > 1:
             levels = _compute_levels(nodes, succ)
             _run_parallel(levels, nodes_map, edges, context, results, traces,
@@ -495,11 +497,18 @@ def run_graph(graph_data: dict, initial_payload: dict = None, logger=None, _dept
             _run_sequential(order, nodes_map, edges, context, results, traces,
                             creds, logger, succ, skip_nodes, _depth,
                             node_callback=node_callback, start_node_id=start_node_id)
+        log.info("Graph complete: %s nodes executed, %s traces", len(results), len(traces))
     except (OSError, TimeoutError) as exc:
         _span.set_status(_SC.ERROR, str(exc))
+        log.error("Graph failed: %s (%s)", type(exc).__name__, exc)
         raise
     except (AttributeError, KeyError, TypeError, ValueError) as exc:
         _span.set_status(_SC.ERROR, str(exc))
+        log.error("Graph failed: %s (%s)", type(exc).__name__, exc)
+        raise
+    except Exception as exc:
+        _span.set_status(_SC.ERROR, str(exc))
+        log.error("Graph failed: %s (%s)", type(exc).__name__, exc)
         raise
     finally:
         _span.set_attribute("graph.trace_count", len(traces))
