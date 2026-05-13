@@ -151,7 +151,18 @@ def run(config, inp, context, logger, creds=None, **kwargs):
 
     # ── Execute ───────────────────────────────────────────────────────────────
     logger.info("GraphQL request → %s", endpoint)
-    resp = httpx.post(endpoint, json=payload, headers=headers, timeout=timeout)
+    try:
+        resp = httpx.post(endpoint, json=payload, headers=headers, timeout=timeout)
+        resp.raise_for_status()
+    except httpx.HTTPError as exc:
+        logger.warning("GraphQL: HTTP error — %s", exc)
+        return {"__error": f"GraphQL HTTP error: {exc}", "endpoint": endpoint}
+    except OSError as exc:
+        logger.warning("GraphQL: connection error — %s", exc)
+        return {"__error": f"GraphQL connection error: {exc}", "endpoint": endpoint}
+    except Exception as exc:
+        logger.warning("GraphQL: unexpected error — %s", exc)
+        return {"__error": f"GraphQL request failed: {exc}", "endpoint": endpoint}
 
     # GraphQL servers typically return 200 even for errors; parse body first
     try:
