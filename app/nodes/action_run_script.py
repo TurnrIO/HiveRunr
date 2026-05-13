@@ -16,6 +16,8 @@ import hashlib
 
 from app.nodes._utils import _render
 
+logger = logging.getLogger(__name__)
+
 NODE_TYPE = "action.run_script"
 LABEL = "Run Script"
 
