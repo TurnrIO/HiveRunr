@@ -161,7 +161,7 @@ def _jira_request(
     except OSError as exc:
         logger.warning("Jira: connection error — %s", exc)
         raise RuntimeError(f"Jira connection error: {exc}") from exc
-    except Exception as exc:
+    except (KeyError, IndexError, TypeError, ValueError, AttributeError) as exc:
         logger.warning("Jira: unexpected error — %s", exc)
         raise RuntimeError(f"Jira request failed: {exc}") from exc
 
