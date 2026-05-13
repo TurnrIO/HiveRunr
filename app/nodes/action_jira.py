@@ -154,6 +154,15 @@ def _jira_request(
         raise RuntimeError(
             f"Jira API error {exc.code}: {err_body.get('errorMessages') or err_body.get('message') or err_body}"
         ) from exc
+    except urllib.error.URLError as exc:
+        logger.warning("Jira: URL error — %s", exc)
+        raise RuntimeError(f"Jira request failed: {exc}") from exc
+    except OSError as exc:
+        logger.warning("Jira: connection error — %s", exc)
+        raise RuntimeError(f"Jira connection error: {exc}") from exc
+    except Exception as exc:
+        logger.warning("Jira: unexpected error — %s", exc)
+        raise RuntimeError(f"Jira request failed: {exc}") from exc
 
 
 def _flatten_issue(raw: dict) -> dict:
