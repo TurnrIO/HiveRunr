@@ -5,22 +5,14 @@ Useful as a scheduled maintenance task to keep the runs table lean.
 Run via the Scripts page or wire up a daily trigger.cron in the canvas.
 """
 
-import os
 import logging
-import psycopg2
-
-# ── Configuration ──────────────────────────────────────────────────────────────
-KEEP_DAYS = 30   # delete runs older than this many days
-DRY_RUN   = False  # set True to preview without deleting
-# ───────────────────────────────────────────────────────────────────────────────
 
 logger = logging.getLogger(__name__)
-DATABASE_URL = os.environ.get("DATABASE_URL", "postgresql://hiverunr:hiverunr@db:5432/hiverunr")
 
 
 def cleanup(
-    keep_days: int = KEEP_DAYS,
-    dry_run: bool = DRY_RUN,
+    keep_days: int = 30,
+    dry_run: bool = False,
     workspace_id: int | None = None,
 ) -> dict:
     """
@@ -34,6 +26,11 @@ def cleanup(
     Returns:
         dict with keys: deleted (int), remaining (int), oldest (str), newest (str)
     """
+    import os
+    import psycopg2
+
+    DATABASE_URL = os.environ.get("DATABASE_URL", "postgresql://hiverunr:hiverunr@db:5432/hiverunr")
+
     workspace_filter = (
         "AND workspace_id = %s" if workspace_id is not None else ""
     )
@@ -114,4 +111,7 @@ def cleanup(
 
 
 if __name__ == "__main__":
-    cleanup()
+    import sys
+    # Allow --dry-run CLI override
+    dry = "--dry-run" in sys.argv
+    cleanup(dry_run=dry)
