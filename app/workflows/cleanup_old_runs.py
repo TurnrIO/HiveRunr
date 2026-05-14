@@ -79,14 +79,17 @@ def cleanup(
             logger.info("Deleted %s run(s) older than %s days.", count, keep_days)
 
         # Show what remains
+        remaining_filter = (
+            "WHERE workspace_id = %s" if workspace_id is not None else ""
+        )
+        remaining_params = (workspace_id,) if workspace_id is not None else ()
         cur.execute(
-            """
+            f"""
             SELECT COUNT(*), MIN(created_at)::text, MAX(created_at)::text
             FROM runs
-            WHERE workspace_id = %s
-            """
-            if workspace_id is not None
-            else "SELECT COUNT(*), MIN(created_at)::text, MAX(created_at)::text FROM runs"
+            {remaining_filter}
+            """,
+            remaining_params,
         )
         total, oldest, newest = cur.fetchone()
         logger.info(
