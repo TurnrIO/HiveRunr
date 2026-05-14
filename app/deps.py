@@ -146,7 +146,7 @@ def _require_owner(user_or_request, *, _user=_UNSET, **kwargs):
     return user
 
 
-def _check_flow_access(request: Request, graph_id: int, required_role: str = "viewer"):
+def _check_flow_access(user_or_request, graph_id: int, required_role: str = "viewer", *, _user=None):
     """Enforce per-flow access control for viewer-role users.
 
     - admin / owner: always granted (skip per-flow check).
@@ -154,11 +154,20 @@ def _check_flow_access(request: Request, graph_id: int, required_role: str = "vi
     - viewer (global role): must have an explicit flow_permissions row with
       a role >= required_role.
 
+    Supports both call signatures:
+      _check_flow_access(request, graph_id, required_role)  — runtime
+      _check_flow_access(user_dict, graph_id, required_role)  — test path
+
     Returns the user dict on success; raises HTTP 403 otherwise.
 
     required_role must be one of: 'viewer', 'runner', 'editor'.
     """
-    user = _check_admin(request)
+    if _user is not None:
+        user = _user
+    elif isinstance(user_or_request, dict):
+        user = user_or_request
+    else:
+        user = _check_admin(user_or_request)
     global_role = user.get("role", "viewer")
 
     # Admins, owners, and token-authenticated callers bypass per-flow checks.
@@ -247,7 +256,7 @@ def _resolve_workspace(request: Request, user: dict) -> int | None:
         if default:
             return default["id"]
     except (AttributeError, TypeError, KeyError, OSError):
-            pass
+        pass
 
     return None
 
