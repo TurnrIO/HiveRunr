@@ -486,7 +486,9 @@ def invite_accept(token: str, request: Request):
                         max_age=SESSION_DAYS * 86400)
         return resp
 
-    # New user — return info so the frontend can show a signup form
+    # New user — consume token atomically to prevent replay, then return
+    # signup info so the frontend can show a pre-filled registration form.
+    consume_invite_token(token_hash)
     return {
         "ok": True,
         "needs_signup": True,
