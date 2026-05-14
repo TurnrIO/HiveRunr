@@ -80,7 +80,7 @@ def cleanup(
 
         # Show what remains
         cur.execute(
-            f"""
+            """
             SELECT COUNT(*), MIN(created_at)::text, MAX(created_at)::text
             FROM runs
             WHERE workspace_id = %s
