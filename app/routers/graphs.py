@@ -223,9 +223,12 @@ def api_test_node(graph_id: int, node_id: str, body: NodeTestBody, request: Requ
     an instant test invocation that populates the NodeIOPanel in the canvas.
     """
     user = _check_admin(request)
+    workspace_id = _resolve_workspace(request, user)
     g = get_graph(graph_id)
     if not g:
         raise HTTPException(404, "Graph not found")
+    if workspace_id is not None and g.get('workspace_id') != workspace_id:
+        raise HTTPException(403, "Graph not in your workspace")
     if not _is_admin_or_owner(user) and user.get("id", 0) != 0:
         _check_flow_access(request, graph_id, "runner")
 
@@ -275,9 +278,11 @@ async def api_graph_run(graph_id: int, request: Request):
     g = get_graph(graph_id)
     if not g:
         raise HTTPException(404, "Graph not found")
+    workspace_id = _resolve_workspace(request, user)
+    if workspace_id is not None and g.get('workspace_id') != workspace_id:
+        raise HTTPException(403, "Graph not in your workspace")
     if not _is_admin_or_owner(user) and user.get("id", 0) != 0:
         _check_flow_access(request, graph_id, "runner")
-    workspace_id = _resolve_workspace(request, user)
     try:
         body = await request.json()
     except JSONDecodeError:
