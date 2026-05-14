@@ -129,7 +129,7 @@ def summary(workspace_id: int | None = None) -> dict:
             WHERE r.created_at >= NOW() - INTERVAL '24 hours'
             {workspace_filter}
             GROUP BY 1
-            ORDER BY 2 DESC
+            ORDER BY runs DESC
             LIMIT 5
             """,
             params,
