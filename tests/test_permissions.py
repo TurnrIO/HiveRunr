@@ -155,9 +155,9 @@ class TestRequireScope:
         _require_scope(_admin(), "write")
 
     def test_viewer_blocked_by_writer(self):
-        from app.deps import _require_scope
+        from app.deps import _require_writer
         with pytest.raises(HTTPException) as exc_info:
-            _require_scope(_viewer(), "write")
+            _require_writer(_viewer())
         assert exc_info.value.status_code == 403
 
     def test_owner_passes_owner_guard(self):
