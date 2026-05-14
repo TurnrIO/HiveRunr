@@ -70,5 +70,9 @@ def run(config, inp, context, logger, creds=None, **kwargs):
         script_hash,
     )
     logger.info("action.run_script: completed_ok hash=%s", script_hash)
-    r = ns.get('result', _UNSET)
+    # Detect whether 'result' was assigned in the script (vs. never touched).
+    # Using 'in ns' after exec() correctly distinguishes "result = None"
+    # (result is in ns, value is None) from "result never assigned"
+    # (result not in ns → return inp).
+    r = ns['result'] if 'result' in ns else _UNSET
     return inp if r is _UNSET else r
