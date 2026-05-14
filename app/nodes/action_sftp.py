@@ -145,6 +145,7 @@ def run(config, inp, context, logger, creds=None, **kwargs):
     operation   = (config.get('operation', 'list') or 'list').lower()
     remote_path = _render(config.get('remote_path', '/'), context, creds)
 
+    logger.info("[action.sftp] Starting SFTP run")
     logger.info("SFTP: op=%s host=%s path=%s", operation, host, remote_path)
     new_path    = _render(config.get('new_path', ''), context, creds)   # for rename
     content     = _render(config.get('content', ''), context, creds)

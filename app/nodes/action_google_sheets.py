@@ -66,6 +66,7 @@ LABEL = "Google Sheets"
 
 def run(config, inp, context, logger, creds=None, **kwargs):
     """Interact with Google Sheets API via service account."""
+    logger.info("[action.google_sheets] Starting Google Sheets run")
     from google.oauth2 import service_account as _sa
     from google.auth.transport.requests import Request as _GReq
 
