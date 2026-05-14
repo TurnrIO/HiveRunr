@@ -326,7 +326,7 @@ class TestCredentialIsolation:
         req = self._mock_cred_request("1")
         user = {"id": 1, "role": "owner", "username": "owner", "token_scope": "manage"}
         with patch("app.auth.get_current_user", return_value=user), \
-             patch("app.deps._resolve_workspace", return_value=1), \
+             patch("app.routers.credentials._resolve_workspace", return_value=1), \
              patch("app.routers.credentials.list_credentials") as mock_list:
             mock_list.return_value = [
                 {"id": 1, "name": "cred-a", "workspace_id": 1},
@@ -358,7 +358,7 @@ class TestCredentialIsolation:
         req = self._mock_cred_request("1")
         user = {"id": 1, "role": "owner", "username": "owner", "token_scope": "manage"}
         with patch("app.auth.get_current_user", return_value=user), \
-             patch("app.deps._resolve_workspace", return_value=1), \
+             patch("app.routers.credentials._resolve_workspace", return_value=1), \
              patch("app.routers.credentials.delete_credential", return_value=False):
             with pytest.raises(HTTPException) as exc_info:
                 api_cred_delete(99, req)
@@ -372,7 +372,7 @@ class TestCredentialIsolation:
         user = {"id": 1, "role": "owner", "username": "owner", "token_scope": "manage"}
         # update_credential finds the credential but it's in workspace 2
         with patch("app.auth.get_current_user", return_value=user), \
-             patch("app.deps._resolve_workspace", return_value=1), \
+             patch("app.routers.credentials._resolve_workspace", return_value=1), \
              patch("app.routers.credentials.update_credential", return_value=None):
             # None means "not found in this workspace" → 404
             with pytest.raises(HTTPException) as exc_info:
