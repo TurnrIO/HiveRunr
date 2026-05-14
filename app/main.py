@@ -7,7 +7,7 @@ import os
 import logging
 from pathlib import Path
 from fastapi import FastAPI, Header, HTTPException, Request
-from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -336,6 +336,27 @@ def health():
         "version": __version__,
         "checks": checks,
     }
+
+
+# ── Healthz (k8s readiness) ─────────────────────────────────────────────────
+@app.get("/healthz")
+def healthz():
+    """Kubernetes readiness probe — returns 200 if DB + Redis are reachable."""
+    try:
+        from app.core.db import get_conn
+        with get_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT 1")
+    except Exception:
+        return Response("database unreachable", status_code=503)
+    try:
+        import redis as _redis
+        redis_url = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
+        r = _redis.from_url(redis_url, socket_connect_timeout=3, socket_timeout=3)
+        r.ping()
+    except Exception:
+        return Response("redis unreachable", status_code=503)
+    return Response("ok", media_type="text/plain")
 
 
 # ── Page routes ───────────────────────────────────────────────────────────────
