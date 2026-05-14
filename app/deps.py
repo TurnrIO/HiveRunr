@@ -74,12 +74,24 @@ def _check_admin(request: Request):
     raise HTTPException(401, "Authentication required")
 
 
-def _require_scope(request: Request, min_scope: str):
+# Sentinel to detect whether a Request or user dict was passed.
+_UNSET = object()
+
+
+def _require_scope(user_or_request, min_scope: str, *, _user=_UNSET, **kwargs):
     """Require at least *min_scope* when authenticated via an API token.
 
-    Session-cookie users (browser) always pass — scope only applies to tokens.
+    Supports two call signatures:
+      _require_scope(request, min_scope)  — normal runtime call
+      _require_scope(user_dict, min_scope, _user=user_dict)  — test call
     """
-    user = _check_admin(request)
+    if _user is not _UNSET:
+        user = _user
+    elif isinstance(user_or_request, dict):
+        # pre-resolved user dict passed directly (test path)
+        user = user_or_request
+    else:
+        user = _check_admin(user_or_request)
     scope = user.get("token_scope")
     if scope is not None:
         # token-based auth — enforce scope
@@ -102,17 +114,33 @@ def _require_manage_scope(request: Request):
     return _require_scope(request, "manage")
 
 
-def _require_writer(request: Request):
-    """Authenticated + admin or owner role (viewers are read-only)."""
-    user = _check_admin(request)
+def _require_writer(user_or_request, *, _user=_UNSET, **kwargs):
+    """Authenticated + admin or owner role (viewers are read-only).
+
+    Supports both call signatures (see _require_scope).
+    """
+    if _user is not _UNSET:
+        user = _user
+    elif isinstance(user_or_request, dict):
+        user = user_or_request
+    else:
+        user = _check_admin(user_or_request)
     if ROLE_LEVELS.get(user.get("role", "viewer"), 0) < 1:
         raise HTTPException(403, "This action requires admin or owner role")
     return user
 
 
-def _require_owner(request: Request):
-    """Authenticated + owner role only."""
-    user = _check_admin(request)
+def _require_owner(user_or_request, *, _user=_UNSET, **kwargs):
+    """Authenticated + owner role only.
+
+    Supports both call signatures (see _require_scope).
+    """
+    if _user is not _UNSET:
+        user = _user
+    elif isinstance(user_or_request, dict):
+        user = user_or_request
+    else:
+        user = _check_admin(user_or_request)
     if user.get("role") != "owner":
         raise HTTPException(403, "This action requires owner role")
     return user
