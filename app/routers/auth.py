@@ -365,8 +365,11 @@ def api_create_token(body: CreateTokenBody, request: Request):
 @router.delete("/api/tokens/{token_id}")
 def api_delete_token(token_id: int, request: Request):
     actor = _require_owner(request)
-    # grab name before deletion for audit detail
-    existing = next((t for t in list_api_tokens() if t["id"] == token_id), None)
+    workspace_id = _resolve_workspace(request, actor)
+    # grab name before deletion for audit detail — scoped to caller's workspace
+    existing = next((t for t in list_api_tokens(workspace_id=workspace_id) if t["id"] == token_id), None)
+    if existing is None:
+        raise HTTPException(404, "Token not found")
     delete_api_token(token_id)
     log_audit(actor["username"], "token.delete", "token", token_id,
               {"name": existing["name"] if existing else None},
