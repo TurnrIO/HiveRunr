@@ -156,7 +156,7 @@ jobs:
         with:
           python-version: "3.11"
           cache: pip
-      - run: pip install pytest httpx
+      - run: pip install pytest httpx -r requirements.txt
       - name: Wait for Celery tasks to be registered
         run: |
           echo "Waiting for Celery task registration..."
