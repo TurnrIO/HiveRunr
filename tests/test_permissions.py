@@ -190,10 +190,23 @@ class TestRoleGuards:
         from app.deps import _require_admin
         _require_admin(_admin())
 
-    def test_viewer_with_editor_permission_granted(self):
+    def test_viewer_global_role_blocked_by_require_writer(self):
+        """_require_writer checks global role only, not workspace_membership.
+
+        Since _require_writer uses ROLE_LEVELS (viewer=0, admin=1, owner=2), a user
+        with global role 'editor' (not in ROLE_LEVELS, treated as viewer=0) is blocked.
+        A viewer with workspace_membership.role='editor' is also blocked — workspace_membership
+        is not consulted by _require_writer.
+
+
+        Use _check_flow_access for per-workspace permission checks.
+        """
         from app.deps import _require_writer
-        viewer = {"id": 3, "username": "editor", "role": "editor", "workspace_membership": {"role": "editor"}}
-        _require_writer(viewer)
+        # Global role 'editor' is not in ROLE_LEVELS — treated as viewer, gets 0, blocked
+        editor = {"id": 3, "username": "editor", "role": "editor"}
+        with pytest.raises(HTTPException) as exc_info:
+            _require_writer(editor)
+        assert exc_info.value.status_code == 403
 
     def test_viewer_with_viewer_permission_blocked_for_runner(self):
         from app.deps import _require_writer
@@ -235,23 +248,24 @@ class TestCheckFlowAccess:
     def test_member_with_permission_allowed(self):
         from app.deps import _check_flow_access
         member = {"id": 5, "role": "member", "workspace_id": 1}
-        with patch("app.deps.get_flow_access", return_value={"may_run": True}):
-            _check_flow_access(member, "flow-123", "run")
+        with patch("app.deps.get_flow_permission", return_value={"role": "editor"}):
+            _check_flow_access(member, 123, "runner")
 
     def test_member_without_permission_blocked(self):
         from app.deps import _check_flow_access
         member = {"id": 5, "role": "member", "workspace_id": 1}
-        with patch("app.deps.get_flow_access", return_value={"may_run": False}):
+        with patch("app.deps.get_flow_permission", return_value={"role": "viewer"}):
             with pytest.raises(HTTPException) as exc_info:
-                _check_flow_access(member, "flow-123", "run")
+                _check_flow_access(member, 123, "runner")
         assert exc_info.value.status_code == 403
 
     def test_token_without_flow_access_blocked(self):
         """Token with insufficient flow permissions should be blocked."""
         from app.deps import _check_flow_access
-        token = {"id": 99, "role": "owner", "token_scope": "read"}
-        with pytest.raises(HTTPException) as exc_info:
-            _check_flow_access(token, "flow-123", "run")
+        token = {"id": 99, "role": "member", "token_scope": "read"}
+        with patch("app.deps.get_flow_permission", return_value=None):
+            with pytest.raises(HTTPException) as exc_info:
+                _check_flow_access(token, 123, "run")
         assert exc_info.value.status_code == 403
 
 
