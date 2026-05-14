@@ -38,6 +38,11 @@ def _patch_db_helpers():
     """
     from unittest.mock import patch
 
+    # Prime the import path so patch() can find app.core.db.
+    # On some Python/path environments the lazy importer resolves this
+    # as a submodule only after an explicit import.
+    import app.core.db  # noqa: F401
+
     def mock_get_conn():
         return _mock_conn
 
