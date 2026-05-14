@@ -283,7 +283,7 @@ class TestResolveWorkspace:
 
     def test_cookie_used_when_no_header(self):
         from app.deps import _resolve_workspace
-        req = _mock_request(cookies={"workspace_id": "7"})
+        req = _mock_request(cookies={"hr_workspace": "7"})
         with patch("app.deps.get_workspace", return_value={"id": 7}):
             result = _resolve_workspace(req, _owner())
         assert result == 7
@@ -324,8 +324,7 @@ class TestCredentialIsolation:
         from app.routers.credentials import api_creds
         # User from workspace 1 calling with X-Workspace-Id: 1
         req = self._mock_cred_request("1")
-        user = {"id": 1, "role": "owner", "token_scope": "manage"}
-        with patch("app.deps._check_admin", return_value=user), \
+        with patch("app.auth.get_current_user", return_value={"id": 1, "role": "owner", "username": "owner", "token_scope": "manage"}), \
              patch("app.deps._resolve_workspace", return_value=1), \
              patch("app.core.db.list_credentials") as mock_list:
             mock_list.return_value = [
@@ -342,8 +341,7 @@ class TestCredentialIsolation:
         from app.routers.credentials import api_cred_update
         from fastapi import HTTPException
         req = self._mock_cred_request("1")
-        user = {"id": 1, "role": "owner", "token_scope": "manage"}
-        with patch("app.deps._check_admin", return_value=user), \
+        with patch("app.auth.get_current_user", return_value={"id": 1, "role": "owner", "username": "owner", "token_scope": "manage"}), \
              patch("app.deps._resolve_workspace", return_value=1), \
              patch("app.core.db.update_credential", return_value=None):
             # update_credential returns None when the cred exists in another workspace but not this one
@@ -356,8 +354,7 @@ class TestCredentialIsolation:
         from app.routers.credentials import api_cred_delete
         from fastapi import HTTPException
         req = self._mock_cred_request("1")
-        user = {"id": 1, "role": "owner", "token_scope": "manage"}
-        with patch("app.deps._check_admin", return_value=user), \
+        with patch("app.auth.get_current_user", return_value={"id": 1, "role": "owner", "username": "owner", "token_scope": "manage"}), \
              patch("app.deps._resolve_workspace", return_value=1), \
              patch("app.core.db.delete_credential", return_value=False):
             with pytest.raises(HTTPException) as exc_info:
@@ -369,9 +366,7 @@ class TestCredentialIsolation:
         from app.routers.credentials import api_cred_update
         from fastapi import HTTPException
         req = self._mock_cred_request("1")
-        user = {"id": 1, "role": "owner", "token_scope": "manage"}
-        # update_credential finds the credential but it's in workspace 2
-        with patch("app.deps._check_admin", return_value=user), \
+        with patch("app.auth.get_current_user", return_value={"id": 1, "role": "owner", "username": "owner", "token_scope": "manage"}), \
              patch("app.deps._resolve_workspace", return_value=1), \
              patch("app.core.db.update_credential", return_value=None):
             # None means "not found in this workspace" → 404
