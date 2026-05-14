@@ -10,17 +10,12 @@ import os
 import sys
 from datetime import datetime, timezone
 
-import psycopg2
-import psycopg2.extras
-
 logger = logging.getLogger(__name__)
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     stream=sys.stdout,
 )
-
-DATABASE_URL = os.environ.get("DATABASE_URL", "postgresql://hiverunr:hiverunr@db:5432/hiverunr")
 
 
 def summary(workspace_id: int | None = None) -> dict:
@@ -33,6 +28,11 @@ def summary(workspace_id: int | None = None) -> dict:
     Returns:
         dict with keys: total, succeeded, failed, running, avg_ms, failures, flows
     """
+    import psycopg2
+    import psycopg2.extras
+
+    DATABASE_URL = os.environ.get("DATABASE_URL", "postgresql://hiverunr:hiverunr@db:5432/hiverunr")
+
     workspace_filter = (
         "AND r.workspace_id = %s" if workspace_id is not None else ""
     )
