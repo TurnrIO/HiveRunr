@@ -324,9 +324,10 @@ class TestCredentialIsolation:
         from app.routers.credentials import api_creds
         # User from workspace 1 calling with X-Workspace-Id: 1
         req = self._mock_cred_request("1")
-        with patch("app.auth.get_current_user", return_value={"id": 1, "role": "owner", "username": "owner", "token_scope": "manage"}), \
+        user = {"id": 1, "role": "owner", "username": "owner", "token_scope": "manage"}
+        with patch("app.auth.get_current_user", return_value=user), \
              patch("app.deps._resolve_workspace", return_value=1), \
-             patch("app.core.db.list_credentials") as mock_list:
+             patch("app.routers.credentials.list_credentials") as mock_list:
             mock_list.return_value = [
                 {"id": 1, "name": "cred-a", "workspace_id": 1},
                 {"id": 2, "name": "cred-b", "workspace_id": 2},  # other workspace — should not leak
@@ -338,15 +339,16 @@ class TestCredentialIsolation:
 
     def test_update_credential_requires_workspace_match(self):
         """Updating a credential from a different workspace should be rejected."""
-        from app.routers.credentials import api_cred_update
+        from app.routers.credentials import api_cred_update, CredUpdate
         from fastapi import HTTPException
         req = self._mock_cred_request("1")
-        with patch("app.auth.get_current_user", return_value={"id": 1, "role": "owner", "username": "owner", "token_scope": "manage"}), \
+        user = {"id": 1, "role": "owner", "username": "owner", "token_scope": "manage"}
+        with patch("app.auth.get_current_user", return_value=user), \
              patch("app.deps._resolve_workspace", return_value=1), \
-             patch("app.core.db.update_credential", return_value=None):
+             patch("app.routers.credentials.update_credential", return_value=None):
             # update_credential returns None when the cred exists in another workspace but not this one
             with pytest.raises(HTTPException) as exc_info:
-                api_cred_update(99, {"type": "webhook", "secret": "x"}, req)
+                api_cred_update(99, CredUpdate(type="webhook", secret="x"), req)
             assert exc_info.value.status_code == 404
 
     def test_delete_credential_requires_workspace_match(self):
@@ -354,22 +356,25 @@ class TestCredentialIsolation:
         from app.routers.credentials import api_cred_delete
         from fastapi import HTTPException
         req = self._mock_cred_request("1")
-        with patch("app.auth.get_current_user", return_value={"id": 1, "role": "owner", "username": "owner", "token_scope": "manage"}), \
+        user = {"id": 1, "role": "owner", "username": "owner", "token_scope": "manage"}
+        with patch("app.auth.get_current_user", return_value=user), \
              patch("app.deps._resolve_workspace", return_value=1), \
-             patch("app.core.db.delete_credential", return_value=False):
+             patch("app.routers.credentials.delete_credential", return_value=False):
             with pytest.raises(HTTPException) as exc_info:
                 api_cred_delete(99, req)
             assert exc_info.value.status_code == 404
 
     def test_cross_workspace_credential_update_blocked(self):
         """A token scoped to workspace 1 cannot update a credential belonging to workspace 2."""
-        from app.routers.credentials import api_cred_update
+        from app.routers.credentials import api_cred_update, CredUpdate
         from fastapi import HTTPException
         req = self._mock_cred_request("1")
-        with patch("app.auth.get_current_user", return_value={"id": 1, "role": "owner", "username": "owner", "token_scope": "manage"}), \
+        user = {"id": 1, "role": "owner", "username": "owner", "token_scope": "manage"}
+        # update_credential finds the credential but it's in workspace 2
+        with patch("app.auth.get_current_user", return_value=user), \
              patch("app.deps._resolve_workspace", return_value=1), \
-             patch("app.core.db.update_credential", return_value=None):
+             patch("app.routers.credentials.update_credential", return_value=None):
             # None means "not found in this workspace" → 404
             with pytest.raises(HTTPException) as exc_info:
-                api_cred_update(55, {"type": "webhook", "secret": "x"}, req)
+                api_cred_update(55, CredUpdate(type="webhook", secret="x"), req)
             assert exc_info.value.status_code == 404
