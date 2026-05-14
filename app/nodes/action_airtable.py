@@ -181,6 +181,8 @@ def _clean_record(r: dict) -> dict:
 def run(config, inp, context, logger, creds=None, **kwargs):
     import httpx
 
+    logger.info("[action.airtable] Starting Airtable run")
+
     api_key, base_id = _resolve_creds(config, context, creds)
     table      = _render(config.get("table", ""), context, creds).strip()
     operation  = _render(config.get("operation", "list_records"), context, creds).strip()
