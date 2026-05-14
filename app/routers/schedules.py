@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from typing import Optional
 
 from app.deps import _check_admin, _resolve_workspace
-from app.core.db import list_schedules, create_schedule, update_schedule, toggle_schedule, delete_schedule, get_schedule
+from app.core.db import list_schedules, create_schedule, update_schedule, toggle_schedule, delete_schedule, get_schedule, update_run
 
 log = logging.getLogger(__name__)
 router = APIRouter()
@@ -123,8 +123,11 @@ def api_run_schedule_now(sid: int, request: Request):
     if not s.get("graph_id"):
         raise HTTPException(status_code=400, detail="Schedule has no graph_id — cannot trigger manually")
 
+    from app.core.executor import run_graph
     from app.worker import enqueue_graph
-    from app.core.db import get_conn
+    from app.core.db import get_conn, get_graph, init_db
+    import uuid
+    import psycopg2.extras
     payload = s.get("payload") or {}
     if isinstance(payload, str):
         try:
@@ -132,22 +135,63 @@ def api_run_schedule_now(sid: int, request: Request):
         except JSONDecodeError:
             payload = {}
 
-    task = enqueue_graph.delay(s["graph_id"], payload)
-
-    # Pre-create run record stamped with the schedule's workspace
-    workspace_id = s.get("workspace_id")
+    graph_id = s["graph_id"]
+    task_id = None
     try:
-        with get_conn() as conn:
-            conn.cursor().execute(
-                "INSERT INTO runs(task_id, graph_id, status, initial_payload, workspace_id) "
-                "VALUES(%s,%s,'queued',%s,%s)",
-                (task.id, s["graph_id"], _json.dumps(payload), workspace_id)
-            )
-    except (AttributeError, TypeError, RuntimeError) as exc:
-        log.warning("Could not pre-create run record for schedule %s: %s", sid, exc)
+        task = enqueue_graph.apply_async(graph_id, payload)
+        task_id = task.id
+    except Exception as exc:
+        log.warning("Celery unavailable (%s) — running schedule %s inline", exc, sid)
+        task_id = str(uuid.uuid4())
+        try:
+            with get_conn() as conn:
+                cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+                cur.execute(
+                    "INSERT INTO runs(task_id, graph_id, status, initial_payload, workspace_id) "
+                    "VALUES(%s,%s,'queued',%s,%s)",
+                    (task_id, graph_id, _json.dumps(payload), s.get("workspace_id"))
+                )
+                conn.commit()
+        except (AttributeError, TypeError, RuntimeError, psycopg2.Error) as db_exc:
+            log.warning("Could not pre-create run record for schedule %s: %s", sid, db_exc)
 
-    log.info("Manual trigger: schedule %s → graph %s (task %s)", sid, s["graph_id"], task.id)
-    return {"queued": True, "task_id": task.id, "graph_id": s["graph_id"]}
+        try:
+            init_db()
+            g = get_graph(graph_id)
+            if not g:
+                raise RuntimeError(f"Graph {graph_id} not found")
+            try:
+                graph_data = _json.loads(g.get('graph_json') or '{}')
+            except JSONDecodeError:
+                graph_data = {}
+            result = run_graph(
+                graph_data,
+                payload,
+                workspace_id=g.get('workspace_id'),
+                log=log,
+            )
+            update_run(task_id, "succeeded", result=result,
+                       traces=result.get('traces', []))
+        except Exception as run_exc:
+            log.exception("Inline schedule run failed for schedule %s", sid)
+            update_run(task_id, "failed", result={"error": str(run_exc)})
+
+    # Pre-create run record if Celery was available
+    if task is not None:
+        try:
+            with get_conn() as conn:
+                cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+                cur.execute(
+                    "INSERT INTO runs(task_id, graph_id, status, initial_payload, workspace_id) "
+                    "VALUES(%s,%s,'queued',%s,%s)",
+                    (task.id, graph_id, _json.dumps(payload), s.get("workspace_id"))
+                )
+                conn.commit()
+        except (AttributeError, TypeError, RuntimeError, psycopg2.Error) as exc:
+            log.warning("Could not pre-create run record for schedule %s: %s", sid, exc)
+
+    log.info("Manual trigger: schedule %s → graph %s (task %s)", sid, graph_id, task_id)
+    return {"queued": True, "task_id": task_id, "graph_id": graph_id}
 
 
 @router.get("/api/schedules/next-run")
