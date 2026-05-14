@@ -62,6 +62,7 @@ def run(config, inp, context, logger, creds=None, **kwargs):
 
         # ── find ─────────────────────────────────────────────────────────────
         if op == "find":
+            logger.info("MongoDB: find db=%s coll=%s limit=%s", db_name, coll_name, limit_val)
             filter_raw     = _render(config.get("filter", "{}"), context, creds)
             projection_raw = _render(config.get("projection", ""), context, creds)
             sort_raw       = _render(config.get("sort", ""), context, creds)
@@ -79,6 +80,7 @@ def run(config, inp, context, logger, creds=None, **kwargs):
         elif op == "find_one":
             filter_raw = _render(config.get("filter", "{}"), context, creds)
             flt  = _parse_json(filter_raw, "filter")
+            logger.info("MongoDB: find_one db=%s coll=%s filter=%s", db_name, coll_name, filter_raw[:50])
             doc  = coll.find_one(flt)
             flat = _bson_to_dict(doc) if doc else None
             return {"document": flat, "found": flat is not None}
@@ -87,6 +89,7 @@ def run(config, inp, context, logger, creds=None, **kwargs):
         elif op == "insert_one":
             doc_raw = _render(config.get("document", "{}"), context, creds)
             doc     = _parse_json(doc_raw, "document")
+            logger.info("MongoDB: insert_one db=%s coll=%s", db_name, coll_name)
             result  = coll.insert_one(doc)
             return {"inserted_id": str(result.inserted_id), "ok": result.acknowledged}
 
@@ -97,6 +100,7 @@ def run(config, inp, context, logger, creds=None, **kwargs):
             upsert     = config.get("upsert", False)
             flt    = _parse_json(filter_raw, "filter")
             upd    = _parse_json(update_raw, "update")
+            logger.info("MongoDB: update_one db=%s coll=%s upsert=%s", db_name, coll_name, upsert)
             result = coll.update_one(flt, upd, upsert=bool(upsert))
             return {
                 "matched_count":  result.matched_count,
@@ -109,12 +113,14 @@ def run(config, inp, context, logger, creds=None, **kwargs):
         elif op == "delete_one":
             filter_raw = _render(config.get("filter", "{}"), context, creds)
             flt    = _parse_json(filter_raw, "filter")
+            logger.info("MongoDB: delete_one db=%s coll=%s", db_name, coll_name)
             result = coll.delete_one(flt)
             return {"deleted_count": result.deleted_count, "ok": result.acknowledged}
 
         # ── aggregate ─────────────────────────────────────────────────────────
         elif op == "aggregate":
             pipeline_raw = _render(config.get("pipeline", "[]"), context, creds)
+            logger.info("MongoDB: aggregate db=%s coll=%s", db_name, coll_name)
             try:
                 pipeline = json.loads(pipeline_raw) if isinstance(pipeline_raw, str) else pipeline_raw
             except JSONDecodeError:
@@ -126,6 +132,7 @@ def run(config, inp, context, logger, creds=None, **kwargs):
         elif op == "count":
             filter_raw = _render(config.get("filter", "{}"), context, creds)
             flt = _parse_json(filter_raw, "filter")
+            logger.info("MongoDB: count db=%s coll=%s", db_name, coll_name)
             n   = coll.count_documents(flt)
             return {"count": n}
 
