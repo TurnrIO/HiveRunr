@@ -17,7 +17,7 @@ import logging
 logger = logging.getLogger(__name__)
 import json
 from json import JSONDecodeError
-from app.nodes._utils import _render
+from app.nodes._utils import _render, _safe_eval
 
 NODE_TYPE = "action.switch"
 LABEL = "Switch / Router"
@@ -27,14 +27,8 @@ def run(config, inp, context, logger, creds=None, **kwargs):
     """Evaluate `value` expression and match it against ordered cases."""
     value_expr = _render(config.get("value", ""), context, creds)
 
-    # Evaluate the value expression in a safe sandbox
-    safe_builtins = {
-        "len": len, "str": str, "int": int, "float": float,
-        "bool": bool, "list": list, "dict": dict, "tuple": tuple,
-    }
     try:
-        value = eval(value_expr, {"__builtins__": safe_builtins},
-                     {"input": inp, "context": context})
+        value = _safe_eval(value_expr, {'input': inp, 'context': context})
     except (SyntaxError, ValueError, NameError, TypeError):
         # If expression fails, use raw string as the value
         value = value_expr
@@ -54,11 +48,11 @@ def run(config, inp, context, logger, creds=None, **kwargs):
         # Support Python expression matching: wrap in eval if it contains
         # operators, otherwise do simple equality / string comparison.
         try:
-            case_result = eval(
+            case_result = _safe_eval(
                 f"{repr(value)} == {repr(match_val)}",
-                {"__builtins__": safe_builtins}, {}
+                {}
             )
-        except (SyntaxError, ValueError, ZeroDivisionError) as e:
+        except (ValueError, SyntaxError, NameError, TypeError) as e:
             case_result = str(value) == str(match_val)
             if case_result is False:
                 logger.warning("Switch case %d: expression eval failed (%s), fell back to string compare", i, e)

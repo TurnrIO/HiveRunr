@@ -19,9 +19,9 @@ Output shape
 import email as _email_module
 import email.header as _email_header
 import imaplib
-import re
+import re as _re
 import logging
-from ._utils import _render
+from ._utils import _render, _safe_eval
 
 logger = logging.getLogger(__name__)
 
@@ -189,7 +189,7 @@ def run(config: dict, inp: dict, context: dict, logger, creds=None, **kwargs) ->
             # Optional Python filter — `email` is bound to the current message dict
             if filter_expr:
                 try:
-                    keep = eval(filter_expr, {"__builtins__": {}}, {"email": entry, "re": re})  # noqa: S307
+                    keep = _safe_eval(filter_expr, {"email": entry, "re": _re})
                     if not keep:
                         continue
                 except (SyntaxError, ValueError, NameError, TypeError) as exc:

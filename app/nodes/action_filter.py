@@ -1,6 +1,7 @@
 """Filter / map action node."""
 import logging
-from app.nodes._utils import _render
+import re as _re
+from app.nodes._utils import _render, _safe_eval
 
 logger = logging.getLogger(__name__)
 
@@ -17,11 +18,11 @@ def run(config, inp, context, logger, creds=None, **kwargs):
     if not isinstance(items, list):
         items = [items]
 
+    local_vars = {'item': None, 'context': context, 'input': inp, 're': _re}
     try:
-        safe_builtins = {'len': len, 'str': str, 'int': int, 'float': float, 'bool': bool, 'list': list, 'dict': dict, 'tuple': tuple}
         kept = [item for item in items
-                if eval(expr, {'__builtins__': safe_builtins}, {'item': item, 'context': context, 'input': inp})]
-    except (SyntaxError, ValueError, TypeError, NameError, ZeroDivisionError) as e:
+                if _safe_eval(expr, {**local_vars, 'item': item})]
+    except (ValueError, SyntaxError, TypeError, NameError, ZeroDivisionError) as e:
         logger.warning("Filter expression evaluation failed: %s — returning all items", e)
         kept = items
 

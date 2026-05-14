@@ -216,7 +216,7 @@ def _parse_atom(root: ET.Element) -> tuple[str, list[dict]]:
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def run(config, inp, context, logger, creds=None, **kwargs):
-    from app.nodes._utils import _render
+    from app.nodes._utils import _render, _safe_eval
 
     url = _render(config.get("url", ""), context, creds).strip()
     if not url:
@@ -267,7 +267,7 @@ def run(config, inp, context, logger, creds=None, **kwargs):
         kept = []
         for e in entries:
             try:
-                if eval(filter_expr, {"entry": e, "re": re, "__builtins__": {}}):  # noqa: S307
+                if _safe_eval(filter_expr, {"entry": e, "re": re}):
                     kept.append(e)
             except (SyntaxError, ValueError, NameError, TypeError) as exc:
                 logger.warning("trigger.rss: filter_expression error for entry '%s': %s", e.get('title', '')[:50], exc)

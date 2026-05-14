@@ -1,7 +1,6 @@
 """Transform / evaluate expression action node."""
 import logging
-import json
-from app.nodes._utils import _render
+from app.nodes._utils import _render, _safe_eval
 
 logger = logging.getLogger(__name__)
 NODE_TYPE = "action.transform"
@@ -11,10 +10,13 @@ LABEL = "Transform"
 def run(config, inp, context, logger, creds=None, **kwargs):
     """Evaluate a Python expression and return result."""
     expr = _render(config.get('expression') or 'input', context, creds)
-    safe_builtins = {'len': len, 'str': str, 'int': int, 'float': float, 'bool': bool, 'list': list, 'dict': dict, 'tuple': tuple}
     try:
-        result = eval(expr, {'__builtins__': safe_builtins}, {'input': inp, 'context': context, 'json': json})
-    except (KeyError, SyntaxError, NameError, TypeError, ZeroDivisionError) as e:
+        result = _safe_eval(expr, {'input': inp, 'context': context, 'json': __import__('json')})
+    except ValueError as exc:
+        return {
+            '__error': f"Unsafe or invalid expression: {exc}"
+        }
+    except (SyntaxError, NameError, TypeError, ZeroDivisionError, KeyError) as e:
         if isinstance(e, KeyError) and e.args and isinstance(e.args[0], slice):
             s = e.args[0]
             notation = f"[:{s.stop}]" if s.start is None and s.step is None else repr(s)
