@@ -236,7 +236,8 @@ def run(config: dict, inp: dict, context: dict, logger, creds=None, **kwargs) ->
             pass
         raise RuntimeError(f"action.postgres: query failed — {exc}") from exc
     finally:
-        try:
-            db_conn.close()
-        except (AttributeError, TypeError, RuntimeError):
-            pass
+        if db_conn is not None:
+            try:
+                db_conn.close()
+            except (AttributeError, TypeError, RuntimeError):
+                pass
