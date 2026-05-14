@@ -13,7 +13,6 @@ Config fields:
 
 All config fields support {{template}} rendering.
 """
-import json
 import logging
 
 logger = logging.getLogger(__name__)

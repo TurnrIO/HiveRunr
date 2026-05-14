@@ -1,5 +1,6 @@
 """Linear.app issue tracker node (GraphQL API)."""
-import json, logging, os
+import json
+import logging
 import socket
 from json import JSONDecodeError
 import urllib.request
