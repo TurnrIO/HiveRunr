@@ -35,7 +35,12 @@ import json
 from json import JSONDecodeError
 import logging
 logger = logging.getLogger(__name__)
-import botocore.exceptions
+# Optional: boto3 needed for action.s3
+try:
+    import botocore.exceptions
+    ClientError = botocore.exceptions.ClientError
+except ImportError:
+    ClientError = Exception
 from ._utils import _render, _resolve_cred_raw
 
 NODE_TYPE = "action.s3"
@@ -78,7 +83,7 @@ def _make_client(cred: dict):
 def _op_get(s3, bucket: str, key: str, config: dict, context: dict, creds: dict) -> dict:
     try:
         resp = s3.get_object(Bucket=bucket, Key=key)
-    except (OSError, botocore.exceptions.ClientError) as exc:
+    except (OSError, ClientError) as exc:
         code = getattr(getattr(exc, "response", {}), "Error", {},).get("Code", "")
         if str(code) in ("404", "NoSuchKey", "NoSuchBucket"):
             return {"exists": False, "key": key, "bucket": bucket}
@@ -125,7 +130,7 @@ def _op_put(s3, bucket: str, key: str, config: dict, context: dict, creds: dict)
 
     try:
         resp = s3.put_object(Bucket=bucket, Key=key, Body=body, **extra)
-    except (OSError, botocore.exceptions.ClientError) as exc:
+    except (OSError, ClientError) as exc:
         logger.warning("[action.s3] put failed: bucket=%s key=%s error=%s", bucket, key, exc)
         return {"ok": False, "key": key, "bucket": bucket, "error": str(exc)}
     return {
@@ -151,7 +156,7 @@ def _op_list(s3, bucket: str, key: str, config: dict, context: dict, creds: dict
 
     try:
         resp    = s3.list_objects_v2(**kwargs)
-    except (OSError, botocore.exceptions.ClientError) as exc:
+    except (OSError, ClientError) as exc:
         logger.warning("[action.s3] list failed: bucket=%s prefix=%s error=%s", bucket, prefix, exc)
         return {"objects": [], "count": 0, "bucket": bucket, "prefix": prefix, "truncated": False, "error": str(exc)}
     objects = [
@@ -176,7 +181,7 @@ def _op_list(s3, bucket: str, key: str, config: dict, context: dict, creds: dict
 def _op_delete(s3, bucket: str, key: str, config: dict, context: dict, creds: dict) -> dict:
     try:
         s3.delete_object(Bucket=bucket, Key=key)
-    except (OSError, botocore.exceptions.ClientError) as exc:
+    except (OSError, ClientError) as exc:
         logger.warning("[action.s3] delete failed: bucket=%s key=%s error=%s", bucket, key, exc)
         return {"ok": False, "key": key, "bucket": bucket, "error": str(exc)}
     return {"ok": True, "key": key, "bucket": bucket}
@@ -227,7 +232,7 @@ def _op_copy(s3, bucket: str, key: str, config: dict, context: dict, creds: dict
     copy_source = {"Bucket": bucket, "Key": source_key}
     try:
         resp = s3.copy_object(Bucket=dest_bucket, CopySource=copy_source, Key=dest_key)
-    except (OSError, botocore.exceptions.ClientError) as exc:
+    except (OSError, ClientError) as exc:
         logger.warning("[action.s3] copy failed: bucket=%s source_key=%s dest_key=%s error=%s", bucket, source_key, dest_key, exc)
         return {"ok": False, "source_key": source_key, "dest_key": dest_key, "bucket": dest_bucket, "error": str(exc)}
     etag = (resp.get("CopyObjectResult") or {}).get("ETag", "").strip('"')
