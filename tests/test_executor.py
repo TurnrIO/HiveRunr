@@ -549,7 +549,7 @@ class TestExecNodeRetryLoop:
         graph = _g([_node('n1', 'action.log', config={'retry_max': 0, 'fail_mode': 'continue'})])
         with patch("app.core.executor._run_node", side_effect=fake_node):
             try:
-                result = run_graph(graph)
+                _ = run_graph(graph)
             except RuntimeError:
                 # run_graph's outer handler converts continue-mode errors to RuntimeError
                 # after the graph-level loop processes abort_or_loop tuples.
