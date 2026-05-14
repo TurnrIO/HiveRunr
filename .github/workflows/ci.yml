@@ -40,6 +40,20 @@ jobs:
   test:
     name: Unit tests (pytest)
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: hiverunr
+          POSTGRES_PASSWORD: hiverunr
+          POSTGRES_DB: hiverunr
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
     steps:
       - uses: actions/checkout@v6.0.2
       - uses: actions/setup-python@v6.2.0
@@ -51,7 +65,7 @@ jobs:
       - name: Run unit tests
         run: pytest tests/ --ignore=tests/integration --cov=app --cov-report=term-missing
         env:
-          # Ensure run_script is disabled (default) — tests handle their own flag
+          DATABASE_URL: postgresql://hiverunr:hiverunr@localhost:5432/hiverunr
           ENABLE_RUN_SCRIPT: "false"
 
   # ── container build check ──────────────────────────────────────────────────
