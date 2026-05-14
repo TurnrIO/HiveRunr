@@ -185,7 +185,8 @@ def run(config: dict, inp: dict, context: dict, logger, creds=None, **kwargs) ->
             pass
         raise RuntimeError(f"action.mysql: query failed — {exc}") from exc
     finally:
-        try:
-            conn.close()
-        except (AttributeError, TypeError, RuntimeError):
-            pass
+        if conn is not None:
+            try:
+                conn.close()
+            except (AttributeError, TypeError, RuntimeError):
+                pass
