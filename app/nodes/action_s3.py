@@ -122,7 +122,11 @@ def _op_put(s3, bucket: str, key: str, config: dict, context: dict, creds: dict)
     if metadata:
         extra["Metadata"] = {str(k): str(v) for k, v in metadata.items()}
 
-    resp = s3.put_object(Bucket=bucket, Key=key, Body=body, **extra)
+    try:
+        resp = s3.put_object(Bucket=bucket, Key=key, Body=body, **extra)
+    except Exception as exc:
+        logger.warning("[action.s3] put failed: bucket=%s key=%s error=%s", bucket, key, exc)
+        return {"ok": False, "key": key, "bucket": bucket, "error": str(exc)}
     return {
         "ok":         True,
         "key":        key,
@@ -144,7 +148,11 @@ def _op_list(s3, bucket: str, key: str, config: dict, context: dict, creds: dict
     if delimiter:
         kwargs["Delimiter"] = delimiter
 
-    resp    = s3.list_objects_v2(**kwargs)
+    try:
+        resp    = s3.list_objects_v2(**kwargs)
+    except Exception as exc:
+        logger.warning("[action.s3] list failed: bucket=%s prefix=%s error=%s", bucket, prefix, exc)
+        return {"objects": [], "count": 0, "bucket": bucket, "prefix": prefix, "truncated": False, "error": str(exc)}
     objects = [
         {
             "key":           o["Key"],
@@ -165,7 +173,11 @@ def _op_list(s3, bucket: str, key: str, config: dict, context: dict, creds: dict
 
 
 def _op_delete(s3, bucket: str, key: str, config: dict, context: dict, creds: dict) -> dict:
-    s3.delete_object(Bucket=bucket, Key=key)
+    try:
+        s3.delete_object(Bucket=bucket, Key=key)
+    except Exception as exc:
+        logger.warning("[action.s3] delete failed: bucket=%s key=%s error=%s", bucket, key, exc)
+        return {"ok": False, "key": key, "bucket": bucket, "error": str(exc)}
     return {"ok": True, "key": key, "bucket": bucket}
 
 
@@ -212,7 +224,11 @@ def _op_copy(s3, bucket: str, key: str, config: dict, context: dict, creds: dict
         raise ValueError("action.s3 copy: 'dest_key' is required")
 
     copy_source = {"Bucket": bucket, "Key": source_key}
-    resp = s3.copy_object(Bucket=dest_bucket, CopySource=copy_source, Key=dest_key)
+    try:
+        resp = s3.copy_object(Bucket=dest_bucket, CopySource=copy_source, Key=dest_key)
+    except Exception as exc:
+        logger.warning("[action.s3] copy failed: bucket=%s source_key=%s dest_key=%s error=%s", bucket, source_key, dest_key, exc)
+        return {"ok": False, "source_key": source_key, "dest_key": dest_key, "bucket": dest_bucket, "error": str(exc)}
     etag = (resp.get("CopyObjectResult") or {}).get("ETag", "").strip('"')
     return {
         "ok":         True,
