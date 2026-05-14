@@ -93,7 +93,10 @@ router = APIRouter()
 # ── Caddy forward_auth gate ───────────────────────────────────────────────────
 @router.get("/api/auth/check", include_in_schema=False)
 def auth_check(request: Request):
-    """Called by Caddy forward_auth before proxying to Flower."""
+    """Called by Caddy forward_auth before proxying to Flower.
+
+    Returns 200 if authenticated, 401 if not.
+    """
     from app.auth import get_current_user, hash_token
     if get_current_user(request):
         return Response(status_code=200)
@@ -105,8 +108,7 @@ def auth_check(request: Request):
         if tok:
             touch_api_token(th)
             return Response(status_code=200)
-    next_path = request.headers.get("x-forwarded-uri", "/flower/")
-    return RedirectResponse(f"/login?next={next_path}", status_code=302)
+    return Response(status_code=401)
 
 
 # ── Auth endpoints ────────────────────────────────────────────────────────────
