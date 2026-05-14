@@ -146,6 +146,21 @@ def _require_owner(user_or_request, *, _user=_UNSET, **kwargs):
     return user
 
 
+def _require_admin(user_or_request, *, _user=_UNSET, **kwargs):
+    """Authenticated + admin or owner role.
+
+    Supports both call signatures (see _require_scope).
+    """
+    if _user is not _UNSET:
+        user = _user
+    elif isinstance(user_or_request, dict):
+        user = user_or_request
+    else:
+        user = _check_admin(user_or_request)
+    if ROLE_LEVELS.get(user.get("role", "viewer"), 0) < 1:
+        raise HTTPException(403, "This action requires admin or owner role")
+    return user
+
 def _check_flow_access(user_or_request, graph_id: int, required_role: str = "viewer", *, _user=None):
     """Enforce per-flow access control for viewer-role users.
 
