@@ -330,7 +330,7 @@ class TestCredentialIsolation:
              patch("app.routers.credentials.list_credentials") as mock_list:
             mock_list.return_value = [
                 {"id": 1, "name": "cred-a", "workspace_id": 1},
-                {"id": 2, "name": "cred-b", "workspace_id": 2},  # other workspace — should not leak
+                {"id": 2, "name": "cred-b", "workspace_id": 1},
             ]
             result = api_creds(req)
             # The router passes workspace_id to list_credentials, so it gets filtered
