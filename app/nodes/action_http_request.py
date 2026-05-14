@@ -159,13 +159,17 @@ def run(config, inp, context, logger, creds=None, **kwargs):
 
     try:
         while True:
-            r = client.request(
-                method, current_url,
-                headers=headers,
-                json=json_body,
-                content=raw_body.encode() if isinstance(raw_body, str) else None,
-                data=form_body,
-            )
+            try:
+                r = client.request(
+                    method, current_url,
+                    headers=headers,
+                    json=json_body,
+                    content=raw_body.encode() if isinstance(raw_body, str) else None,
+                    data=form_body,
+                )
+            except (httpx.HTTPError, OSError) as exc:
+                logger.warning("HTTP %s %s: connection error — %s", method, current_url, exc)
+                return {"__error": f"HTTP request failed: {exc}"}
 
             # If not a redirect, we're done
             if not r.is_redirect:
