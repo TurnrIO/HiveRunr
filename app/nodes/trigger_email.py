@@ -89,6 +89,7 @@ def _get_attachment_names(msg) -> list:
 # ── Node entry point ──────────────────────────────────────────────────────────
 
 def run(config: dict, inp: dict, context: dict, logger, creds=None, **kwargs) -> dict:
+    logger.info("[trigger.email] Starting email trigger run")
     creds = creds or {}
 
     # Credential lookup
