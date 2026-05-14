@@ -536,12 +536,12 @@ def create_schedule(name, workflow=None, graph_id=None, cron=None, payload=None,
         )
         return dict(cur.fetchone())
 
-def update_schedule(sid, name, workflow, graph_id, cron, payload, timezone, run_at=None):
+def update_schedule(sid, name, workflow, graph_id, cron, payload, timezone, run_at=None, workspace_id: int | None = None):
     with get_conn() as conn:
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         cur.execute(
-            "UPDATE schedules SET name=%s,workflow=%s,graph_id=%s,cron=%s,payload=%s,timezone=%s,run_at=%s WHERE id=%s RETURNING *",
-            (name, workflow, graph_id, cron, json.dumps(payload or {}), timezone, run_at, sid)
+            "UPDATE schedules SET name=%s,workspace=%s,graph_id=%s,cron=%s,payload=%s,timezone=%s,run_at=%s,workspace_id=%s WHERE id=%s RETURNING *",
+            (name, workflow, graph_id, cron, json.dumps(payload or {}), timezone, run_at, workspace_id, sid)
         )
         row = cur.fetchone()
         return dict(row) if row else None
