@@ -75,7 +75,13 @@ def _make_client(cred: dict):
 # ── Operation handlers ────────────────────────────────────────────────────────
 
 def _op_get(s3, bucket: str, key: str, config: dict, context: dict, creds: dict) -> dict:
-    resp = s3.get_object(Bucket=bucket, Key=key)
+    try:
+        resp = s3.get_object(Bucket=bucket, Key=key)
+    except Exception as exc:
+        code = getattr(getattr(exc, "response", {}), "Error", {},).get("Code", "")
+        if str(code) in ("404", "NoSuchKey", "NoSuchBucket"):
+            return {"exists": False, "key": key, "bucket": bucket}
+        raise
     raw  = resp["Body"].read()
 
     content_type = resp.get("ContentType", "")
