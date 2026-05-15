@@ -18,9 +18,6 @@ def _get_client(uri):
     except (OSError, RuntimeError, ValueError, ImportError) as exc:
         logger.warning("MongoDB: connection failed — %s", exc)
         raise
-    except (TypeError, AttributeError) as exc:
-        logger.warning("MongoDB: unexpected error during client creation — %s", exc)
-        raise
 
 
 def _parse_json(raw, label):
