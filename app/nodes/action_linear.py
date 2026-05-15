@@ -23,7 +23,6 @@ _BLOCKED = (
     "169.254.",  # AWS / Azure metadata
 )
 
-
 def _check_ssrf(host: str) -> None:
     """Resolve hostname and check it doesn't point to a blocked network."""
     try:
@@ -40,7 +39,7 @@ def _check_ssrf(host: str) -> None:
                     )
 
 
-def _gql(api_key: str, query: str, variables: dict = None):
+def _gql(api_key: str, query: str, variables: dict = None, logger=None):
     body = json.dumps({"query": query, "variables": variables or {}}).encode()
     req  = urllib.request.Request(_ENDPOINT, data=body)
     req.add_header("Authorization", api_key)
@@ -49,13 +48,25 @@ def _gql(api_key: str, query: str, variables: dict = None):
         with urllib.request.urlopen(req, timeout=15) as r:
             data = json.loads(r.read().decode())
     except urllib.error.HTTPError as e:
-        raise RuntimeError(f"Linear {e.code}: {e.read().decode()[:300]}")
+        msg = f"Linear {e.code}: {e.read().decode()[:300]}"
+        if logger:
+            logger.warning("Linear: HTTP error — %s", msg)
+        return {"__error": msg}
     except urllib.error.URLError as e:
-        raise RuntimeError(f"Linear connection error: {e.reason}")
+        msg = f"Linear connection error: {e.reason}"
+        if logger:
+            logger.warning("Linear: connection error — %s", msg)
+        return {"__error": msg}
     except OSError as e:
-        raise RuntimeError(f"Linear socket error: {e}")
+        msg = f"Linear socket error: {e}"
+        if logger:
+            logger.warning("Linear: socket error — %s", msg)
+        return {"__error": msg}
     if data.get("errors"):
-        raise RuntimeError(f"Linear GraphQL error: {data['errors'][0]['message']}")
+        msg = f"Linear GraphQL error: {data['errors'][0]['message']}"
+        if logger:
+            logger.warning("Linear: GraphQL error — %s", msg)
+        return {"__error": msg}
     return data.get("data", {})
 
 
@@ -89,7 +100,9 @@ def run(config, inp, context, logger, creds=None, **kwargs):
                 assignee { name email } priority createdAt updatedAt url
               }
             }
-        """, {"id": issue_id})
+        """, {"id": issue_id}, logger=logger)
+        if data.get("__error"):
+            return data
         issue = data.get("issue", {})
         return {"issue": issue, "id": issue.get("id"), "title": issue.get("title"),
                 "state": (issue.get("state") or {}).get("name")}
@@ -110,7 +123,9 @@ def run(config, inp, context, logger, creds=None, **kwargs):
               }
             }
         """, {"input": {"teamId": team_id, "title": title,
-                        "description": description, "priority": priority}})
+                        "description": description, "priority": priority}}, logger=logger)
+        if data.get("__error"):
+            return data
         issue = (data.get("issueCreate") or {}).get("issue", {})
         return {"issue": issue, "id": issue.get("id"), "title": issue.get("title"),
                 "url": issue.get("url")}
@@ -128,7 +143,9 @@ def run(config, inp, context, logger, creds=None, **kwargs):
                 success issue { id identifier title state { name } updatedAt }
               }
             }
-        """, {"id": issue_id, "input": updates})
+        """, {"id": issue_id, "input": updates}, logger=logger)
+        if data.get("__error"):
+            return data
         issue = (data.get("issueUpdate") or {}).get("issue", {})
         return {"issue": issue, "id": issue.get("id"), "success": (data.get("issueUpdate") or {}).get("success")}
 
@@ -145,7 +162,9 @@ def run(config, inp, context, logger, creds=None, **kwargs):
               }
             }
         """, {"filter": {"title": {"containsIgnoreCase": query_str}} if query_str else {},
-              "first": min(limit, 100)})
+              "first": min(limit, 100)}, logger=logger)
+        if data.get("__error"):
+            return data
         issues = (data.get("issues") or {}).get("nodes", [])
         return {"issues": issues, "count": len(issues), "issue": issues[0] if issues else None}
 
