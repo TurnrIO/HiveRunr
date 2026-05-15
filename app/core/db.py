@@ -453,9 +453,13 @@ def bulk_delete_runs(ids: list) -> int:
         )
         return cur.rowcount
 
-def clear_runs():
-    with get_conn() as conn:
-        conn.cursor().execute("DELETE FROM runs")
+def clear_runs(workspace_id: int | None = None):
+    if workspace_id is not None:
+        with get_conn() as conn:
+            conn.cursor().execute("DELETE FROM runs WHERE workspace_id = %s", (workspace_id,))
+    else:
+        with get_conn() as conn:
+            conn.cursor().execute("DELETE FROM runs")
 
 # ── workflows ─────────────────────────────────────────────────────────────
 def list_workflows():

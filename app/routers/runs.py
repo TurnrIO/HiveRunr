@@ -107,8 +107,10 @@ def api_delete_run(run_id: int, request: Request):
 @router.delete("/api/runs")
 def api_clear_runs(request: Request):
     user = _require_manage_scope(request)
-    clear_runs()
-    log_audit(user["username"], "run.clear_all", None, None, None,
+    workspace_id = _resolve_workspace(request, user)
+    clear_runs(workspace_id=workspace_id)
+    log_audit(user["username"], "run.clear_all", None, None,
+              {"workspace_id": workspace_id},
               request.client.host if request.client else None)
     return {"cleared": True}
 
