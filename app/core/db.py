@@ -1298,26 +1298,43 @@ def set_retention_policy(enabled: bool, mode: str, count: int, days: int) -> Non
     set_setting("retention_count",   str(max(1, int(count))))
     set_setting("retention_days",    str(max(1, int(days))))
 
-def trim_runs_by_count(keep: int) -> int:
-    """Delete all but the `keep` most recent runs. Returns deleted count."""
+def trim_runs_by_count(keep: int, workspace_id: int | None = None) -> int:
+    """Delete all but the `keep` most recent runs per-workspace (or global if workspace_id is None). Returns deleted count."""
     with get_conn() as conn:
         cur = conn.cursor()
-        cur.execute("""
-            DELETE FROM runs
-            WHERE id NOT IN (
-                SELECT id FROM runs ORDER BY id DESC LIMIT %s
-            )
-        """, (max(1, keep),))
+        if workspace_id is not None:
+            cur.execute("""
+                DELETE FROM runs
+                WHERE workspace_id = %s
+                  AND id NOT IN (
+                      SELECT id FROM runs
+                      WHERE workspace_id = %s
+                      ORDER BY id DESC LIMIT %s
+                  )
+            """, (workspace_id, workspace_id, max(1, keep)))
+        else:
+            cur.execute("""
+                DELETE FROM runs
+                WHERE id NOT IN (
+                    SELECT id FROM runs ORDER BY id DESC LIMIT %s
+                )
+            """, (max(1, keep),))
         return cur.rowcount
 
-def trim_runs_by_age(days: int) -> int:
-    """Delete runs older than `days` days. Returns deleted count."""
+def trim_runs_by_age(days: int, workspace_id: int | None = None) -> int:
+    """Delete runs older than `days` days per-workspace (or global if workspace_id is None). Returns deleted count."""
     with get_conn() as conn:
         cur = conn.cursor()
-        cur.execute(
-            "DELETE FROM runs WHERE created_at < NOW() - (%s || ' days')::INTERVAL",
-            (str(max(1, days)),)
-        )
+        if workspace_id is not None:
+            cur.execute(
+                "DELETE FROM runs WHERE workspace_id = %s AND created_at < NOW() - (%s || ' days')::INTERVAL",
+                (workspace_id, str(max(1, days)))
+            )
+        else:
+            cur.execute(
+                "DELETE FROM runs WHERE created_at < NOW() - (%s || ' days')::INTERVAL",
+                (str(max(1, days)),)
+            )
         return cur.rowcount
 
 
