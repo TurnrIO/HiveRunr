@@ -280,3 +280,62 @@ def test_llm_call_missing_api_key_raises():
         os.environ.pop("OPENAI_API_KEY", None)
         with pytest.raises(ValueError, match="api_key"):
             run({"model": "gpt-4o-mini", "prompt": "test"}, {}, {}, log)
+
+
+# ── action.http_request ───────────────────────────────────────────────────────
+
+def test_http_request_rejects_http_scheme():
+    """HTTP Request must reject non-HTTPS URLs via ValueError."""
+    from app.nodes.action_http_request import run
+    log, _ = make_logger()
+    with pytest.raises(ValueError, match="only https"):
+        run({"url": "http://example.com/api", "method": "GET"}, {}, {}, log)
+
+
+def test_http_request_rejects_ssrf_blocked_ip():
+    """HTTP Request must reject URLs resolving to blocked ranges."""
+    from app.nodes.action_http_request import run
+    log, _ = make_logger()
+    # 169.254.169.254 is the AWS metadata IP — always blocked
+    with pytest.raises(ValueError, match="blocked|resolves to"):
+        run({"url": "https://169.254.169.254/latest/meta-data/", "method": "GET"}, {}, {}, log)
+
+
+# ── action.twilio ─────────────────────────────────────────────────────────────
+
+def test_twilio_missing_account_sid_raises():
+    """Twilio node must raise when no account_sid is configured."""
+    from app.nodes.action_twilio import run
+    log, _ = make_logger()
+    with pytest.raises(ValueError, match="account_sid"):
+        run({"operation": "send_sms", "to": "+1555", "from_": "+1555", "body": "hi"}, {}, {}, log)
+
+
+# ── action.airtable ───────────────────────────────────────────────────────────
+
+def test_airtable_missing_api_key_raises():
+    """Airtable node must raise when no api_key is configured."""
+    from app.nodes.action_airtable import run
+    log, _ = make_logger()
+    with pytest.raises(ValueError, match="api_key"):
+        run({"operation": "list_records", "base_id": "appXXX", "table": "Contacts"}, {}, {}, log)
+
+
+# ── action.github ─────────────────────────────────────────────────────────────
+
+def test_github_missing_credential_raises():
+    """GitHub node must raise when no credential is configured."""
+    from app.nodes.action_github import run
+    log, _ = make_logger()
+    with pytest.raises(ValueError, match="token|credential"):
+        run({"operation": "get_file", "repo": "test/test", "path": "README.md"}, {}, {}, log)
+
+
+# ── action.s3 ─────────────────────────────────────────────────────────────────
+
+def test_s3_missing_bucket_raises():
+    """S3 node must raise when no bucket is configured."""
+    from app.nodes.action_s3 import run
+    log, _ = make_logger()
+    with pytest.raises(ValueError, match="credential|bucket"):
+        run({"operation": "list_objects", "bucket": ""}, {}, {}, log)
