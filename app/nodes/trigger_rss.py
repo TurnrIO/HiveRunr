@@ -232,9 +232,19 @@ def run(config, inp, context, logger, creds=None, **kwargs):
 
     # ── Fetch feed ────────────────────────────────────────────────────────────
     logger.info("trigger.rss: fetching %s", url)
-    req = urllib.request.Request(url, headers={"User-Agent": "HiveRunr/1.0 RSS Trigger"})
-    with urllib.request.urlopen(req, timeout=20) as resp:
-        raw = resp.read()
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "HiveRunr/1.0 RSS Trigger"})
+        with urllib.request.urlopen(req, timeout=20) as resp:
+            raw = resp.read()
+    except urllib.error.HTTPError as exc:
+        logger.warning("trigger.rss: HTTP error fetching %s — %s", url, exc)
+        return {"__error": f"trigger.rss: HTTP error {exc.code} fetching feed: {exc}", "entries": [], "count": 0}
+    except urllib.error.URLError as exc:
+        logger.warning("trigger.rss: URL error fetching %s — %s", url, exc)
+        return {"__error": f"trigger.rss: URL error fetching feed: {exc}", "entries": [], "count": 0}
+    except OSError as exc:
+        logger.warning("trigger.rss: connection error fetching %s — %s", url, exc)
+        return {"__error": f"trigger.rss: connection error: {exc}", "entries": [], "count": 0}
 
     root = ET.fromstring(raw)
     tag  = root.tag.lower()
