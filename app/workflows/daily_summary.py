@@ -62,7 +62,7 @@ def summary(workspace_id: int | None = None) -> dict:
                 ROUND(
                     AVG(EXTRACT(EPOCH FROM (updated_at - created_at)) * 1000)
                 )::int AS avg_ms
-            FROM runs
+            FROM runs r
             WHERE created_at >= NOW() - INTERVAL '24 hours'
             {workspace_filter}
             """,
@@ -103,6 +103,7 @@ def summary(workspace_id: int | None = None) -> dict:
                        r.created_at::text AS started
                 FROM runs r
                 LEFT JOIN graph_workflows g ON r.graph_id = g.id
+                                              AND g.workspace_id = r.workspace_id
                 WHERE r.status = 'failed'
                   AND r.created_at >= NOW() - INTERVAL '24 hours'
                 {workspace_filter}
@@ -126,6 +127,7 @@ def summary(workspace_id: int | None = None) -> dict:
                    SUM(CASE WHEN r.status = 'failed'    THEN 1 ELSE 0 END) AS err
             FROM runs r
             LEFT JOIN graph_workflows g ON r.graph_id = g.id
+                                          AND g.workspace_id = r.workspace_id
             WHERE r.created_at >= NOW() - INTERVAL '24 hours'
             {workspace_filter}
             GROUP BY 1
