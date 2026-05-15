@@ -2,6 +2,7 @@
 from json import JSONDecodeError
 import json as _json
 import logging
+import socket
 from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel
 from typing import Optional
@@ -140,7 +141,7 @@ def api_run_schedule_now(sid: int, request: Request):
     try:
         task = enqueue_graph.apply_async(graph_id, payload)
         task_id = task.id
-    except Exception as exc:
+    except (OSError, RuntimeError) as exc:
         log.warning("Celery unavailable (%s) — running schedule %s inline", exc, sid)
         task_id = str(uuid.uuid4())
         try:
@@ -172,7 +173,7 @@ def api_run_schedule_now(sid: int, request: Request):
             )
             update_run(task_id, "succeeded", result=result,
                        traces=result.get('traces', []))
-        except Exception as run_exc:
+        except (OSError, RuntimeError, ValueError, TypeError) as run_exc:
             log.exception("Inline schedule run failed for schedule %s", sid)
             update_run(task_id, "failed", result={"error": str(run_exc)})
 
