@@ -1,6 +1,7 @@
 """Admin, maintenance, system status, metrics, scripts, nodes, and templates routers."""
 import json
 import httpx
+import logging
 from json import JSONDecodeError
 import re as _re
 import uuid
@@ -11,6 +12,8 @@ from typing import Optional
 from app.deps import _check_admin, _require_owner
 from app.core.db import log_audit, get_audit_log
 from app._version import __version__
+
+log = logging.getLogger(__name__)
 
 SCRIPTS_DIR   = Path(__file__).parent.parent / 'workflows'
 TEMPLATES_DIR = Path(__file__).parent.parent / 'templates'
@@ -537,7 +540,11 @@ def api_delete_script(name: str, request: Request):
     p = SCRIPTS_DIR / f"{name}.py"
     if not p.exists():
         raise HTTPException(404, "Script not found")
-    p.unlink()
+    try:
+        p.unlink()
+    except (OSError, PermissionError, FileNotFoundError) as exc:
+        log.error("Could not delete script %s: %s", name, exc)
+        raise HTTPException(500, f"Could not delete script: {exc}")
     return {"name": name, "deleted": True}
 
 
