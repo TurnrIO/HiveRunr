@@ -90,6 +90,12 @@ from app.core.db import (
 router = APIRouter()
 
 
+def _user_in_workspace(user_id: int, workspace_id: int) -> bool:
+    """Return True if user_id is a member of workspace_id."""
+    from app.core.db import get_workspace_member
+    return get_workspace_member(workspace_id, user_id) is not None
+
+
 # ── Caddy forward_auth gate ───────────────────────────────────────────────────
 @router.get("/api/auth/check", include_in_schema=False)
 def auth_check(request: Request):
@@ -261,9 +267,13 @@ class UpdateRoleBody(BaseModel):
 @router.patch("/api/users/{user_id}/role")
 def api_update_user_role(user_id: int, body: UpdateRoleBody, request: Request):
     actor = _require_owner(request)
+    workspace_id = _resolve_workspace(request, actor)
     target = get_user_by_id(user_id)
     if not target:
         raise HTTPException(404, "User not found")
+    # enforce workspace ownership when caller has a workspace context
+    if workspace_id is not None and not _user_in_workspace(user_id, workspace_id):
+        raise HTTPException(403, "Cross-workspace user access denied")
     if target["role"] == "owner":
         raise HTTPException(400, "Cannot change the owner's role")
     if body.role == "owner":
@@ -285,9 +295,13 @@ class ResetPasswordBody(BaseModel):
 def api_reset_user_password(user_id: int, body: ResetPasswordBody, request: Request):
     from app.auth import hash_password
     actor = _require_writer(request)
+    workspace_id = _resolve_workspace(request, actor)
     target = get_user_by_id(user_id)
     if not target:
         raise HTTPException(404, "User not found")
+    # enforce workspace ownership when caller has a workspace context
+    if workspace_id is not None and not _user_in_workspace(user_id, workspace_id):
+        raise HTTPException(403, "Cross-workspace user access denied")
     if target["role"] == "owner" and actor.get("role") != "owner":
         raise HTTPException(403, "Only owner can reset the owner's password")
     if len(body.new_password) < 8:
@@ -302,6 +316,7 @@ def api_reset_user_password(user_id: int, body: ResetPasswordBody, request: Requ
 @router.delete("/api/users/{user_id}")
 def api_delete_user(user_id: int, request: Request):
     actor = _require_writer(request)
+    workspace_id = _resolve_workspace(request, actor)
     target = get_user_by_id(user_id)
     if not target:
         raise HTTPException(404, "User not found")
@@ -309,6 +324,9 @@ def api_delete_user(user_id: int, request: Request):
         raise HTTPException(400, "Cannot delete the owner account")
     if actor.get("id") == user_id:
         raise HTTPException(400, "Cannot delete your own account")
+    # enforce workspace ownership when caller has a workspace context
+    if workspace_id is not None and not _user_in_workspace(user_id, workspace_id):
+        raise HTTPException(403, "Cross-workspace user access denied")
     delete_user(user_id)
     log_audit(actor["username"], "user.delete", "user", user_id,
               {"username": target["username"], "role": target["role"]},
