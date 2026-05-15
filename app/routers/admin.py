@@ -420,7 +420,7 @@ def api_reset(request: Request):
 @router.post("/api/maintenance/reset_sequences")
 def api_reset_sequences(request: Request):
     """Reset all PostgreSQL SERIAL sequences back to 1."""
-    user = _require_owner(request)
+    user = _check_admin(request)
     from app.core.db import get_conn
     tables = [
         "runs", "workflows", "schedules", "graph_workflows",
