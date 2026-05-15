@@ -339,3 +339,13 @@ def test_s3_missing_bucket_raises():
     log, _ = make_logger()
     with pytest.raises(ValueError, match="credential|bucket"):
         run({"operation": "list_objects", "bucket": ""}, {}, {}, log)
+
+
+# ── action.send_email ─────────────────────────────────────────────────────────
+
+def test_send_email_missing_smtp_host_raises():
+    """Send Email node must raise when no smtp_host is configured."""
+    from app.nodes.action_send_email import run
+    log, _ = make_logger()
+    with pytest.raises(ValueError, match="SMTP|no smtp"):
+        run({"to": "test@example.com", "subject": "hi", "body": "hello"}, {}, {}, log)
