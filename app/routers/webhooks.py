@@ -162,9 +162,9 @@ async def webhook_trigger(token: str, request: Request):
             update_run(task_id, "succeeded", result=result,
                        traces=result.get('traces', []))
         except psycopg2.Error as db_err:
-            log.error("DB error during inline webhook run: %s", db_err)
+            log.warning("DB error during inline webhook run: %s", db_err)
         except (TypeError, KeyError, ValueError) as data_err:
-            log.error("Data error during inline webhook run: %s", data_err)
+            log.warning("Data error during inline webhook run: %s", data_err)
         except (ValueError, RuntimeError, TypeError) as inline_err:
             log.exception("Inline webhook graph run failed")
             update_run(task_id, "failed", result={"error": str(inline_err)})
