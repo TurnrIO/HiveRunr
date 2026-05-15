@@ -44,7 +44,8 @@ def run(config, inp, context, logger, creds=None, **kwargs):
     except (JSONDecodeError, ValueError):
         gd = {}
 
-    sub = run_graph(gd, initial_payload=sub_payload, logger=logger, _depth=kwargs.get('_depth', 0) + 1)
+    sub = run_graph(gd, initial_payload=sub_payload, logger=logger, _depth=kwargs.get('_depth', 0) + 1,
+                      workspace_id=kwargs.get('workspace_id'))
 
     logger.info("Call Graph: completed graph_id=%s", target_id)
     return sub.get('context', {})
