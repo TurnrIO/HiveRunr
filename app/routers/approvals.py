@@ -218,6 +218,6 @@ def _get_approval(token: str):
             cur = conn.cursor()
             cur.execute("SELECT * FROM approvals WHERE token=%s", (token,))
             return cur.fetchone()
-    except (AttributeError, TypeError, RuntimeError) as exc:
+    except (AttributeError, TypeError, RuntimeError, OSError) as exc:
         log.error("approvals: DB lookup failed — %s", exc)
         return None
