@@ -141,7 +141,7 @@ def api_run_schedule_now(sid: int, request: Request):
     try:
         task = enqueue_graph.apply_async(graph_id, payload)
         task_id = task.id
-    except (OSError, RuntimeError) as exc:
+    except (ConnectionError, OSError, RuntimeError) as exc:
         log.warning("Celery unavailable (%s) — running schedule %s inline", exc, sid)
         task_id = str(uuid.uuid4())
         try:
