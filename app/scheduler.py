@@ -29,7 +29,6 @@ import os
 import time
 import logging
 import psycopg2
-from json import JSONDecodeError
 import json
 import secrets as _secrets
 

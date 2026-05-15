@@ -2,7 +2,6 @@
 from json import JSONDecodeError
 import json as _json
 import logging
-import socket
 from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel
 from typing import Optional

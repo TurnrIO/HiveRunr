@@ -3,7 +3,7 @@ import logging
 import redis
 import secrets as _sec
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import JSONResponse, Response, RedirectResponse
+from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel
 
 from app.deps import _check_admin, _require_writer, _require_owner, _resolve_workspace
