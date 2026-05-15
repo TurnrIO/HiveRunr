@@ -108,7 +108,11 @@ def _safe_eval(expr: str, local_vars: dict) -> bool:
                 else:
                     # For any other method call, check the attribute name isn't dangerous
                     attr = node.func.attr
-                    if attr in ('__class__', '__bases__', '__subclasses__', '__init__', '__globals__', '__code__', '__closure__', '__func__'):
+                    if attr in (
+                        '__class__', '__bases__', '__subclasses__',
+                        '__init__', '__globals__', '__code__',
+                        '__closure__', '__func__',
+                    ):
                         raise ValueError(f"Forbidden attribute/method: {attr}")
             # Block dynamic function calls (e.g. (lambda: os.system)())
             if isinstance(node.func, (ast.BinOp, ast.Subscript, ast.BoolOp)):
