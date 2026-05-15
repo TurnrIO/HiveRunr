@@ -370,7 +370,7 @@ def api_delete_token(token_id: int, request: Request):
     existing = next((t for t in list_api_tokens(workspace_id=workspace_id) if t["id"] == token_id), None)
     if existing is None:
         raise HTTPException(404, "Token not found")
-    delete_api_token(token_id)
+    delete_api_token(token_id, workspace_id=workspace_id)
     log_audit(actor["username"], "token.delete", "token", token_id,
               {"name": existing["name"] if existing else None},
               request.client.host if request.client else None)

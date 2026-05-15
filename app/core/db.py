@@ -1134,9 +1134,15 @@ def touch_api_token(token_hash: str):
             "UPDATE api_tokens SET last_used=NOW() WHERE token_hash=%s", (token_hash,)
         )
 
-def delete_api_token(token_id: int):
+def delete_api_token(token_id: int, workspace_id: int | None = None):
     with get_conn() as conn:
-        conn.cursor().execute("DELETE FROM api_tokens WHERE id=%s", (token_id,))
+        if workspace_id is not None:
+            conn.cursor().execute(
+                "DELETE FROM api_tokens WHERE id=%s AND workspace_id=%s",
+                (token_id, workspace_id),
+            )
+        else:
+            conn.cursor().execute("DELETE FROM api_tokens WHERE id=%s", (token_id,))
 
 # ── Graph alert config ─────────────────────────────────────────────────────────
 def get_graph_alerts(graph_id: int):
