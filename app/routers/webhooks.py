@@ -39,7 +39,7 @@ def _check_webhook_rate(token: str) -> tuple[bool, int, int]:
         count, _ = pipe.execute()
         return count <= limit, limit, window
     except (redis.exceptions.RedisError, OSError, TimeoutError):  # Redis connection/network failures → fail closed
-        log.error(f"Redis unavailable for webhook rate limit check: {token} — fail closed, returning denied")
+        log.warning(f"Redis unavailable for webhook rate limit check: {token} — fail closed, returning denied")
         return False, limit, window
 
 
