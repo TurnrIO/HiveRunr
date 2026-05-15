@@ -118,6 +118,127 @@ def test_webhook_trigger_passthrough():
 
 # ── action.llm_call ───────────────────────────────────────────────────────────
 
+def test_redis_get_returns_expected_keys():
+    """Redis get must return value, key, and exists flag."""
+    import app.nodes.action_redis as redis_module
+    log, _ = make_logger()
+
+    # Patch the redis client so we don't need a running Redis server
+    fake_r = mock.MagicMock()
+    fake_r.get.return_value = "my-value"
+    with mock.patch.object(redis_module, "_get_client", return_value=fake_r):
+        out = redis_module.run({"operation": "get", "key": "my-key"}, {}, {}, log)
+
+
+    assert "value" in out
+    assert "key" in out
+    assert "exists" in out
+    assert out["key"] == "my-key"
+    assert out["exists"] is True
+
+
+def test_redis_set_returns_ok():
+    """Redis set must return ok=True."""
+    import app.nodes.action_redis as redis_module
+    log, _ = make_logger()
+
+    fake_r = mock.MagicMock()
+    with mock.patch.object(redis_module, "_get_client", return_value=fake_r):
+        out = redis_module.run({"operation": "set", "key": "k", "value": "v"}, {}, {}, log)
+
+
+    assert out.get("ok") is True
+    assert out["key"] == "k"
+
+    assert out["value"] == "v"
+
+
+def test_redis_connection_error_returns_error_dict():
+    """Redis connection failure must return __error dict, not raise."""
+    import app.nodes.action_redis as redis_module
+    log, _ = make_logger()
+
+
+    import redis as _redis
+    fake_r = mock.MagicMock()
+    # Simulate a ConnectionError from redis client
+    fake_r.get.side_effect = _redis.exceptions.ConnectionError("connection refused")
+    with mock.patch.object(redis_module, "_get_client", return_value=fake_r):
+        out = redis_module.run({"operation": "get", "key": "my-key"}, {}, {}, log)
+
+
+    assert "__error" in out or "error" in out
+
+
+
+def test_redis_missing_key_returns_exists_false():
+    """Redis get on missing key must return exists=False."""
+    import app.nodes.action_redis as redis_module
+    log, _ = make_logger()
+
+
+    fake_r = mock.MagicMock()
+    fake_r.get.return_value = None  # key does not exist
+    with mock.patch.object(redis_module, "_get_client", return_value=fake_r):
+        out = redis_module.run({"operation": "get", "key": "nonexistent"}, {}, {}, log)
+
+    assert out["exists"] is False
+    assert out["value"] is None
+
+
+def test_redis_incr_returns_value():
+    """Redis incr must return the new value."""
+    import app.nodes.action_redis as redis_module
+    log, _ = make_logger()
+
+    fake_r = mock.MagicMock()
+    fake_r.incrby.return_value = 42
+    with mock.patch.object(redis_module, "_get_client", return_value=fake_r):
+        out = redis_module.run({"operation": "incr", "key": "counter"}, {}, {}, log)
+
+
+    assert out["value"] == 42
+
+
+
+# ── action.linear ─────────────────────────────────────────────────────────────
+
+
+def test_linear_output_shape():
+    """Linear node should return a dict (no network required for basic config validation)."""
+    from app.nodes.action_linear import run
+    log, _ = make_logger()
+    # Missing api_key / credential should raise ValueError
+    with pytest.raises(ValueError, match="api_key|credential"):
+        run({"operation": "getIssue", "issueId": "TEST-1"}, {}, {}, log)
+
+
+
+# ── action.jira ───────────────────────────────────────────────────────────────
+
+
+def test_jira_output_shape():
+    """Jira node should return a dict (no network required for basic config validation)."""
+    from app.nodes.action_jira import run
+    log, _ = make_logger()
+    # Missing api_key / credential should raise ValueError
+    with pytest.raises(ValueError, match="api_key|credential"):
+        run({"operation": "get-issue", "issueKey": "TEST-1"}, {}, {}, log)
+
+
+
+# ── action.mongodb ────────────────────────────────────────────────────────────
+
+def test_mongodb_output_shape():
+    """MongoDB node should raise when no credential and no inline config."""
+    from app.nodes.action_mongodb import run
+    log, _ = make_logger()
+    # Missing connection config should raise ValueError
+    with pytest.raises(ValueError, match="connection|mongodb|credential"):
+        run({"operation": "find-one", "collection": "test"}, {}, {}, log)
+
+
+
 def test_llm_call_output_shape():
     """LLM node should return text, model, and token counts."""
     from app.nodes.action_llm_call import run
