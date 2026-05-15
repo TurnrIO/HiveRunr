@@ -58,21 +58,24 @@ def _page(icon: str, heading: str, body: str, colour: str) -> HTMLResponse:
 # ── Approve ───────────────────────────────────────────────────────────────────
 
 @router.get("/api/approvals/{token}/approve", include_in_schema=False)
-def do_approve(token: str):
-    return _decide(token, "approved")
+def do_approve(token: str, request: Request):
+    return _decide(token, "approved", request)
 
 
 # ── Reject ────────────────────────────────────────────────────────────────────
 
 @router.get("/api/approvals/{token}/reject", include_in_schema=False)
-def do_reject(token: str):
-    return _decide(token, "rejected")
+def do_reject(token: str, request: Request):
+    return _decide(token, "rejected", request)
 
 
 # ── Core decision handler ─────────────────────────────────────────────────────
 
-def _decide(token: str, decision: str) -> HTMLResponse:
+def _decide(token: str, decision: str, request: Request | None = None) -> HTMLResponse:
     """Write decision to Redis + DB, return a confirmation page."""
+    from app.deps import _resolve_workspace
+    from app.auth import get_current_user
+
     # Validate token
     row = _get_approval(token)
     if not row:
@@ -81,6 +84,20 @@ def _decide(token: str, decision: str) -> HTMLResponse:
             "<p>This approval link is invalid or has expired.</p>",
             "#f87171",
         )
+
+    # Enforce workspace isolation: if the caller has a workspace context,
+    # verify the approval belongs to that workspace.
+    if request is not None:
+        actor = get_current_user(request)
+        if actor:
+            workspace_id = _resolve_workspace(request, actor)
+            if workspace_id is not None and row.get("workspace_id") is not None:
+                if row["workspace_id"] != workspace_id:
+                    return _page(
+                        "🚫", "Wrong workspace",
+                        "<p>This approval does not belong to your workspace.</p>",
+                        "#f87171",
+                    )
 
     if row["status"] != "pending":
         status = row["status"]
