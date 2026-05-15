@@ -115,7 +115,13 @@ def _decide(token: str, decision: str) -> HTMLResponse:
                 (decision, token),
             )
     except (AttributeError, RuntimeError, OSError) as exc:
-        log.warning("approvals: DB update failed — %s", exc)
+        log.error("approvals: DB update failed for %s — %s", token[:8], exc)
+        return _page(
+            "⚠", "Error",
+            "<p>Could not record your decision — the database may be unavailable. "
+            "Please try again or contact your administrator.</p>",
+            "#fbbf24",
+        )
 
     log.info("approvals: %s decision=%s graph=%s", token[:8], decision, row.get("graph_name", ""))
 
