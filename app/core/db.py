@@ -441,16 +441,22 @@ def delete_run(run_id):
     with get_conn() as conn:
         conn.cursor().execute("DELETE FROM runs WHERE id=%s", (run_id,))
 
-def bulk_delete_runs(ids: list) -> int:
+def bulk_delete_runs(ids: list, workspace_id: int | None = None) -> int:
     """Delete multiple runs by ID list. Returns the number actually deleted."""
     if not ids:
         return 0
     with get_conn() as conn:
         cur = conn.cursor()
-        cur.execute(
-            "DELETE FROM runs WHERE id = ANY(%s)",
-            (list(ids),),
-        )
+        if workspace_id is not None:
+            cur.execute(
+                "DELETE FROM runs WHERE id = ANY(%s) AND workspace_id = %s",
+                (list(ids), workspace_id),
+            )
+        else:
+            cur.execute(
+                "DELETE FROM runs WHERE id = ANY(%s)",
+                (list(ids),),
+            )
         return cur.rowcount
 
 def clear_runs(workspace_id: int | None = None):

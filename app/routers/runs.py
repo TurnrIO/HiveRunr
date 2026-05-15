@@ -125,7 +125,8 @@ def api_bulk_delete_runs(body: BulkDeleteBody, request: Request):
     user = _require_manage_scope(request)
     if not body.ids:
         return {"deleted": 0}
-    deleted = bulk_delete_runs(body.ids)
+    workspace_id = _resolve_workspace(request, user)
+    deleted = bulk_delete_runs(body.ids, workspace_id=workspace_id)
     log_audit(user["username"], "run.bulk_delete", None, None,
               {"count": deleted, "ids": body.ids[:20]},  # log first 20 IDs max
               request.client.host if request.client else None)
