@@ -582,17 +582,33 @@ def sync_graph_schedules(graph_id: int, cron_nodes: list):
             )
 
 # ── graph_workflows ───────────────────────────────────────────────────────
-def list_graphs(workspace_id: int | None = None):
+def list_graphs(workspace_id: int | None = None, page: int = 1, page_size: int = 50):
+    """List graphs for a workspace with pagination. page is 1-indexed."""
+    offset = (max(1, page) - 1) * min(max(1, page_size), 100)
+    limit = min(max(1, page_size), 100)
     with get_conn() as conn:
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         if workspace_id is not None:
             cur.execute(
-                "SELECT * FROM graph_workflows WHERE workspace_id=%s ORDER BY id",
-                (workspace_id,),
+                "SELECT * FROM graph_workflows WHERE workspace_id=%s ORDER BY id LIMIT %s OFFSET %s",
+                (workspace_id, limit, offset),
             )
         else:
-            cur.execute("SELECT * FROM graph_workflows ORDER BY id")
-        return [dict(r) for r in cur.fetchall()]
+            cur.execute("SELECT * FROM graph_workflows ORDER BY id LIMIT %s OFFSET %s",
+                        (limit, offset))
+        return [dict(r) for r in cur.fetchall()]  # fetchall for small page sizes; offset/limit in query
+
+
+def count_graphs(workspace_id: int | None = None) -> int:
+    """Return total graph count for a workspace (for pagination metadata)."""
+    with get_conn() as conn:
+        cur = conn.cursor()
+        if workspace_id is not None:
+            cur.execute("SELECT COUNT(*) FROM graph_workflows WHERE workspace_id=%s",
+                        (workspace_id,))
+        else:
+            cur.execute("SELECT COUNT(*) FROM graph_workflows")
+        return cur.fetchone()[0] or 0
 
 def create_graph(name, description, graph_json, workspace_id: int | None = None, tags: list | None = None):
     import secrets as _sec

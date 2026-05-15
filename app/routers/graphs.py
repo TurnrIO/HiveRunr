@@ -10,7 +10,7 @@ from typing import Optional
 from app.deps import _check_admin, _check_flow_access, _resolve_workspace, ROLE_LEVELS
 from app.core.db import (
     list_graphs, create_graph, get_graph, update_graph, delete_graph,
-    get_graph_by_slug, duplicate_graph,
+    get_graph_by_slug, duplicate_graph, count_graphs,
     list_graph_versions, save_graph_version, get_graph_version,
     sync_graph_schedules,
     get_graph_alerts, update_graph_alerts,
@@ -65,15 +65,27 @@ class GraphUpdate(BaseModel):
 
 
 @router.get("/api/graphs")
-def api_graphs(request: Request):
+def api_graphs(request: Request, page: int = 1, page_size: int = 50):
+    """List graphs for the caller's workspace with pagination."""
     user = _check_admin(request)
     workspace_id = _resolve_workspace(request, user)
-    all_graphs = list_graphs(workspace_id=workspace_id)
+    page = max(1, page)
+    page_size = min(max(1, page_size), 100)
+    all_graphs = list_graphs(workspace_id=workspace_id, page=page, page_size=page_size)
     # Viewer-role users only see flows they have explicit permission for.
     if not _is_admin_or_owner(user) and user.get("id", 0) != 0:
         permitted = set(get_permitted_graph_ids(user["id"]))
         all_graphs = [g for g in all_graphs if g["id"] in permitted]
-    return [_graph_with_data(g) for g in all_graphs]
+    total = count_graphs(workspace_id=workspace_id)
+    return {
+        "graphs": [_graph_with_data(g) for g in all_graphs],
+        "pagination": {
+            "page": page,
+            "page_size": page_size,
+            "total": total,
+            "pages": (total + page_size - 1) // page_size if total else 1,
+        },
+    }
 
 
 @router.post("/api/graphs")
