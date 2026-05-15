@@ -48,8 +48,8 @@ def _run_script_worker(script: str, inp, context_json: str, ns_keys: list, resul
         result_val = ns['result'] if has_result else None
         with open(result_path, 'w') as f:
             json.dump({'has_result': has_result, 'result': result_val}, f)
-    except Exception:
-        # Script errors are raised in the parent — the result file won't be written.
+    except (SyntaxError, ValueError, NameError, TypeError, RuntimeError):
+        # Script errors → result file not written; parent sees non-zero exit and raises.
         pass
 
 
