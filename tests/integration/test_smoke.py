@@ -106,7 +106,10 @@ def test_graph_created(graph_id):
 def test_graph_appears_in_list(client, graph_id):
     resp = client.get("/api/graphs")
     assert resp.status_code == 200
-    ids = [g.get("id") for g in resp.json()]
+    data = resp.json()
+    # API returns {"graphs": [...], "pagination": {...}} with pagination
+    graphs = data if isinstance(data, list) else data.get("graphs", [])
+    ids = [g.get("id") for g in graphs]
     assert graph_id in ids
 
 
