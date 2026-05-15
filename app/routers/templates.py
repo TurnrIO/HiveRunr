@@ -45,7 +45,7 @@ def _load_all() -> list[dict]:
                 "edge_count":  len(data.get("graph_data", {}).get("edges", [])),
             })
         except (json.JSONDecodeError, OSError) as exc:
-            log.warning("Failed to load template %s: %s", path.name, exc)
+            log.warning("Failed to load template %s: %s", path, exc)
     return templates
 
 
