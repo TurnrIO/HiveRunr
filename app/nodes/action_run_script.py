@@ -35,13 +35,15 @@ def _run_script_worker(script: str, inp, context_json: str, ns_keys: list, resul
         ns = {
             'input': json.loads(context_json)[0],
             'context': json.loads(context_json)[1],
-            'result': None,
             'log': logging.getLogger("script"),
             'json': json,
             'os': os,
             'time': time,
         }
         exec(script, ns)  # noqa: S102
+        # Detect whether 'result' was assigned in the script (vs. never touched).
+        # If the script never assigns 'result', 'result' is not in ns → no result.
+        # If the script assigns 'result = None', 'result' IS in ns → return None.
         has_result = 'result' in ns
         result_val = ns['result'] if has_result else None
         with open(result_path, 'w') as f:
