@@ -810,6 +810,16 @@ export function ConfigPanel({ node, onChange, onDelete, edges }) {
           </div>
         )}
 
+        {node.data.type === "trigger.webhook" && (
+          <div style={{ background: "#0f1117", border: "1px solid #2a2d3e", borderRadius: 6, padding: "8px 10px", fontSize: 10, color: "#94a3b8", marginTop: 6, lineHeight: 1.8 }}>
+            <div style={{ color: "#0284c7", fontWeight: 600, marginBottom: 4 }}>🔗 Webhook Trigger</div>
+            Your webhook URL is:<br />
+            <code style={{ color: "#a78bfa", wordBreak: "break-all" }}>https://your-app.example.com/api/webhooks/trigger/{"{{graph_id}}"}/{"{{secret}}"}</code><br />
+            Replace <strong>{"{{graph_id}}"}</strong> with this flow's ID and <strong>{"{{secret}}"}</strong> with your secret (or leave blank to accept any POST).<br />
+            To fire manually, use the <strong>▶ Run</strong> button in the topbar.
+          </div>
+        )}
+
         {/* Retry Policy (action nodes only) */}
         {!isNote && !isTrigger && (
           <>
