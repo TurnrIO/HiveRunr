@@ -150,8 +150,10 @@ def run(config, inp, context, logger, creds=None, **kwargs):
     new_path    = _render(config.get('new_path', ''), context, creds)   # for rename
     content     = _render(config.get('content', ''), context, creds)
     recursive   = str(config.get('recursive', 'false')).lower() in ('true', '1', 'yes')
-    try: timeout = int(_render(str(config.get('timeout', 30)), context, creds))
-    except (ValueError, TypeError): timeout = 30
+    try:
+        timeout = int(_render(str(config.get('timeout', 30)), context, creds))
+    except (ValueError, TypeError):
+        timeout = 30
 
     # ── credential shortcut ───────────────────────────────────────────────
     cred_name = _render(config.get('credential', ''), context, creds)
@@ -179,8 +181,7 @@ def run(config, inp, context, logger, creds=None, **kwargs):
     # SFTP
     # ══════════════════════════════════════════════════════════════════════
     if protocol == 'sftp':
-        import paramiko
-
+        
         transport = paramiko.Transport((host, port))
         transport.banner_timeout  = timeout
         transport.handshake_timeout = timeout
