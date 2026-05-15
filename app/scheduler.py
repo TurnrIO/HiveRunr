@@ -125,7 +125,7 @@ def _make_job(sched, scheduler_ref=None):
             try:
                 task = enqueue_graph.apply_async(args=[sched["graph_id"], payload], priority=_priority)
                 task_id = task.id
-            except (OSError, RuntimeError, TypeError) as exc:
+            except (ConnectionError, OSError, RuntimeError, TypeError) as exc:
                 log.warning("Celery unavailable (%s) — running scheduled graph inline", exc)
                 import uuid
                 task_id = str(uuid.uuid4())
@@ -152,7 +152,7 @@ def _make_job(sched, scheduler_ref=None):
                             " ON CONFLICT (task_id) DO NOTHING",
                             (task_id, sched["graph_id"], _json.dumps(payload), workspace_id),
                         )
-                except (OSError, RuntimeError, TypeError) as exc:
+                except (ConnectionError, OSError, RuntimeError, TypeError) as exc:
                     log.warning("Could not pre-create run record for schedule %s: %s", sid, exc)
         elif sched.get("workflow", "").startswith("script:"):
             script_name = sched["workflow"][len("script:"):]
