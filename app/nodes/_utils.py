@@ -129,7 +129,7 @@ def _safe_eval(expr: str, local_vars: dict) -> bool:
     except (TypeError, NameError, KeyError, IndexError, AttributeError, ValueError):
         # Re-raise our own ValueErrors from the check above
         raise
-    except Exception as e:
+    except (ArithmeticError, OSError, RuntimeError) as e:
         raise ValueError(f"Expression evaluation error: {e}")
 
 
