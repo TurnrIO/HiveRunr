@@ -5,6 +5,7 @@ static files, page routes, and startup lifecycle only.
 """
 import os
 import logging
+import psycopg2
 from pathlib import Path
 from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response
@@ -347,14 +348,15 @@ def healthz():
         with get_conn() as conn:
             with conn.cursor() as cur:
                 cur.execute("SELECT 1")
-    except Exception:
+    except (psycopg2.Error, OSError):
         return Response("database unreachable", status_code=503)
     try:
         import redis as _redis
+        from redis.exceptions import ConnectionError as _RedisConnError, TimeoutError as _RedisTimeoutError
         redis_url = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
         r = _redis.from_url(redis_url, socket_connect_timeout=3, socket_timeout=3)
         r.ping()
-    except Exception:
+    except (_RedisConnError, _RedisTimeoutError, OSError):
         return Response("redis unreachable", status_code=503)
     return Response("ok", media_type="text/plain")
 
