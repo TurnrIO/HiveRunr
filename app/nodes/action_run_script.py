@@ -13,6 +13,8 @@ import os
 import time
 import json
 import hashlib
+import tempfile
+import multiprocessing
 
 from app.nodes._utils import _render
 
@@ -22,6 +24,31 @@ NODE_TYPE = "action.run_script"
 LABEL = "Run Script"
 
 _audit = logging.getLogger("audit")
+
+# Maximum time a user script can run before being terminated (seconds).
+_SCRIPT_TIMEOUT_SEC = 30
+
+
+def _run_script_worker(script: str, inp, context_json: str, ns_keys: list, result_path: str):
+    """Worker function run in a subprocess. Writes result to result_path."""
+    try:
+        ns = {
+            'input': json.loads(context_json)[0],
+            'context': json.loads(context_json)[1],
+            'result': None,
+            'log': logging.getLogger("script"),
+            'json': json,
+            'os': os,
+            'time': time,
+        }
+        exec(script, ns)  # noqa: S102
+        has_result = 'result' in ns
+        result_val = ns['result'] if has_result else None
+        with open(result_path, 'w') as f:
+            json.dump({'has_result': has_result, 'result': result_val}, f)
+    except Exception:
+        # Script errors are raised in the parent — the result file won't be written.
+        pass
 
 
 def run(config, inp, context, logger, creds=None, **kwargs):
@@ -50,29 +77,54 @@ def run(config, inp, context, logger, creds=None, **kwargs):
         script_preview,
     )
 
-    _UNSET = object()
-    ns = {
-        'input':   inp,
-        'context': context,
-        'result':  _UNSET,      # sentinel — distinguishes "not assigned" from None
-        'log':     logger,
-        'json':    json,
-        'os':      os,
-        'time':    time,
-    }
-    try:
-        exec(script, ns)  # noqa: S102
-    except (ValueError, RuntimeError, TypeError, ArithmeticError, SyntaxError) as exc:
-        raise RuntimeError(f"run_script raised {type(exc).__name__}: {exc}") from exc
+    # ── run with timeout via subprocess ──────────────────────────────────
+    context_json = json.dumps([inp, context])
+    ns_keys = ['input', 'context', 'result', 'log', 'json', 'os', 'time']
 
-    _audit.warning(
-        "AUDIT run_script | hash=%s | completed_ok",
-        script_hash,
-    )
-    logger.info("action.run_script: completed_ok hash=%s", script_hash)
-    # Detect whether 'result' was assigned in the script (vs. never touched).
-    # Using 'in ns' after exec() correctly distinguishes "result = None"
-    # (result is in ns, value is None) from "result never assigned"
-    # (result not in ns → return inp).
-    r = ns['result'] if 'result' in ns else _UNSET
-    return inp if r is _UNSET else r
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as tf:
+        result_path = tf.name
+
+    try:
+        p = multiprocessing.Process(
+            target=_run_script_worker,
+            args=(script, inp, context_json, ns_keys, result_path),
+            daemon=True,
+        )
+        p.start()
+        p.join(timeout=_SCRIPT_TIMEOUT_SEC)
+
+        if p.is_alive():
+            p.terminate()
+            p.join(timeout=5)
+            raise RuntimeError(
+                f"action.run_script: script exceeded {_SCRIPT_TIMEOUT_SEC}s timeout "
+                f"and was terminated. Reduce computation or I/O in the script."
+            )
+
+        # Read the result file written by the worker.
+        try:
+            with open(result_path) as f:
+                outcome = json.load(f)
+            has_result = outcome['has_result']
+            result_val = outcome['result']
+        except (FileNotFoundError, json.JSONDecodeError, OSError):
+            # result_path not written → script raised an exception before completion.
+            raise RuntimeError(
+                "action.run_script: script raised an exception. "
+                "Check the worker logs for the traceback."
+            )
+
+        _audit.warning(
+            "AUDIT run_script | hash=%s | completed_ok",
+            script_hash,
+        )
+        logger.info("action.run_script: completed_ok hash=%s", script_hash)
+        # has_result False means 'result' was never assigned → return input unchanged.
+        return inp if not has_result else result_val
+
+    finally:
+        try:
+            os.unlink(result_path)
+        except OSError:
+            pass
+
