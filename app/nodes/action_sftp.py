@@ -181,7 +181,7 @@ def run(config, inp, context, logger, creds=None, **kwargs):
     # SFTP
     # ══════════════════════════════════════════════════════════════════════
     if protocol == 'sftp':
-        
+
         transport = paramiko.Transport((host, port))
         transport.banner_timeout  = timeout
         transport.handshake_timeout = timeout
