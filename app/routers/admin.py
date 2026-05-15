@@ -391,7 +391,11 @@ def api_runlogs(request: Request):
 @router.get("/api/runlogs/{filename}")
 def api_runlog_file(filename: str, request: Request):
     _check_admin(request)
-    p = RUNLOGS_DIR / filename
+    p = (RUNLOGS_DIR / filename).resolve()
+    try:
+        p.relative_to(RUNLOGS_DIR.resolve())
+    except ValueError:
+        raise HTTPException(404)
     if not p.exists() or not p.name.endswith(".log"):
         raise HTTPException(404)
     return {"content": p.read_text(errors="replace")[-8000:]}
