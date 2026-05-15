@@ -276,8 +276,14 @@ def run(config, inp, context, logger, creds=None, **kwargs):
                     "Use: list, upload, download, delete, mkdir, rename, exists, stat"
                 )
 
+        except (OSError, SSHException) as exc:
+            logger.warning("SFTP operation '%s' failed: %s", operation, exc)
+            return {'__error': f'SFTP operation failed: {exc}', 'operation': operation}
         finally:
-            sftp.close()
+            try:
+                sftp.close()
+            except (NameError, OSError):
+                pass
             transport.close()
 
     # ══════════════════════════════════════════════════════════════════════
