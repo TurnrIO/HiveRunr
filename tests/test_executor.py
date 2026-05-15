@@ -640,6 +640,37 @@ class TestExecNodeRetryLoop:
             except KeyError:
                 pass  # expected
 
+    def test_lookup_error_not_in_retry_tuple_propagates(self, monkeypatch):
+        """LookupError (IndexError, StopIteration, etc.) is NOT in the retry tuple — propagates."""
+        from unittest.mock import patch
+        from tests.test_executor import _g, _node, run_graph
+
+        def fake_node(*a, **kw):
+            raise LookupError('index out of range')
+
+        graph = _g([_node('n1', 'action.log', config={'retry_max': 2, 'fail_mode': 'abort'})])
+        with patch("app.core.executor._run_node", side_effect=fake_node):
+            try:
+                run_graph(graph)
+                assert False, "Expected LookupError"
+            except LookupError:
+                pass  # expected
+
+    def test_zero_division_error_caught_by_retry_loop_aborts(self, monkeypatch):
+        """ZeroDivisionError (subclass of ArithmeticError) is in the retry tuple — abort raises RuntimeError."""
+        from unittest.mock import patch
+        from tests.test_executor import _g, _node, run_graph
+
+        def fake_node(*a, **kw):
+            raise ZeroDivisionError('division by zero')
+
+        graph = _g([_node('n1', 'action.log', config={'retry_max': 0, 'fail_mode': 'abort'})])
+        with patch("app.core.executor._run_node", side_effect=fake_node):
+            try:
+                run_graph(graph)
+                assert False, "Expected RuntimeError"
+            except RuntimeError as exc:
+                assert 'attempt(s)' in str(exc)
 
 
 class TestRunFromCombined:
