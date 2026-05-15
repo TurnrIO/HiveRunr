@@ -9,5 +9,5 @@ LABEL = "Cron Schedule"
 
 def run(config, inp, context, logger, creds=None, **kwargs):
     """Pass through input as-is."""
-    logger.info("trigger.cron pass-through")
+    logger.info("trigger.cron: pass-through complete")
     return inp
