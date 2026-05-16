@@ -12,6 +12,7 @@ LABEL = "Call Graph"
 
 def run(config, inp, context, logger, creds=None, **kwargs):
     """Call another graph (subgraph/nested automation)."""
+    logger.info("[action.call_graph] Starting Call Graph run")
     from app.core.db import get_graph_by_slug as _get_graph_by_slug
     from app.core.executor import run_graph
 
