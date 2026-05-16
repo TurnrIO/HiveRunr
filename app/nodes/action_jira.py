@@ -348,7 +348,10 @@ def run(config: dict, inp: dict, context: dict, logger, creds=None, **kwargs) ->
         )
 
     # SSRF: validate base_url before making any HTTP request
-    _check_url_ssrf(base_url)
+    try:
+        _check_url_ssrf(base_url)
+    except ValueError as e:
+        return {"__error": str(e), "base_url": base_url}
 
     def r(key, default=""):
         return _render(str(config.get(key, default) or default), context, creds)
