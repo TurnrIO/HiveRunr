@@ -98,6 +98,7 @@ def run(config, inp, context, logger, creds=None, **kwargs):
     """Execute a GraphQL query or mutation."""
     import httpx
 
+    logger.info("GraphQL: executing query")
     # ── Resolve credential ────────────────────────────────────────────────────
     endpoint = _render(config.get("endpoint", ""), context, creds).strip()
     token    = _render(config.get("token", ""),    context, creds).strip()
@@ -147,7 +148,11 @@ def run(config, inp, context, logger, creds=None, **kwargs):
         payload["operationName"] = op_name
 
     # ── SSRF check on endpoint ──────────────────────────────────────────────
-    _check_ssrf(endpoint)
+    try:
+        _check_ssrf(endpoint)
+    except ValueError as exc:
+        logger.warning("GraphQL: SSRF check failed — %s", exc)
+        return {"__error": f"GraphQL: SSRF check failed: {exc}", "endpoint": endpoint}
 
     # ── Execute ───────────────────────────────────────────────────────────────
     logger.info("GraphQL request → %s", endpoint)
@@ -160,16 +165,16 @@ def run(config, inp, context, logger, creds=None, **kwargs):
     except OSError as exc:
         logger.warning("GraphQL: connection error — %s", exc)
         return {"__error": f"GraphQL connection error: {exc}", "endpoint": endpoint}
-    except (KeyError, IndexError, TypeError, ValueError) as exc:
-        logger.warning("GraphQL: unexpected error — %s", exc)
-        return {"__error": f"GraphQL request failed: {exc}", "endpoint": endpoint}
+    except (KeyError, IndexError, TypeError) as exc:
+        logger.warning("GraphQL: unexpected response structure — %s", exc)
+        return {"__error": f"GraphQL response structure error: {exc}", "endpoint": endpoint}
 
     # GraphQL servers typically return 200 even for errors; parse body first
     try:
         body = resp.json()
     except JSONDecodeError:
         resp.raise_for_status()
-        raise ValueError(f"GraphQL: non-JSON response (status {resp.status_code})")
+        raise ValueError(f"GraphQL: non-JSON response (status {resp.status_code})") from None
 
     data   = body.get("data")
     errors = body.get("errors", [])
