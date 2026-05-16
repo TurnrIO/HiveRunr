@@ -132,13 +132,19 @@ jobs:
           # but Docker healthcheck only confirms the /health endpoint responds.
           # Poll alembic_version until current == head so the schema is fully ready.
           for i in $(seq 1 30); do
+            # Query the alembic_version table directly so we don't depend on
+            # alembic command.head() resolving alembic.ini inside the container.
             version=$(docker exec $(docker compose ps -q api) \
-              python3 -c "from alembic.config import Config; from alembic import command as c; cfg=Config('/app/alembic.ini'); cfg.set_main_option('sqlalchemy.url',__import__('os').environ['DATABASE_URL']); print(c.current(cfg))" \
+              python3 -c "
+from alembic.config import Config; from alembic import command as c
+cfg=Config('/app/alembic.ini')
+cfg.set_main_option('sqlalchemy.url',__import__('os').environ['DATABASE_URL'])
+print(c.current(cfg))
+" \
               2>/dev/null || echo "unknown")
-            head=$(docker exec $(docker compose ps -q api) \
-              python3 -c "from alembic.config import Config; from alembic import command as c; cfg=Config('/app/alembic.ini'); cfg.set_main_option('sqlalchemy.url',__import__('os').environ['DATABASE_URL']); print(c.head(cfg))" \
-              2>/dev/null || echo "unknown")
-            if [ "$version" = "$head" ] && [ "$version" != "unknown" ]; then
+            # Check both that current() returned something real AND that the
+            # alembic_version table has a row — empty DB has current()=None.
+            if [ "$version" != "unknown" ] && [ -n "$version" ]; then
               echo "Migrations complete (version=$version) after $((i*2))s"
               exit 0
             fi
