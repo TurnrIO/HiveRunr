@@ -161,14 +161,14 @@ async def webhook_trigger(token: str, request: Request):
             )
             update_run(task_id, "succeeded", result=result,
                        traces=result.get('traces', []))
-        except psycopg2.Error as db_err:
-            log.warning("DB error during inline webhook run: %s", db_err)
-        except (TypeError, KeyError, ValueError) as data_err:
-            log.warning("Data error during inline webhook run: %s", data_err)
-        except (ValueError, RuntimeError, TypeError) as inline_err:
+        except (psycopg2.Error, OSError, RuntimeError) as infra_err:
             log.exception("Inline webhook graph run failed")
-            update_run(task_id, "failed", result={"error": str(inline_err)})
-            raise HTTPException(500, f"Graph run failed: {inline_err}")
+            update_run(task_id, "failed", result={"error": str(infra_err)})
+            raise HTTPException(500, f"Graph run failed: {infra_err}")
+        except (ValueError, TypeError, KeyError) as flow_err:
+            log.exception("Inline webhook graph run failed")
+            update_run(task_id, "failed", result={"error": str(flow_err)})
+            raise HTTPException(500, f"Graph run failed: {flow_err}")
 
     try:
         from app.core.db import get_conn
