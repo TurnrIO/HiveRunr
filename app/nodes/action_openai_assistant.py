@@ -89,7 +89,7 @@ def run(config, inp, context, logger, creds=None, **kwargs):
             status  = run_obj.get("status")
             if status in ("completed", "failed", "cancelled", "expired"):
                 break
-            time.sleep(2)
+            time.sleep(0.5)
 
         if run_obj.get("status") != "completed":
             raise RuntimeError(f"OpenAI run {run_id} ended with status: {run_obj.get('status')}")
