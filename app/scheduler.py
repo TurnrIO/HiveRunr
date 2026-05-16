@@ -118,7 +118,7 @@ def _make_job(sched, scheduler_ref=None):
                 from app.core.db import get_graph as _get_graph
                 _g = _get_graph(sched["graph_id"])
                 _priority = int((_g or {}).get("priority", 5))
-            except (ValueError, TypeError, KeyError):
+            except (OSError, RuntimeError):
                 _priority = 5
 
             task_id = None
