@@ -132,6 +132,8 @@ def run(config, inp, context, logger, creds=None, **kwargs):
         result = _req("POST", "/Messages.json", account_sid, auth_token, {
             "To": to_, "From": from_, "Body": body_,
         })
+        if isinstance(result, dict) and "__error" in result:
+            return result
         return {
             "sid":    result.get("sid"),
             "status": result.get("status"),
@@ -158,6 +160,8 @@ def run(config, inp, context, logger, creds=None, **kwargs):
         else:
             params["Twiml"] = twiml_
         result = _req("POST", "/Calls.json", account_sid, auth_token, params)
+        if isinstance(result, dict) and "__error" in result:
+            return result
         return {
             "sid":    result.get("sid"),
             "status": result.get("status"),
@@ -173,6 +177,8 @@ def run(config, inp, context, logger, creds=None, **kwargs):
         logger.info("Twilio: check_status sid=%s", sid)
         suffix = "/Messages" if kind == "message" else "/Calls"
         result = _req("GET", f"{suffix}/{sid}.json", account_sid, auth_token)
+        if isinstance(result, dict) and "__error" in result:
+            return result
         return {
             "sid":        result.get("sid"),
             "status":     result.get("status"),
@@ -192,6 +198,8 @@ def run(config, inp, context, logger, creds=None, **kwargs):
         except (ValueError, TypeError): limit = 20
         qs    = urllib.parse.urlencode({k: v for k, v in {"To": to_, "From": from_, "PageSize": limit}.items() if v})
         result = _req("GET", f"/Messages.json?{qs}", account_sid, auth_token)
+        if isinstance(result, dict) and "__error" in result:
+            return result
         msgs  = result.get("messages", [])
         return {
             "messages": [{
