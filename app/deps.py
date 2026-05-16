@@ -242,8 +242,10 @@ def _resolve_workspace(request: Request, user: dict) -> int | None:
             result = _validate(wid)
             if result:
                 return result
-        except (ValueError, TypeError):
-            pass
+        except (ValueError, TypeError) as exc:
+            log.warning("Could not resolve workspace from X-Workspace-Id header: %s", exc)
+        except Exception as exc:
+            log.warning("Unexpected error resolving workspace from X-Workspace-Id header: %s", exc)
 
     # 2. Browser cookie
     cookie_val = request.cookies.get(WORKSPACE_COOKIE, "").strip()
@@ -253,8 +255,10 @@ def _resolve_workspace(request: Request, user: dict) -> int | None:
             result = _validate(wid)
             if result:
                 return result
-        except (ValueError, TypeError):
-            pass
+        except (ValueError, TypeError) as exc:
+            log.warning("Could not resolve workspace from cookie: %s", exc)
+        except Exception as exc:
+            log.warning("Unexpected error resolving workspace from cookie: %s", exc)
 
     # 3. User's first workspace
     if uid and uid != 0:
@@ -262,16 +266,21 @@ def _resolve_workspace(request: Request, user: dict) -> int | None:
             memberships = list_user_workspaces(uid)
             if memberships:
                 return memberships[0]["id"]
-        except (AttributeError, TypeError, KeyError, OSError):
-            pass
+        except (AttributeError, TypeError, KeyError, OSError) as exc:
+            log.warning("Could not resolve workspace from user's workspaces: %s", exc)
+        except Exception as exc:
+            log.warning("Unexpected error resolving workspace from user's workspaces: %s", exc)
+
 
     # 4. Global default workspace
     try:
         default = get_default_workspace()
         if default:
             return default["id"]
-    except (AttributeError, TypeError, KeyError, OSError):
-        pass
+    except (AttributeError, TypeError, KeyError, OSError) as exc:
+        log.warning("Could not resolve workspace from default workspace: %s", exc)
+    except Exception as exc:
+        log.warning("Unexpected error resolving workspace from default workspace: %s", exc)
 
     return None
 
