@@ -42,8 +42,8 @@ def _sync_cron_triggers(graph_id: int, graph_data: dict):
     try:
         nodes = (graph_data or {}).get('nodes', [])
         sync_graph_schedules(graph_id, [n for n in nodes if n.get('type') == 'trigger.cron'])
-    except (AttributeError, RuntimeError, OSError) as e:
-        log.warning(f"Could not sync schedules for graph {graph_id}: {e}")
+    except (AttributeError, RuntimeError, OSError) as exc:
+        log.warning(f"Could not sync schedules for graph {graph_id}: {exc}")
 
 
 def _is_admin_or_owner(user: dict) -> bool:
