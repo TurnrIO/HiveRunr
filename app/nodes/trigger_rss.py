@@ -218,11 +218,17 @@ def _parse_atom(root: ET.Element) -> tuple[str, list[dict]]:
 def run(config, inp, context, logger, creds=None, **kwargs):
     from app.nodes._utils import _render, _safe_eval
 
+    logger.info("trigger.rss: starting")
+
     url = _render(config.get("url", ""), context, creds).strip()
     if not url:
         raise ValueError("trigger.rss: 'url' is required")
 
-    _validate_feed_url(url)  # SSRF guard — raises ValueError on blocked URLs
+    try:
+        _validate_feed_url(url)  # SSRF guard — raises ValueError on blocked URLs
+    except ValueError as exc:
+        logger.warning("trigger.rss: SSRF check failed for %s — %s", url, exc)
+        return {"__error": f"trigger.rss: {exc}", "entries": [], "count": 0}
 
     try: lookback_minutes = int(_render(config.get("lookback_minutes", "60"), context, creds))
     except (ValueError, TypeError): lookback_minutes = 60
