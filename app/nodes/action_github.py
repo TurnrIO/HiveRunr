@@ -109,8 +109,12 @@ def run(config, inp, context, logger, creds=None, **kwargs):
                 try:
                     r.raise_for_status()
                 except httpx.HTTPStatusError as exc:
-                    logger.error("GitHub API HTTP error action=%s url=%s status=%s response=%s",
-                                 action, url, exc.response.status_code, exc.response.text[:200])
+                    if exc.response.status_code in (401, 403, 404, 422):
+                        logger.warning("GitHub API client error action=%s url=%s status=%s response=%s",
+                                       action, url, exc.response.status_code, exc.response.text[:200])
+                    else:
+                        logger.error("GitHub API HTTP error action=%s url=%s status=%s response=%s",
+                                     action, url, exc.response.status_code, exc.response.text[:200])
                     raise exc
                 except httpx.HTTPError as exc:
                     logger.error("GitHub API network error action=%s url=%s error=%s", action, url, exc)
