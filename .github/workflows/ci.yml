@@ -135,15 +135,15 @@ jobs:
           for i in $(seq 1 30); do
             version=$(docker compose exec -T api \
               python3 -c "
-import os, psycopg2
-dsn = os.environ['DATABASE_URL']
-conn = psycopg2.connect(dsn)
-cur = conn.cursor()
-cur.execute('SELECT version_num FROM alembic_version LIMIT 1')
-row = cur.fetchone()
-print(row[0] if row else '')
-conn.close()
-" 2>/dev/null || echo "")
+          import os, psycopg2
+          dsn = os.environ['DATABASE_URL']
+          conn = psycopg2.connect(dsn)
+          cur = conn.cursor()
+          cur.execute('SELECT version_num FROM alembic_version LIMIT 1')
+          row = cur.fetchone()
+          print(row[0] if row else '')
+          conn.close()
+          " 2>/dev/null || echo "")
             if [ -n "$version" ]; then
               echo "Migrations complete (version=$version) after $((i*2))s"
               exit 0
