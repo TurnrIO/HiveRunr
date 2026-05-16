@@ -130,25 +130,28 @@ jobs:
         run: |
           # After the container is healthy it has run init_db() (= run_migrations()),
           # but Docker healthcheck only confirms the /health endpoint responds.
-          # Poll alembic_version until current == head so the schema is fully ready.
+          # Poll alembic_version directly so we don't depend on alembic
+          # command.current() resolving alembic.ini inside the container.
           for i in $(seq 1 30); do
-            # Query the alembic_version table directly so we don't depend on
-            # alembic command.head() resolving alembic.ini inside the container.
+            # Query the alembic_version table directly — works even when
+            # current() returns None (e.g. empty DB or pre-migration state).
             version=$(docker exec $(docker compose ps -q api) \
               python3 -c "
-from alembic.config import Config; from alembic import command as c
-cfg=Config('/app/alembic.ini')
-cfg.set_main_option('sqlalchemy.url',__import__('os').environ['DATABASE_URL'])
-print(c.current(cfg))
+import os, psycopg2
+dsn = os.environ['DATABASE_URL']
+conn = psycopg2.connect(dsn)
+cur = conn.cursor()
+cur.execute('SELECT version_num FROM alembic_version LIMIT 1')
+row = cur.fetchone()
+print(row[0] if row else '')
+conn.close()
 " \
-              2>/dev/null || echo "unknown")
-            # Check both that current() returned something real AND that the
-            # alembic_version table has a row — empty DB has current()=None.
-            if [ "$version" != "unknown" ] && [ -n "$version" ]; then
+              2>/dev/null || echo "")
+            if [ -n "$version" ]; then
               echo "Migrations complete (version=$version) after $((i*2))s"
               exit 0
             fi
-            echo "Waiting for migrations... version=$version head=$head ($((i*2))s)"
+            echo "Waiting for migrations... version=${version:-empty} ($((i*2))s)"
             sleep 2
           done
           echo "Migrations not complete in 60s"
