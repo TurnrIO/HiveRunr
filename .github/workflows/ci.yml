@@ -140,19 +140,19 @@ jobs:
             # or the row may be absent. In both cases we keep waiting.
             version=$(docker exec $(docker compose ps -q api) \
               python3 -c "
-import os, psycopg2
-dsn = os.environ['DATABASE_URL']
-conn = psycopg2.connect(dsn)
-cur = conn.cursor()
-cur.execute(\"SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name='alembic_version')\")
-if not cur.fetchone()[0]:
-    print('')
-else:
-    cur.execute('SELECT version_num FROM alembic_version LIMIT 1')
-    row = cur.fetchone()
-    print(row[0] if row else '')
-conn.close()
-" \
+              import os, psycopg2
+              dsn = os.environ['DATABASE_URL']
+              conn = psycopg2.connect(dsn)
+              cur = conn.cursor()
+              cur.execute(\"SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name='alembic_version')\")
+              if not cur.fetchone()[0]:
+                  print('')
+              else:
+                  cur.execute('SELECT version_num FROM alembic_version LIMIT 1')
+                  row = cur.fetchone()
+                  print(row[0] if row else '')
+              conn.close()
+              " \
               2>/dev/null || echo "")
             if [ -n "$version" ]; then
               echo "Migrations complete (version=$version) after $((i*2))s"
