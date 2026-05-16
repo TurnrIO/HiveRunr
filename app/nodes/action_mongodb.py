@@ -31,6 +31,7 @@ def _parse_json(raw, label):
         raise ValueError(f"MongoDB {label}: must be valid JSON, got: {raw!r}")
 
 def run(config, inp, context, logger, creds=None, **kwargs):
+    logger.info("MongoDB: node invoked")
     cred_name = config.get("credential", "")
     uri       = ""
     if cred_name and creds:

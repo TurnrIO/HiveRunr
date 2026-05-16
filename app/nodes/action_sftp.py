@@ -133,6 +133,7 @@ def _ftp_list_flat(ftp, path):
 # ── main ──────────────────────────────────────────────────────────────────
 
 def run(config, inp, context, logger, creds=None, **kwargs):
+    logger.info("SFTP: node invoked")
     """Transfer files and manage paths via SFTP or FTP.
 
     Operations: list, upload, download, delete, mkdir, rename, exists, stat
