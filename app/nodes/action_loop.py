@@ -11,6 +11,7 @@ LABEL = "Loop"
 
 def run(config, inp, context, logger, creds=None, **kwargs):
     """Prepare items for looping."""
+    logger.info("[action.loop] Starting loop (max_items=%s)", config.get('max_items', '100'))
     field = config.get('field', '')
     try:
         max_items = int(_render(config.get('max_items', '100'), context, creds) or 100)
