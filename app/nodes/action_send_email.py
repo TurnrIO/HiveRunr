@@ -23,6 +23,7 @@ def run(config, inp, context, logger, creds=None, **kwargs):
       587 → STARTTLS                  — Gmail, Outlook, most modern providers
       25  → plain SMTP                — local relay / MTA
     """
+    logger.info("Send Email: firing node")
     to      = _render(config.get('to', ''), context, creds)
     subject = _render(config.get('subject', ''), context, creds)
     body    = _render(config.get('body', ''), context, creds)
