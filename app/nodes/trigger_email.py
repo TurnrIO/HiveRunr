@@ -151,26 +151,25 @@ def run(config: dict, inp: dict, context: dict, logger, creds=None, **kwargs) ->
     except OSError as exc:
         logger.warning("[trigger.email] Connection error during login — %s:%s — %s", host, port, exc)
         return {"__error": f"Email trigger: connection error — {exc}", "emails": [], "count": 0}
+        # readonly=True when we're not marking messages read (avoids write perm requirement)
+        conn.select(folder, readonly=not mark_read)
 
-    # readonly=True when we're not marking messages read (avoids write perm requirement)
-    conn.select(folder, readonly=not mark_read)
+        typ, data = conn.search(None, search_criteria)
+        if typ != "OK":
+            raise RuntimeError(f"IMAP SEARCH failed: {typ} {data}")
 
-    typ, data = conn.search(None, search_criteria)
-    if typ != "OK":
-        raise RuntimeError(f"IMAP SEARCH failed: {typ} {data}")
+        all_ids = data[0].split() if data and data[0] else []
+        # Take the most-recent N message IDs
+        ids = all_ids[-max_msg:]
 
-    all_ids = data[0].split() if data and data[0] else []
-    # Take the most-recent N message IDs
-    ids = all_ids[-max_msg:]
-
-    emails = []
-    for uid in ids:
-        typ2, raw = conn.fetch(uid, "(RFC822)")
-        if typ2 != "OK" or not raw or raw[0] is None:
-            continue
-        raw_bytes = raw[0][1] if isinstance(raw[0], tuple) else raw[0]
-        if not isinstance(raw_bytes, bytes):
-            continue
+        emails = []
+        for uid in ids:
+            typ2, raw = conn.fetch(uid, "(RFC822)")
+            if typ2 != "OK" or not raw or raw[0] is None:
+                continue
+            raw_bytes = raw[0][1] if isinstance(raw[0], tuple) else raw[0]
+            if not isinstance(raw_bytes, bytes):
+                continue
             msg = _email_module.message_from_bytes(raw_bytes)
 
             plain, html = _get_body(msg)
