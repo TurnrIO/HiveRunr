@@ -12,7 +12,7 @@ def _get_client(uri):
     try:
         from pymongo import MongoClient
     except ImportError:
-        raise RuntimeError("pymongo is required: pip install pymongo")
+        raise
     try:
         return MongoClient(uri, serverSelectionTimeoutMS=10000)
     except (OSError, RuntimeError, ValueError, ImportError) as exc:
