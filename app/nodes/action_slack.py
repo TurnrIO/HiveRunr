@@ -92,6 +92,7 @@ def run(config, inp, context, logger, creds=None, **kwargs):
         return {"__error": f"Slack SSRF check failed: {exc}", "sent": False}
     if not message:
         raise ValueError("Slack: no message configured")
+    logger.info("Slack: sending message len=%s", len(message))
 
     body = {'text': message}
     if channel:
