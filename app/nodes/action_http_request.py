@@ -186,7 +186,11 @@ def run(config, inp, context, logger, creds=None, **kwargs):
             resolved = urllib.parse.urljoin(current_url, location)
 
             # Check redirect URL for SSRF
-            _check_url_ssrf(resolved)
+            try:
+                _check_url_ssrf(resolved)
+            except ValueError as exc:
+                logger.warning("HTTP %s: redirect SSRF check failed — %s", current_url, exc)
+                return {"__error": f"HTTP redirect SSRF check failed: {exc}"}
 
             current_url = resolved
 
