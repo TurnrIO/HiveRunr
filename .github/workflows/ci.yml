@@ -138,14 +138,16 @@ jobs:
             # Check if alembic_version table exists and has a row.
             # On a fresh DB the table may not exist yet (created by stamp),
             # or the row may be absent. In both cases we keep waiting.
-            version=$(docker exec $(docker compose ps -q api) \
+            debug_output=$(docker exec $(docker compose ps -q api) \
               python3 -c "
               import os, psycopg2
               dsn = os.environ['DATABASE_URL']
               conn = psycopg2.connect(dsn)
               cur = conn.cursor()
               cur.execute(\"SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name='alembic_version')\")
-              if not cur.fetchone()[0]:
+              exists = cur.fetchone()[0]
+              print('DEBUG: table_exists=' + str(exists))
+              if not exists:
                   print('')
               else:
                   cur.execute('SELECT version_num FROM alembic_version LIMIT 1')
@@ -154,11 +156,13 @@ jobs:
               conn.close()
               " \
               2>/dev/null || echo "")
+            version=$(echo "$debug_output" | grep -v DEBUG)
+            echo "DEBUG: iteration $i, output=$debug_output"
             if [ -n "$version" ]; then
               echo "Migrations complete (version=$version) after $((i*2))s"
               exit 0
             fi
-            echo "Waiting for migrations... version=${version:-empty} ($((i*2))s)"
+            echo "Waiting for migrations... ($((i*2))s)"
             sleep 2
           done
           echo "Migrations not complete in 60s"
