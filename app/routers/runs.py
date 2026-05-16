@@ -146,16 +146,17 @@ def api_trim_runs(body: TrimRunsBody, request: Request):
     - `days`: delete runs older than N days (takes precedence over `keep` when set).
     """
     user = _require_manage_scope(request)
+    workspace_id = _resolve_workspace(request, user)
     if body.days is not None:
-        deleted = trim_runs_by_age(body.days)
+        deleted = trim_runs_by_age(body.days, workspace_id=workspace_id)
         log_audit(user["username"], "run.trim", None, None,
-                  {"mode": "age", "older_than_days": body.days, "deleted": deleted},
+                  {"mode": "age", "older_than_days": body.days, "deleted": deleted, "workspace_id": workspace_id},
                   request.client.host if request.client else None)
         return {"deleted": deleted, "mode": "age", "older_than_days": body.days}
     else:
-        deleted = trim_runs_by_count(body.keep)
+        deleted = trim_runs_by_count(body.keep, workspace_id=workspace_id)
         log_audit(user["username"], "run.trim", None, None,
-                  {"mode": "count", "kept": body.keep, "deleted": deleted},
+                  {"mode": "count", "kept": body.keep, "deleted": deleted, "workspace_id": workspace_id},
                   request.client.host if request.client else None)
         return {"deleted": deleted, "mode": "count", "kept": body.keep}
 
