@@ -85,8 +85,11 @@ def run(config, inp, context, logger, creds=None, **kwargs):
 
     if not webhook_url:
         raise ValueError("Slack: no webhook_url configured")
-    logger.info("Slack: sending message len=%s", len(message))
-    _check_url_ssrf(webhook_url)
+    try:
+        _check_url_ssrf(webhook_url)
+    except ValueError as exc:
+        logger.warning("Slack: SSRF check failed — %s", exc)
+        return {"__error": f"Slack SSRF check failed: {exc}", "sent": False}
     if not message:
         raise ValueError("Slack: no message configured")
 
