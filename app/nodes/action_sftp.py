@@ -182,10 +182,10 @@ def run(config, inp, context, logger, creds=None, **kwargs):
     # ══════════════════════════════════════════════════════════════════════
     if protocol == 'sftp':
 
-        transport = paramiko.Transport((host, port))
-        transport.banner_timeout  = timeout
-        transport.handshake_timeout = timeout
         try:
+            transport = paramiko.Transport((host, port))
+            transport.banner_timeout  = timeout
+            transport.handshake_timeout = timeout
             transport.connect(username=username or None, password=password or None)
         except (OSError, SSHException, AuthenticationException) as exc:
             logger.warning("SFTP connect failed: host=%s port=%s — %s", host, port, exc)
