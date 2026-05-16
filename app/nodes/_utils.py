@@ -69,23 +69,6 @@ def _safe_eval(expr: str, local_vars: dict) -> bool:
         if node_type is ast.Name:
             if node.id in FORBIDDEN_BUILTINS:
                 raise ValueError(f"Forbidden builtin: {node.id}")
-            if node.id not in SAFE_BUILTINS and node.id not in local_vars:
-                # Allow unknown names to fail at eval time (NameError) rather
-                # than reject them here — the user may have a local_var with
-                # that name that isn't in the pre-checked set.
-                pass
-        if node_type is ast.Attribute:
-            # Disallow attribute access on the 'json' module or other suspicious globals
-            if isinstance(node.value, ast.Name) and node.value.id in ('json', 'os', 'sys', 'subprocess', 'builtins'):
-                raise ValueError(f"Attribute access on '{node.value.id}' is not allowed")
-    def _check(node, allowed: bool = False):
-        """Walk AST node. Return True if safe, False to skip branch."""
-        node_type = type(node)
-        if node_type not in ALLOWED_AST_NODES:
-            raise ValueError(f"Unsafe or unsupported expression element: {node_type.__name__}")
-        if node_type is ast.Name:
-            if node.id in FORBIDDEN_BUILTINS:
-                raise ValueError(f"Forbidden builtin: {node.id}")
         if node_type is ast.Attribute:
             # Disallow attribute access on the 'json' module or other suspicious globals
             if isinstance(node.value, ast.Name) and node.value.id in ('json', 'os', 'sys', 'subprocess', 'builtins'):
@@ -121,7 +104,6 @@ def _safe_eval(expr: str, local_vars: dict) -> bool:
             # Disallow subscript on dangerous builtins like builtins.open
             if isinstance(node.value, ast.Name) and node.value.id in ('builtins',):
                 raise ValueError(f"Subscript on '{node.value.id}' is not allowed")
-        return True
         return True
 
     for child in ast.walk(tree):
