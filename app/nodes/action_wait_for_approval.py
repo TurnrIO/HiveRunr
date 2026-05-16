@@ -26,6 +26,8 @@ import time
 import os
 import logging
 
+import psycopg2
+
 from app.nodes._utils import _render
 
 logger = logging.getLogger(__name__)
@@ -61,15 +63,16 @@ def run(config, inp, context, logger, creds=None, **kwargs):
     try:
         from app.core.db import get_conn
         with get_conn() as conn:
-            conn.cursor().execute(
-                """INSERT INTO approvals
+            with conn.cursor() as cur:
+                cur.execute(
+                    """INSERT INTO approvals
                    (token, task_id, graph_name, node_id, approver_email,
                     subject, message, timeout_hours, status)
                    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,'pending')""",
-                (token, task_id, graph_name, node_id,
-                 approver_email, subject, message, timeout_hours),
-            )
-    except (AttributeError, TypeError, RuntimeError) as exc:
+                    (token, task_id, graph_name, node_id,
+                     approver_email, subject, message, timeout_hours),
+                )
+    except psycopg2.Error as exc:
         logger.warning("wait_for_approval: could not persist record — %s", exc)
 
     # ── Send email ───────────────────────────────────────────────────────────
@@ -130,11 +133,12 @@ def _update_status(token: str, status: str) -> None:
     try:
         from app.core.db import get_conn
         with get_conn() as conn:
-            conn.cursor().execute(
-                "UPDATE approvals SET status=%s, decided_at=NOW() WHERE token=%s AND status='pending'",
-                (status, token),
-            )
-    except (AttributeError, RuntimeError) as exc:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "UPDATE approvals SET status=%s, decided_at=NOW() WHERE token=%s AND status='pending'",
+                    (status, token),
+                )
+    except psycopg2.Error as exc:
         logger.warning("wait_for_approval: could not update status — %s", exc)
 
 
