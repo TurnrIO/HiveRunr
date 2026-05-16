@@ -143,13 +143,21 @@ def _make_job(sched, scheduler_ref=None):
                         )
                 except (ConnectionError, OSError, RuntimeError, TypeError) as exc:
                     log.warning("Could not pre-create run record for inline schedule %s: %s", sid, exc)
+                # Set running state before execution; catch infrastructure errors only
+                try:
+                    update_run(task_id, "running")
+                except (ConnectionError, OSError, RuntimeError, psycopg2.Error):
+                    log.warning("Could not update run %s to 'running' — skipping inline execution", task_id)
+                    return
                 try:
                     _g_data = json.loads(_g.get('graph_json') or '{}') if _g else {}
-                    update_run(task_id, "running")
                     result = run_graph(_g_data, payload, workspace_id=sched.get("workspace_id"))
                     update_run(task_id, "succeeded", result=result,
                                traces=result.get('traces', []))
-                except (OSError, RuntimeError, ValueError, TypeError, psycopg2.Error, AttributeError) as inline_err:
+                except (OSError, RuntimeError, psycopg2.Error) as inline_err:
+                    # Only catch infrastructure errors; flow logic errors (ValueError,
+                    # TypeError, AttributeError from nodes) should propagate uncaught so
+                    # the error is surfaced as a traceback rather than silently swallowed.
                     log.exception("Inline scheduled graph run failed")
                     update_run(task_id, "failed", result={"error": str(inline_err)})
                     return  # graph failed inline
