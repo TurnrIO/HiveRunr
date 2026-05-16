@@ -128,16 +128,25 @@ jobs:
           exit 1
       - name: Wait for stack to be healthy
         run: |
-          echo "Waiting for stack..."
-          for i in $(seq 1 60); do
-            if curl -sf http://localhost/health > /dev/null 2>&1; then
-              echo "Stack healthy after $((i*2))s"
+          # After the container is healthy it has run init_db() (= run_migrations()),
+          # but Docker healthcheck only confirms the /health endpoint responds.
+          # Poll alembic_version until current == head so the schema is fully ready.
+          for i in $(seq 1 30); do
+            version=$(docker exec hiverunr-api-1 \
+              python3 -c "from alembic.config import Config; from alembic import command as c; cfg=Config('/app/alembic.ini'); cfg.set_main_option('sqlalchemy.url',__import__('os').environ['DATABASE_URL']); print(c.current(cfg))" \
+              2>/dev/null || echo "unknown")
+            head=$(docker exec hiverunr-api-1 \
+              python3 -c "from alembic.config import Config; from alembic import command as c; cfg=Config('/app/alembic.ini'); cfg.set_main_option('sqlalchemy.url',__import__('os').environ['DATABASE_URL']); print(c.head(cfg))" \
+              2>/dev/null || echo "unknown")
+            if [ "$version" = "$head" ] && [ "$version" != "unknown" ]; then
+              echo "Migrations complete (version=$version) after $((i*2))s"
               exit 0
             fi
+            echo "Waiting for migrations... version=$version head=$head ($((i*2))s)"
             sleep 2
           done
-          echo "Stack did not become healthy in 120s — dumping logs"
-          docker compose logs --tail=50
+          echo "Migrations not complete in 60s"
+          docker compose ps
           exit 1
       - name: Bootstrap first admin user
         run: |
