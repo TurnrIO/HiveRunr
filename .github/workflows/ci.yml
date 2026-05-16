@@ -132,10 +132,10 @@ jobs:
           # but Docker healthcheck only confirms the /health endpoint responds.
           # Poll alembic_version until current == head so the schema is fully ready.
           for i in $(seq 1 30); do
-            version=$(docker exec hiverunr-api-1 \
+            version=$(docker exec $(docker compose ps -q api) \
               python3 -c "from alembic.config import Config; from alembic import command as c; cfg=Config('/app/alembic.ini'); cfg.set_main_option('sqlalchemy.url',__import__('os').environ['DATABASE_URL']); print(c.current(cfg))" \
               2>/dev/null || echo "unknown")
-            head=$(docker exec hiverunr-api-1 \
+            head=$(docker exec $(docker compose ps -q api) \
               python3 -c "from alembic.config import Config; from alembic import command as c; cfg=Config('/app/alembic.ini'); cfg.set_main_option('sqlalchemy.url',__import__('os').environ['DATABASE_URL']); print(c.head(cfg))" \
               2>/dev/null || echo "unknown")
             if [ "$version" = "$head" ] && [ "$version" != "unknown" ]; then
