@@ -158,9 +158,6 @@ def _list_all(client, url: str, headers: dict, params: dict) -> list:
         except OSError as exc:
             logger.warning("Airtable: connection error during list — %s", exc)
             return {"__error": f"Airtable list failed: connection error — {exc}", "records": []}
-        except (httpx.HTTPError, OSError) as exc:
-            logger.warning("Airtable: unexpected error during list — %s", exc)
-            return {"__error": f"Airtable list failed: {exc}", "records": []}
         data = resp.json()
         records.extend(data.get("records", []))
         offset = data.get("offset")
@@ -182,6 +179,7 @@ def run(config, inp, context, logger, creds=None, **kwargs):
     import httpx
 
     logger.info("[action.airtable] Starting Airtable run")
+    logger.info("Airtable: node invoked")
 
     api_key, base_id = _resolve_creds(config, context, creds)
     table      = _render(config.get("table", ""), context, creds).strip()
