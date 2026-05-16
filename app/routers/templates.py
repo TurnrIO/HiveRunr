@@ -46,6 +46,8 @@ def _load_all() -> list[dict]:
             })
         except (json.JSONDecodeError, OSError) as exc:
             log.warning("Failed to load template %s: %s", path, exc)
+    loaded = len(templates)
+    log.info("Loaded %d templates (failed: %d)", loaded, sum(1 for _ in TEMPLATES_DIR.glob("*.json")) - loaded)
     return templates
 
 
