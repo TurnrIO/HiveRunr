@@ -133,34 +133,16 @@ jobs:
           # Poll alembic_version directly so we don't depend on alembic
           # command.current() resolving alembic.ini inside the container.
           for i in $(seq 1 30); do
-            # Query the alembic_version table directly — works even when
-            # current() returns None (e.g. empty DB or pre-migration state).
-            # Check if alembic_version table exists and has a row.
-            # On a fresh DB the table may not exist yet (created by stamp),
-            # or the row may be absent. In both cases we keep waiting.
-            debug_output=$(docker compose exec -T api \
-              python3 -c "
-              import os, psycopg2
-              dsn = os.environ['DATABASE_URL']
-              conn = psycopg2.connect(dsn)
-              cur = conn.cursor()
-              cur.execute(\"SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name='alembic_version')\")
-              exists = cur.fetchone()[0]
-              print('DEBUG: table_exists=' + str(exists))
-              if not exists:
-                  print('')
-              else:
-                  cur.execute('SELECT version_num FROM alembic_version LIMIT 1')
-                  row = cur.fetchone()
-                  print(row[0] if row else '')
-              conn.close()
-              " \
-              2>/dev/null || echo "")
-            version=$(echo "$debug_output" | grep -v DEBUG)
+            # Write Python migration check script to /tmp in the container
+            docker compose cp /tmp/check_migrations.py api:/tmp/check_migrations.py 2>/dev/null || true
+            debug_output=$(docker compose exec -T api python3 /tmp/check_migrations.py 2>/dev/null || echo "")
             echo "DEBUG: iteration $i, output=$debug_output"
-            if [ -n "$version" ]; then
-              echo "Migrations complete (version=$version) after $((i*2))s"
-              exit 0
+            if echo "$debug_output" | grep -q "table_exists=True"; then
+              version=$(echo "$debug_output" | tail -1)
+              if [ -n "$version" ] && [ "$version" != "table_exists=True" ]; then
+                echo "Migrations complete (version=$version) after $((i*2))s"
+                exit 0
+              fi
             fi
             echo "Waiting for migrations... ($((i*2))s)"
             sleep 2
