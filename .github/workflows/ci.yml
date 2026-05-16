@@ -135,15 +135,22 @@ jobs:
           for i in $(seq 1 30); do
             # Query the alembic_version table directly — works even when
             # current() returns None (e.g. empty DB or pre-migration state).
+            # Check if alembic_version table exists and has a row.
+            # On a fresh DB the table may not exist yet (created by stamp),
+            # or the row may be absent. In both cases we keep waiting.
             version=$(docker exec $(docker compose ps -q api) \
               python3 -c "
 import os, psycopg2
 dsn = os.environ['DATABASE_URL']
 conn = psycopg2.connect(dsn)
 cur = conn.cursor()
-cur.execute('SELECT version_num FROM alembic_version LIMIT 1')
-row = cur.fetchone()
-print(row[0] if row else '')
+cur.execute(\"SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name='alembic_version')\")
+if not cur.fetchone()[0]:
+    print('')
+else:
+    cur.execute('SELECT version_num FROM alembic_version LIMIT 1')
+    row = cur.fetchone()
+    print(row[0] if row else '')
 conn.close()
 " \
               2>/dev/null || echo "")
