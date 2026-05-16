@@ -138,7 +138,7 @@ jobs:
             # Check if alembic_version table exists and has a row.
             # On a fresh DB the table may not exist yet (created by stamp),
             # or the row may be absent. In both cases we keep waiting.
-            debug_output=$(docker exec $(docker compose ps -q api) \
+            debug_output=$(docker compose exec -T api \
               python3 -c "
               import os, psycopg2
               dsn = os.environ['DATABASE_URL']
