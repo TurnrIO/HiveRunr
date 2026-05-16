@@ -159,6 +159,7 @@ def _rows_to_dicts(cursor, driver: str):
 
 def run(config: dict, inp: dict, context: dict, logger, creds=None, **kwargs) -> dict:
     creds = creds or {}
+    logger.info("[action.postgres] firing node")
 
     # Resolve credential
     cred_name = _render(config.get("credential", ""), context, creds)
