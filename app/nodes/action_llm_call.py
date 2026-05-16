@@ -99,7 +99,11 @@ def run(config, inp, context, logger, creds=None, **kwargs):
     logger.info("LLM Call: model=%s api_base=%s", model, api_base)
 
     # ── SSRF check on api_base ───────────────────────────────────────────
-    _check_ssrf(api_base)
+    try:
+        _check_ssrf(api_base)
+    except ValueError as exc:
+        logger.warning("LLM Call: SSRF check failed — %s", exc)
+        return {"__error": f"SSRF check failed: {exc}", "model": model}
 
     try:
         resp = httpx.post(
