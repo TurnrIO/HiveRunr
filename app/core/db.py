@@ -379,7 +379,7 @@ def list_runs(page: int = 1, page_size: int = 50,
             f"""SELECT r.*,
                     COALESCE(
                         g.name,
-                        INITCAP(REPLACE(REPLACE(r.workflow, '_', ' '), '.py', ''))
+                        INITCAP(REPLACE(REPLACE(REPLACE(r.workflow, '_', ' '), '.py', ''), '__', '_'))
                     ) AS flow_name
                 {base_query}
                 ORDER BY r.id DESC
@@ -400,7 +400,7 @@ def get_run_by_task(task_id):
             """SELECT r.*,
                     COALESCE(
                         g.name,
-                        INITCAP(REPLACE(REPLACE(r.workflow, '_', ' '), '.py', ''))
+                        INITCAP(REPLACE(REPLACE(REPLACE(r.workflow, '_', ' '), '.py', ''), '__', '_'))
                     ) AS flow_name
                FROM runs r
                LEFT JOIN graph_workflows g ON r.graph_id = g.id
