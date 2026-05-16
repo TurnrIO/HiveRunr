@@ -48,7 +48,7 @@ def _run_script_worker(script: str, inp, context_json: str, ns_keys: list, resul
         result_val = ns['result'] if has_result else None
         with open(result_path, 'w') as f:
             json.dump({'has_result': has_result, 'result': result_val}, f)
-    except (SyntaxError, ValueError, NameError, TypeError, RuntimeError):
+    except Exception:
         # Script errors → result file not written; parent sees non-zero exit and raises.
         pass
 
@@ -109,8 +109,8 @@ def run(config, inp, context, logger, creds=None, **kwargs):
                 outcome = json.load(f)
             has_result = outcome['has_result']
             result_val = outcome['result']
-        except (FileNotFoundError, json.JSONDecodeError, OSError):
-            # result_path not written → script raised an exception before completion.
+        except Exception:
+            # result_path not written or unreadable → script raised an exception before completion.
             raise RuntimeError(
                 "action.run_script: script raised an exception. "
                 "Check the worker logs for the traceback."
