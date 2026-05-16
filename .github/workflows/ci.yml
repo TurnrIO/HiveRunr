@@ -116,7 +116,7 @@ jobs:
         run: |
           echo "Waiting for api container to be healthy..."
           for i in $(seq 1 60); do
-            status=$(docker inspect --format '{{.State.Health.Status}}' hiverunr-api-1 2>/dev/null || echo "starting")
+            status=$(docker inspect --format '{{.State.Health.Status}}' $(docker compose ps -q api) 2>/dev/null || echo "starting")
             if [ "$status" = "healthy" ]; then
               echo "Api healthy after $((i*2))s"
               exit 0
@@ -186,7 +186,7 @@ conn.close()
         run: |
           echo "Waiting for Celery task registration..."
           for i in $(seq 1 30); do
-            if docker exec hiverunr-worker-1 celery -b redis://redis:6379/0 inspect registered 2>/dev/null | grep -q "enqueue_graph"; then
+            if docker exec $(docker compose ps -q worker) celery -b redis://redis:6379/0 inspect registered 2>/dev/null | grep -q "enqueue_graph"; then
               echo "Tasks registered after $((i*5))s"
               exit 0
             fi
