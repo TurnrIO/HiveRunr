@@ -137,7 +137,11 @@ def _resolve_creds(config, context, creds):
     if not base_id.startswith("app"):
         raise ValueError(f"Airtable: base_id '{base_id}' does not look like a valid Airtable base ID")
     base_url = f"https://api.airtable.com/v0/{base_id}"
-    _check_ssrf(base_url)
+    try:
+        _check_ssrf(base_url)
+    except ValueError as e:
+        logger.warning("Airtable: SSRF check failed — %s", e)
+        return {"__error": f"SSRF check failed: {e}", "base_url": base_url}
     return api_key, base_id
 
 
@@ -181,7 +185,10 @@ def run(config, inp, context, logger, creds=None, **kwargs):
     logger.info("[action.airtable] Starting Airtable run")
     logger.info("Airtable: node invoked")
 
-    api_key, base_id = _resolve_creds(config, context, creds)
+    result = _resolve_creds(config, context, creds)
+    if isinstance(result, dict) and "__error" in result:
+        return result
+    api_key, base_id = result
     table      = _render(config.get("table", ""), context, creds).strip()
     operation  = _render(config.get("operation", "list_records"), context, creds).strip()
     record_id  = _render(config.get("record_id", ""), context, creds).strip()
