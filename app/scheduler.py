@@ -129,6 +129,20 @@ def _make_job(sched, scheduler_ref=None):
                 log.warning("Celery unavailable (%s) — running scheduled graph inline", exc)
                 import uuid
                 task_id = str(uuid.uuid4())
+                # Pre-create a run record so the DB has a 'queued' entry before
+                # the inline executor transitions it to 'running'.
+                try:
+                    from app.core.db import get_conn
+                    ws_id = sched.get("workspace_id")
+                    with get_conn() as conn:
+                        conn.cursor().execute(
+                            "INSERT INTO runs(task_id, graph_id, status, initial_payload, workspace_id)"
+                            " VALUES(%s,%s,'queued',%s,%s)"
+                            " ON CONFLICT (task_id) DO NOTHING",
+                            (task_id, sched["graph_id"], _json.dumps(payload), ws_id),
+                        )
+                except (ConnectionError, OSError, RuntimeError, TypeError) as exc:
+                    log.warning("Could not pre-create run record for inline schedule %s: %s", sid, exc)
                 try:
                     _g_data = json.loads(_g.get('graph_json') or '{}') if _g else {}
                     update_run(task_id, "running")
@@ -138,7 +152,7 @@ def _make_job(sched, scheduler_ref=None):
                 except (OSError, RuntimeError, ValueError, TypeError, psycopg2.Error, AttributeError) as inline_err:
                     log.exception("Inline scheduled graph run failed")
                     update_run(task_id, "failed", result={"error": str(inline_err)})
-                    return  # skip run record, graph failed inline
+                    return  # graph failed inline
 
             # Pre-create a run record scoped to the schedule's workspace
             if task_id:
