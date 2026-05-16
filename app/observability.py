@@ -49,7 +49,7 @@ class _RunMetricsCollector:
             from app.core.db import get_conn
             with get_conn() as conn:
                 cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-                cur.execute("SELECT status, COUNT(*) AS n FROM runs GROUP BY status")
+                cur.execute("SELECT status, COUNT(*) AS n FROM app_schema GROUP BY status")
                 rows = cur.fetchall()
             g = GaugeMetricFamily(
                 "hiverunr_runs_total",
